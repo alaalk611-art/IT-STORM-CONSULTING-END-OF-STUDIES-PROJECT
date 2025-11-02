@@ -1,0 +1,14 @@
+- Multiplicité des formats de documentation (PDF scannés, anciens PowerPoints, emails exportés)
+  → rend l’extraction bruitée ou partielle
+
+- Connaissances implicites non documentées (dépendance à l’oral, rôle des experts historiques)
+  → faible couverture métier en l’état
+
+- Hétérogénéité des vocabulaires (même notion exprimée différemment par service)
+  → réduction de la précision du retrieval
+
+- Silos d’information techniques non ouverts (Jira, SharePoint fermés)
+  → empêche l’accès global à la base de connaissances
+
+- Pas de politique de versionning ou de gouvernance documentaire
+  → risques de réponses obsolètes ou contradictoires

@@ -1,0 +1,2 @@
+IT Storm est une société de conseil spécialisée en Cloud, Data et IA.
+Elle accompagne ses clients sur l’industrialisation MLOps, la mise en place de pipelines CI/CD et le déploiement sur Kubernetes.

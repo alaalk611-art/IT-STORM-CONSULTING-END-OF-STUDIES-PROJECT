@@ -1,0 +1,14 @@
+- Risque : mauvaise qualité ou dispersion des sources documentaires internes
+  → Mesure : accompagnement IT STORM pour nettoyage et structuration initiale
+
+- Risque : réponses non pertinentes du LLM (hallucinations)
+  → Mesure : prompt strict + modèle local + audit des réponses pendant le POC
+
+- Risque : adoption faible par les utilisateurs finaux
+  → Mesure : ateliers d’acculturation + phase pilote impliquant des utilisateurs réels
+
+- Risque : coûts cachés d’exploitation (infrastructure, maintenance)
+  → Mesure : estimation en amont + automatisation de la pipeline de mise à jour
+
+- Risque : non-conformité RGPD / données sensibles dans les sources
+  → Mesure : filtrage systématique en amont + journalisation des requêtes

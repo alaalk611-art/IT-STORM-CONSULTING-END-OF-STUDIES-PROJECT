@@ -1,0 +1,9 @@
+1. Organiser un atelier de cadrage avec les référents métier et IT STORM (objectifs, sources, contraintes)
+
+2. Valider les jeux de documents disponibles et prioritaires pour un premier POC
+
+3. Créer un environnement de travail local (machine ou VM) avec accès à la base documentaire
+
+4. Implémenter la chaîne RAG minimale (ingestion, embeddings, retrieval, LLM)
+
+5. Préparer une session de test utilisateur + recueil de feedback (3 profils différents)

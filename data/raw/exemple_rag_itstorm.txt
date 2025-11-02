@@ -1,0 +1,9 @@
+IT STORM est une société de conseil spécialisée en cloud, DevOps, pipelines data et intelligence artificielle appliquée aux métiers. En 2024, l'entreprise accompagne plusieurs clients dans la mise en place de solutions internes RAG (Retrieval-Augmented Generation) pour l'accès documentaire.
+
+L'objectif principal du projet est de fournir un assistant intelligent capable de répondre aux questions des équipes internes à partir d'une base documentaire technique, avec un respect strict du périmètre métier (cloud, IaC, LLMs internes, RGPD).
+
+Les documents sont extraits automatiquement depuis les dépôts internes (Git, Confluence, fichiers Word et PDF), découpés en chunks, vectorisés avec Sentence Transformers, puis indexés dans ChromaDB. La chaîne RAG utilise un modèle local Flan-T5 pour la génération contrôlée de réponses.
+
+Un atelier de cadrage est prévu pour collecter les besoins des utilisateurs finaux, établir les critères de succès et identifier les risques (qualité des sources, obsolescence, bruit documentaire).
+
+Technos clés : LangChain, HuggingFace Transformers, SentenceTransformers, ChromaDB, FastAPI, Streamlit.

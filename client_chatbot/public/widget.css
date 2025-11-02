@@ -1,0 +1,372 @@
+/* public/widget.css */
+
+.sc-bubble-dot:nth-child(2) {
+    animation-delay: .15s;
+}
+
+.sc-bubble-dot:nth-child(3) {
+    animation-delay: .3s;
+}
+
+@keyframes sc-pulse {
+    0%,
+    80%,
+    100% {
+        transform: scale(0.9);
+    }
+    40% {
+        transform: scale(1);
+    }
+}
+
+
+/* --- Panneau --- */
+
+.sc-panel {
+    position: fixed;
+    bottom: 100px;
+    width: 360px;
+    max-width: calc(100vw - 40px);
+    height: 520px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+    border-radius: var(--sc-radius);
+    overflow: hidden;
+    box-shadow: var(--sc-shadow);
+    background: #0b1220;
+    color: #e5eefb;
+    transform: translateY(20px) scale(.98);
+    opacity: 0;
+    pointer-events: none;
+    transition: all .18s ease;
+    z-index: 2147483001;
+}
+
+.sc-panel.sc-pos-right {
+    right: 20px;
+}
+
+.sc-panel.sc-pos-left {
+    left: 20px;
+}
+
+.sc-panel:not(.sc-hidden) {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+.sc-panel.sc-minimized {
+    height: 90px;
+}
+
+
+/* Header */
+
+.sc-header {
+    background: linear-gradient(180deg, var(--primary, #0f172a), #0b1220);
+    padding: 10px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid rgba(255, 255, 255, .06);
+}
+
+.sc-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.sc-logo {
+    width: 20px;
+    height: 20px;
+    fill: var(--accent, #60a5fa);
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .4));
+}
+
+.sc-title strong {
+    letter-spacing: .2px;
+}
+
+.sc-status {
+    opacity: .7;
+    font-size: 12px;
+}
+
+.sc-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.sc-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, .15);
+    color: #e5eefb;
+    padding: 6px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.sc-btn:hover {
+    background: rgba(255, 255, 255, .06);
+}
+
+.sc-ghost {
+    background: transparent;
+}
+
+.sc-primary {
+    background: var(--accent, #60a5fa);
+    color: #081226;
+    border: none;
+}
+
+
+/* Corps */
+
+.sc-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    overflow: auto;
+    scroll-behavior: smooth;
+}
+
+.sc-msg {
+    max-width: 85%;
+    animation: sc-pop .12s ease both;
+}
+
+.sc-msg.sc-user {
+    align-self: flex-end;
+}
+
+.sc-msg.sc-assistant {
+    align-self: flex-start;
+}
+
+.sc-bubble-item {
+    padding: 10px 12px;
+    border-radius: 16px;
+    line-height: 1.35;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}
+
+.sc-user .sc-bubble-item {
+    background: #1f2a44;
+}
+
+.sc-assistant .sc-bubble-item {
+    background: #0e1a33;
+    border: 1px solid rgba(255, 255, 255, .06);
+}
+
+@keyframes sc-pop {
+    from {
+        transform: scale(.98) translateY(4px);
+        opacity: 0;
+    }
+    to {
+        transform: scale(1) translateY(0);
+        opacity: 1;
+    }
+}
+
+
+/* Typing */
+
+.sc-typing {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 10px;
+    margin-left: 4px;
+}
+
+.sc-typing span {
+    width: 6px;
+    height: 6px;
+    background: #9bb7ff;
+    border-radius: 50%;
+    display: inline-block;
+    animation: sc-type 1s infinite ease-in-out;
+}
+
+.sc-typing span:nth-child(2) {
+    animation-delay: .15s;
+}
+
+.sc-typing span:nth-child(3) {
+    animation-delay: .3s;
+}
+
+@keyframes sc-type {
+    0%,
+    80%,
+    100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-4px);
+    }
+}
+
+
+/* Footer */
+
+.sc-footer {
+    padding: 10px 12px;
+    border-top: 1px solid rgba(255, 255, 255, .06);
+    background: #0b1220;
+    display: grid;
+    gap: 8px;
+}
+
+.sc-form {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+}
+
+.sc-input {
+    background: #0e1a33;
+    border: 1px solid rgba(255, 255, 255, .08);
+    color: #e6efff;
+    padding: 10px 12px;
+    border-radius: 12px;
+}
+
+.sc-input::placeholder {
+    color: #8aa3d8;
+}
+
+.sc-send {
+    background: var(--accent, #60a5fa);
+    color: #081226;
+    border: none;
+    border-radius: 12px;
+    padding: 0 14px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.sc-hints {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.sc-hints .sc-hint {
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid rgba(255, 255, 255, .1);
+    color: #cfe0ff;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+
+/* Feedback + suggestions */
+
+.sc-feedback {
+    display: inline-flex;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+.sc-feedback .sc-on {
+    filter: saturate(1.4);
+    transform: scale(1.05);
+}
+
+.sc-suggestions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.sc-suggestions .sc-sugg {
+    background: #11224a;
+    border: 1px solid rgba(255, 255, 255, .1);
+    color: #cfe0ff;
+    padding: 6px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+
+/* Modal contact */
+
+.sc-modal {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    background: rgba(0, 0, 0, .5);
+}
+
+.sc-modal.sc-hidden {
+    display: none;
+}
+
+.sc-modal-card {
+    width: 92%;
+    max-width: 420px;
+    background: #0e1a33;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: var(--sc-shadow);
+}
+
+.sc-contact-form {
+    display: grid;
+    gap: 10px;
+}
+
+.sc-contact-form input,
+.sc-contact-form textarea {
+    width: 100%;
+    background: #0b1b38;
+    border: 1px solid rgba(255, 255, 255, .12);
+    color: #eaf0ff;
+    padding: 10px 12px;
+    border-radius: 12px;
+}
+
+.sc-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.sc-contact-feedback {
+    font-size: 14px;
+    opacity: .85;
+    margin-top: 4px;
+}
+
+.sc-contact-feedback.sc-ok {
+    color: #7ee787;
+}
+
+
+/* Utilitaires */
+
+.sc-hidden {
+    display: none !important;
+}
+
+
+/* Responsive */
+
+@media (max-width: 480px) {
+    .sc-panel {
+        bottom: 80px;
+        width: calc(100vw - 20px);
+        height: 70vh;
+    }
+}

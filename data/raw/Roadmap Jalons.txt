@@ -1,0 +1,18 @@
+Phase 1 – Cadrage (Semaine 1–2) :
+- Atelier de définition des cas d’usage cibles
+- Validation des sources documentaires et contraintes RGPD
+
+Phase 2 – POC RAG (Semaine 3–5) :
+- Extraction et indexation de documents
+- Prototype avec interface Streamlit, modèle Flan-T5 local
+- Tests internes avec 3 utilisateurs pilotes
+
+Phase 3 – Extension & Intégration (Semaine 6–8) :
+- Intégration dans portail interne
+- Dashboard de supervision
+- Feedback utilisateurs et itérations
+
+Phase 4 – Passage en production (Semaine 9–10) :
+- Documentation technique
+- Formation interne
+- Validation finale avec la DSI

@@ -1,0 +1,2 @@
+Le projet PFE consiste à construire un assistant RAG pour la documentation interne.
+L’architecture repose sur ChromaDB pour l’index vectoriel et des embeddings MiniLM.

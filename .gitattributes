@@ -1,0 +1,20 @@
+# Normaliser les fins de ligne
+* text=auto
+
+# Forcer LF pour le code
+*.py text eol=lf
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+
+# Binaire
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.pdf binary
+*.sqlite3 binary
+*.npy binary
+*.npz binary

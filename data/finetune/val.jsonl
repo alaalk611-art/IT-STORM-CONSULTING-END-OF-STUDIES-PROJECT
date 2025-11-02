@@ -1,0 +1,20 @@
+{"question": "Quelle est l’expertise principale d’IT Storm ?", "expected_answer": "IT Storm est spécialisée en cloud et intelligence artificielle.", "must_find_source": true}
+{"question": "IT Storm propose-t-elle des services en intelligence artificielle ?", "expected_answer": "Oui, elle propose des POC et des intégrations de modèles IA.", "must_find_source": true}
+{"question": "Quel est le rôle d’IT Storm dans la modernisation des systèmes d’information ?", "expected_answer": "Accompagner la modernisation et l’adoption du cloud.", "must_find_source": true}
+{"question": "Comment IT Storm contribue-t-elle à l’automatisation des déploiements ?", "expected_answer": "En mettant en place des pipelines CI/CD et Kubernetes.", "must_find_source": true}
+{"question": "Quels outils DevOps sont utilisés par IT Storm ?", "expected_answer": "CI/CD et Kubernetes.", "must_find_source": true}
+{"question": "Comment IT Storm gère-t-elle l’infrastructure cloud ?", "expected_answer": "Avec l’infrastructure as code et l’automatisation.", "must_find_source": true}
+{"question": "Quelles solutions IT Storm développe-t-elle pour la donnée ?", "expected_answer": "Des data pipelines pour la collecte, la qualité et l’exploitation.", "must_find_source": true}
+{"question": "IT Storm intervient-elle dans la qualité des données ?", "expected_answer": "Oui, via des data pipelines.", "must_find_source": true}
+{"question": "Quels services IT Storm propose-t-elle en IA métier ?", "expected_answer": "Des POC IA et l’intégration de modèles pour les usages métier.", "must_find_source": true}
+{"question": "Quelles sont les priorités des projets IT Storm ?", "expected_answer": "La sécurité, la fiabilité et l’optimisation des coûts cloud.", "must_find_source": true}
+{"question": "IT Storm garantit-elle la fiabilité de ses projets ?", "expected_answer": "Oui, la fiabilité fait partie des priorités.", "must_find_source": true}
+{"question": "Quels bénéfices IT Storm apporte-t-elle à ses clients en termes de coûts ?", "expected_answer": "L’optimisation des coûts cloud.", "must_find_source": true}
+{"question": "IT Storm propose-t-elle de la formation ?", "expected_answer": "Oui, elle forme les équipes clientes.", "must_find_source": true}
+{"question": "Comment IT Storm partage-t-elle ses compétences ?", "expected_answer": "Par la formation et le transfert de compétences.", "must_find_source": true}
+{"question": "Où se trouve IT Storm ?", "expected_answer": "À Palaiseau, en France.", "must_find_source": true}
+{"question": "IT Storm accompagne-t-elle uniquement les entreprises locales ?", "expected_answer": "Non, elle intervient auprès d’entreprises partout en France.", "must_find_source": true}
+{"question": "IT Storm est-elle basée en région parisienne ?", "expected_answer": "Oui, à Palaiseau.", "must_find_source": true}
+{"question": "À quoi sert ce document de test ?", "expected_answer": "À vérifier et évaluer le pipeline RAG.", "must_find_source": true}
+{"question": "Ce fichier fait-il partie du pipeline RAG ?", "expected_answer": "Oui, il sert à le tester.", "must_find_source": true}
+{"question": "Quel est l’objectif final de ce document ?", "expected_answer": "Tester et valider un pipeline RAG.", "must_find_source": true}

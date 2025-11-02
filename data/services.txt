@@ -1,0 +1,5 @@
+IT Storm propose :
+- Ingestion de données
+- Pipeline de transformation
+- Qualité de données
+- IA générative interne

@@ -1,0 +1,10 @@
+Le client est un groupe du secteur énergie ayant initié une transformation digitale de ses processus internes. L’enjeu est d’accélérer l’accès aux connaissances documentaires dispersées, en particulier les archives projet, les rapports d’audit, et les guides opérationnels.
+
+Les objectifs sont de :
+- Réduire le temps de recherche d’information critique de 50% (KPI mesurable).
+- Centraliser les réponses sur une interface unique, pour améliorer la cohérence des discours.
+- Démontrer la faisabilité d’une chaîne RAG 100% locale.
+
+Des objectifs qualitatifs complémentaires incluent : adoption par les managers de proximité, facilité de maintenance, respect RGPD.
+
+L’initiative s’inscrit dans le cadre plus large d’une stratégie IA interne menée par la DSI et les responsables métiers.

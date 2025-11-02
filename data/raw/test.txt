@@ -1,0 +1,10 @@
+IT Storm est une société de consulting spécialisée en cloud et en intelligence artificielle.
+Elle accompagne ses clients dans la modernisation des systèmes d’information et l’adoption du cloud.
+Les missions couvrent la migration vers des architectures cloud natives, le DevOps et l’automatisation.
+IT Storm met en place des pipelines CI/CD, l’orchestration Kubernetes et l’infrastructure as code.
+L’entreprise conçoit des data pipelines pour la collecte, la qualité et l’exploitation des données.
+Côté IA, IT Storm réalise des POC et des intégrations de modèles pour les usages métier.
+La sécurité, la fiabilité et l’optimisation des coûts cloud font partie des priorités des projets.
+IT Storm propose aussi de la formation et du transfert de compétences aux équipes clientes.
+La société est basée à Palaiseau (France) et intervient auprès d’entreprises en France.
+Ce document de test sert à vérifier et évaluer un pipeline RAG (retrieval-augmented generation).

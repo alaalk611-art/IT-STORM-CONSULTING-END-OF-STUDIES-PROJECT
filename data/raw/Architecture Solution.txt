@@ -1,0 +1,13 @@
+La chaîne RAG conçue repose sur les composants suivants :
+
+1. Ingestion documentaire : les fichiers internes (PDF, DOCX, TXT) sont extraits via des scripts Python, nettoyés, puis segmentés en chunks de 900 mots avec chevauchement de 150.
+
+2. Embeddings : chaque chunk est vectorisé avec le modèle SentenceTransformers (all-MiniLM-L6-v2), puis stocké dans ChromaDB.
+
+3. Moteur de recherche : la recherche de contexte se fait par similarité cosine (top-k=4). Les documents pertinents sont formatés avec provenance.
+
+4. LLM : la génération est réalisée par un modèle Flan-T5 local (via Transformers), contraint par un prompt strict interdisant toute hallucination.
+
+5. Intégration front : l’ensemble est piloté via Streamlit, avec possibilité d’export DOCX et visualisation des sources.
+
+Tous les composants sont exécutés en local (offline) pour garantir la confidentialité.

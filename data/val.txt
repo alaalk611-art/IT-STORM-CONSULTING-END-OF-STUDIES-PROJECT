@@ -1,0 +1,100 @@
+Q: Quelle est l’expertise principale d’IT Storm ?
+A: IT Storm est spécialisée en cloud et intelligence artificielle.
+
+---
+
+Q: IT Storm propose-t-elle des services en intelligence artificielle ?
+A: Oui, elle propose des POC et des intégrations de modèles IA.
+
+---
+
+Q: Quel est le rôle d’IT Storm dans la modernisation des systèmes d’information ?
+A: Accompagner la modernisation et l’adoption du cloud.
+
+---
+
+Q: Comment IT Storm contribue-t-elle à l’automatisation des déploiements ?
+A: En mettant en place des pipelines CI/CD et Kubernetes.
+
+---
+
+Q: Quels outils DevOps sont utilisés par IT Storm ?
+A: CI/CD et Kubernetes.
+
+---
+
+Q: Comment IT Storm gère-t-elle l’infrastructure cloud ?
+A: Avec l’infrastructure as code et l’automatisation.
+
+---
+
+Q: Quelles solutions IT Storm développe-t-elle pour la donnée ?
+A: Des data pipelines pour la collecte, la qualité et l’exploitation.
+
+---
+
+Q: IT Storm intervient-elle dans la qualité des données ?
+A: Oui, via des data pipelines.
+
+---
+
+Q: Quels services IT Storm propose-t-elle en IA métier ?
+A: Des POC IA et l’intégration de modèles pour les usages métier.
+
+---
+
+Q: Quelles sont les priorités des projets IT Storm ?
+A: La sécurité, la fiabilité et l’optimisation des coûts cloud.
+
+---
+
+Q: IT Storm garantit-elle la fiabilité de ses projets ?
+A: Oui, la fiabilité fait partie des priorités.
+
+---
+
+Q: Quels bénéfices IT Storm apporte-t-elle à ses clients en termes de coûts ?
+A: L’optimisation des coûts cloud.
+
+---
+
+Q: IT Storm propose-t-elle de la formation ?
+A: Oui, elle forme les équipes clientes.
+
+---
+
+Q: Comment IT Storm partage-t-elle ses compétences ?
+A: Par la formation et le transfert de compétences.
+
+---
+
+Q: Où se trouve IT Storm ?
+A: À Palaiseau, en France.
+
+---
+
+Q: IT Storm accompagne-t-elle uniquement les entreprises locales ?
+A: Non, elle intervient auprès d’entreprises partout en France.
+
+---
+
+Q: IT Storm est-elle basée en région parisienne ?
+A: Oui, à Palaiseau.
+
+---
+
+Q: À quoi sert ce document de test ?
+A: À vérifier et évaluer le pipeline RAG.
+
+---
+
+Q: Ce fichier fait-il partie du pipeline RAG ?
+A: Oui, il sert à le tester.
+
+---
+
+Q: Quel est l’objectif final de ce document ?
+A: Tester et valider un pipeline RAG.
+
+---
+

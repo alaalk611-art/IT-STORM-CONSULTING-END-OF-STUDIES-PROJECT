@@ -1,0 +1,130 @@
+[
+  {
+    "id": "cloud_ia_specialty",
+    "question": "Quelle est la spécialité principale d’IT Storm ?",
+    "answer": "IT Storm est spécialisée dans le cloud et l’intelligence artificielle, en alliant DevOps, pipelines data et intégrations IA pour ses clients.",
+    "keywords": ["\\bcloud\\b", "\\bia\\b", "intelligence artificielle", "sp[ée]cialit", "expertise", "cœur de m[ée]tier"],
+    "aliases": [
+      "Quelle est la spécialité principale d’IT Storm ?",
+      "Dans quels domaines IT Storm concentre-t-elle son expertise ?",
+      "IT Storm travaille-t-elle dans le cloud et l’IA ?",
+      "Peut-on dire qu’IT Storm est une société de cloud et IA ?",
+      "Quel est le cœur de métier d’IT Storm ?",
+      "IT Storm est-elle experte en intelligence artificielle ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "devops_cicd_k8s",
+    "question": "Quelles pratiques DevOps IT Storm met-elle en place ?",
+    "answer": "IT Storm met en œuvre des pratiques DevOps telles que CI/CD, Kubernetes, automatisation des déploiements et supervision continue pour assurer fiabilité et agilité.",
+    "keywords": ["\\bdevops\\b", "ci/?cd", "kubernetes|\\bk8s\\b", "livraison", "d[ée]ploiement", "workflow"],
+    "aliases": [
+      "Quelles pratiques DevOps IT Storm met-elle en place ?",
+      "IT Storm propose-t-elle du DevOps ?",
+      "Quel type de workflows IT Storm déploie-t-elle ?",
+      "Comment IT Storm gère-t-elle les livraisons logicielles ?",
+      "IT Storm utilise-t-elle Kubernetes ?",
+      "Quelles solutions IT Storm apporte-t-elle en DevOps ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "iac_infrastructure",
+    "question": "Comment IT Storm gère-t-elle l’infrastructure avec l’infrastructure as code ?",
+    "answer": "IT Storm gère son infrastructure via Terraform et Ansible afin d’automatiser, versionner et fiabiliser les déploiements.",
+    "keywords": ["infrastructure as code|\\biac\\b", "terraform", "ansible", "automati"],
+    "aliases": [
+      "IT Storm pratique-t-elle l’infrastructure as code ?",
+      "Quel moyen IT Storm utilise pour automatiser l’infrastructure ?",
+      "IT Storm déploie-t-elle l’automatisation de l’infrastructure ?",
+      "Quelle méthode d’automatisation IT Storm adopte-t-elle ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "data_pipelines",
+    "question": "Quelles solutions IT Storm développe-t-elle pour la donnée ?",
+    "answer": "IT Storm développe des data pipelines pour la collecte, la qualité et l’exploitation des données d’entreprise, afin de valoriser les informations clés.",
+    "keywords": ["\\bdata\\b|\\bdonn[ée]e", "pipeline", "etl|elt", "qualit[ée] des donn[ée]es"],
+    "aliases": [
+      "Que met en place IT Storm pour la donnée ?",
+      "Comment IT Storm traite-t-elle la donnée ?",
+      "Quels pipelines IT Storm développe-t-elle ?",
+      "Quel livrable IT Storm fournit pour gérer la donnée ?",
+      "Quelles solutions IT Storm apporte-t-elle pour la data ?",
+      "IT Storm crée-t-elle des pipelines de données ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "ia_poc_integrations",
+    "question": "Quels services IA IT Storm propose-t-elle (POC et intégrations IA) ?",
+    "answer": "IT Storm propose des POC IA et des intégrations de modèles métiers (NLP, vision, prédiction) adaptés aux besoins des clients, avec transfert de compétences.",
+    "keywords": ["\\bia\\b|intelligence artificielle", "\\bpoc\\b", "mod[èe]le", "int[ée]gration", "usage m[ée]tier"],
+    "aliases": [
+      "Quels services IA propose IT Storm ?",
+      "IT Storm réalise-t-elle des POC IA ?",
+      "IT Storm intègre-t-elle des modèles IA ?",
+      "Quelles intégrations IA IT Storm développe-t-elle ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "project_priorities",
+    "question": "Quelles sont les priorités des projets IT Storm (sécurité, fiabilité, coûts) ?",
+    "answer": "Les priorités des projets IT Storm sont la sécurité, la fiabilité des livrables et l’optimisation des coûts pour maximiser la valeur pour les clients.",
+    "keywords": ["s[ée]curit[ée]", "fiabilit[ée]", "co[uû]ts", "optimisation"],
+    "aliases": [
+      "Pourquoi IT Storm insiste sur la sécurité ?",
+      "La sécurité fait-elle partie des priorités d’IT Storm ?",
+      "IT Storm garantit-elle la fiabilité de ses projets ?",
+      "Quels bénéfices IT Storm apporte-t-elle à ses clients en termes de coûts ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "training_transfer",
+    "question": "IT Storm propose-t-elle de la formation et du transfert de compétences ?",
+    "answer": "Oui, IT Storm accompagne ses clients par la formation et le transfert de compétences sur le cloud, DevOps et l’intelligence artificielle.",
+    "keywords": ["formation", "transfert de comp[ée]tences", "monte[er] en comp[ée]tences"],
+    "aliases": [
+      "IT Storm aide-t-elle à moderniser les systèmes d’information ?",
+      "Quels services de formation propose IT Storm ?",
+      "IT Storm propose-t-elle du transfert de compétences ?",
+      "Les clients bénéficient-ils de formations IT Storm ?",
+      "IT Storm aide-t-elle les équipes clientes à monter en compétences ?",
+      "Quel est le rôle d’IT Storm dans la modernisation des systèmes d’information ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "location_france",
+    "question": "Où se trouve IT Storm ?",
+    "answer": "Le siège d’IT Storm est situé à Palaiseau, en région parisienne, avec des interventions dans toute la France.",
+    "keywords": ["palaiseau", "france", "r[ée]gion parisienne", "adresse", "o[uù] se trouve"],
+    "aliases": [
+      "IT Storm intervient-elle uniquement à Palaiseau ?",
+      "Quelle est l’adresse d’IT Storm ?",
+      "Où se trouve le siège d’IT Storm ?",
+      "IT Storm est-elle implantée en région parisienne ?",
+      "Où se trouve IT Storm ?",
+      "IT Storm est-elle basée en région parisienne ?"
+    ],
+    "weight": 1.0
+  },
+  {
+    "id": "fin_reports",
+    "question": "Comment générer des rapports financiers automatiquement ?",
+    "answer": "IT Storm conçoit des scripts Python connectés à Yahoo Finance et des modèles NLP pour générer des rapports financiers automatiques et fiables.",
+    "keywords": ["rapport", "financier", "bourse", "yfinance", "KPI"],
+    "aliases": [
+      "Comment automatiser la génération de rapports financiers ?",
+      "Quels outils utiliser pour créer des rapports financiers automatiques ?",
+      "Peut-on automatiser les rapports financiers avec yfinance ?",
+      "Comment suivre les KPI financiers automatiquement ?",
+      "Quels sont les avantages d’automatiser les rapports financiers ?"
+    ],
+    "weight": 1.0
+  }
+]

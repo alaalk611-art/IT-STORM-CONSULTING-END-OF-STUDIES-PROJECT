@@ -1,0 +1,52 @@
+==============================================================================
+IT STORM RAG — Automated Test Run
+Model: google/flan-t5-base | Device: -1
+Embedding: sentence-transformers/all-MiniLM-L6-v2 | TopK: 4
+MaxContextChars: 1300
+==============================================================================
+
+--- EXECUTIVE SUMMARY ---
+Prompt   : Executive Summary of the IT STORM Proof of Concept
+Duration : 19.72s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+IT Storm is a cloud consulting company specialized in Cloud, Data and IA. IT Storm’s clients include MLOps, CI/CD pipelines, and Kubernetes deployments. IT STORM is an IT Consulting company specializing in cloud, DevOps and IT Applied Intelligence. In 2024, IT Storm supports several clients in the development of RAG (Retrieval-Augmented Generation) internal solutions for document access. The main objective of the project is to provide an intelligent assistant capable of ing questions from internal teams at the workplace.
+
+--- TECHNICAL ARCHITECTURE ---
+Prompt   : Describe the technical architecture of the RAG solution
+Duration : 40.24s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+IT STORM proposes an intelligent assistant for the internal teams of major groups, combining RAG (Retrieval-Augmented Generation) and local LLM. The project aims to valorise internal documents to accelerate decision making. In 2024, a pilot phase has allowed to validate the feasibility of the RAG chain, based on ChromaDB and a local Flan-T5. Cases of use should include internal FAQs, technical documentation, and project support. The client expressed strong expectations in terms of confidentiality, personnalisation of the ton and control on the sources.
+
+--- BUDGET AND EFFORT ---
+Prompt   : Summarize the estimated budget and effort for the project
+Duration : 37.50s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+Global Estimation: - Total Estimated Time: 25 to 35 Days-Per-Hour - Cost Indicable: between 12 000 and 18 000 € HT based on TJM (480 € – 520 €) Hypotheses: – Pre-existing internal assets (pas de reprise manuelle massive) – Flan-T5 already available locally (pas tinkering) - Internal infrastructure environment Repartition approximative of effort:- 15% cadrage. 40% dev prototype. A review post-POC will be able to adjust depending on user feedback and technical difficulties encountered. - Risque: poor quality or dispersion of internal document sources Measure: IT STORM for cleaning and initial structure - Measure: strict prompt + local model + audit of it during POC - Survey: low adoption by financial users Survey: acculturation + pilot phase impliquant real users - Estimate: exploitation costs (infrastructure. maintenance) & Measure: Estimate in amont + automation of the pipeline The initiative is included in the larger framework of an internal IA strategy undertaken by DSI and industry leaders.
+
+--- RISKS ---
+Prompt   : List the main project risks and how they are mitigated
+Duration : 21.43s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+IT Storm is a specialized cloud and artificial intelligence consulting company. IT Storm supports its clients in the modernization of information systems and cloud adoption. The mission focuses on migration to native cloud architectures, DevOps and automation. IT storm has CI/CD pipelines, Kubernetes and infrastructure as code, and IT Storm manages data pipelines for the collection, quality and operation of data. In the IA region, IT Storm performs POCs and integrations of models for professional use.
+
+--- ROADMAP ---
+Prompt   : Summarize the project roadmap and main milestones
+Duration : 21.88s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+IT Storm is an IT consulting company specializing in cloud and artificial intelligence. IT Storm supports its clients in the cloud and AI industry. It is a cloud consulting company with a strong focus on cloud computing and Artificial Intelligence (AI). IT Storm's core competencies include cloud computing, AI, machine learning, computer science, information technology, and information systems. IT storm is headquartered in San Francisco, California and has offices in Washington, D.C.
+
+--- NEXT STEPS ---
+Prompt   : Summarize the next operational steps after the POC
+Duration : 39.11s
+Checks   : sentences=5 | ends_with_period=True -> PASS
+Output   :
+Phase 1 – Cadrage Phase 2 – POC RAG Phase 3 – Extension & Integration Phase 4 – Production Passage (Section 9–10) : - Documentation Techniques - Internal Training - Dashboard of Control - User Feedback - Feedback Users and Identifiers Phase 5 – Testing & Production Phase 6 – End-of-life Phase 8 – Development & Extension Phase 9 – Implementation Phase 10 – User Test + Feedback Phase 11 – Productive Testing Phase 12 – Release & Delivery Phase 13 – Proposal & Validation Phase 14 – Output Phase 15 – Expansion and Integration Phase 16 – Application Testing Phase 17 – Tests & Testing Phase 18 – Final Product Testing Phase 19 – Software Testing Phase 20 – System Testing Phase 21 – Integration Testing Phase 22 – Installation Testing Phase 23 – Continuation Testing Phase 24 – Submission Testing Phase 25 – Delivery Testing Phase 26 – Performance Testing Phase 27 – Execution Testing Phase 28 – Deliverables and Expected Value. Additionally, phase 1 – Cadrage Phase 2 – POC RAG Phase 3 – Extension & Integration Phase 4 – Production Passage (Section 9–10) : - Documentation Techniques - Internal Training - Dashboard of Control - User Feedback - Feedback Users and Identifiers Phase 5 – Testing & Production Phase 6 – End-of-life Phase 8 – Development & Extension Phase 9 – Implementation Phase 10 – User Test + Feedback Phase 11 – Productive Testing Phase 12 – Release & Delivery Phase 13 – Proposal & Validation Phase 14 – Output Phase 15 – Expansion and Integration Phase 16 – Application Testing Phase 17 – Tests & Testing Phase 18 – Final Product Testing Phase 19 – Software Testing Phase 20 – System Testing Phase 21 – Integration Testing Phase 22 – Installation Testing Phase 23 – Continuation Testing Phase 24 – Submission Testing Phase 25 – Delivery Testing Phase 26 – Performance Testing Phase 27 – Execution Testing Phase 28 – Deliverables and Expected Value. Moreover, additionally, phase 1 – Cadrage Phase 2 – POC RAG Phase 3 – Extension & Integration Phase 4 – Production Passage (Section 9–10) : - Documentation Techniques - Internal Training - Dashboard of Control - User Feedback - Feedback Users and Identifiers Phase 5 – Testing & Production Phase 6 – End-of-life Phase 8 – Development & Extension Phase 9 – Implementation Phase 10 – User Test + Feedback Phase 11 – Productive Testing Phase 12 – Release & Delivery Phase 13 – Proposal & Validation Phase 14 – Output Phase 15 – Expansion and Integration Phase 16 – Application Testing Phase 17 – Tests & Testing Phase 18 – Final Product Testing Phase 19 – Software Testing Phase 20 – System Testing Phase 21 – Integration Testing Phase 22 – Installation Testing Phase 23 – Continuation Testing Phase 24 – Submission Testing Phase 25 – Delivery Testing Phase 26 – Performance Testing Phase 27 – Execution Testing Phase 28 – Deliverables and Expected Value. In addition, moreover, additionally, phase 1 – Cadrage Phase 2 – POC RAG Phase 3 – Extension & Integration Phase 4 – Production Passage (Section 9–10) : - Documentation Techniques - Internal Training - Dashboard of Control - User Feedback - Feedback Users and Identifiers Phase 5 – Testing & Production Phase 6 – End-of-life Phase 8 – Development & Extension Phase 9 – Implementation Phase 10 – User Test + Feedback Phase 11 – Productive Testing Phase 12 – Release & Delivery Phase 13 – Proposal & Validation Phase 14 – Output Phase 15 – Expansion and Integration Phase 16 – Application Testing Phase 17 – Tests & Testing Phase 18 – Final Product Testing Phase 19 – Software Testing Phase 20 – System Testing Phase 21 – Integration Testing Phase 22 – Installation Testing Phase 23 – Continuation Testing Phase 24 – Submission Testing Phase 25 – Delivery Testing Phase 26 – Performance Testing Phase 27 – Execution Testing Phase 28 – Deliverables and Expected Value. Additionally, moreover, additionally, phase 1 – Cadrage Phase 2 – POC RAG Phase 3 – Extension & Integration Phase 4 – Production Passage (Section 9–10) : - Documentation Techniques - Internal Training - Dashboard of Control - User Feedback - Feedback Users and Identifiers Phase 5 – Testing & Production Phase 6 – End-of-life Phase 8 – Development & Extension Phase 9 – Implementation Phase 10 – User Test + Feedback Phase 11 – Productive Testing Phase 12 – Release & Delivery Phase 13 – Proposal & Validation Phase 14 – Output Phase 15 – Expansion and Integration Phase 16 – Application Testing Phase 17 – Tests & Testing Phase 18 – Final Product Testing Phase 19 – Software Testing Phase 20 – System Testing Phase 21 – Integration Testing Phase 22 – Installation Testing Phase 23 – Continuation Testing Phase 24 – Submission Testing Phase 25 – Delivery Testing Phase 26 – Performance Testing Phase 27 – Execution Testing Phase 28 – Deliverables and Expected Value.
+
+==============================================================================
+Done in 183.95s
+==============================================================================
