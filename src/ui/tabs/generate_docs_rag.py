@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 import streamlit as st
+# --- RAG strict engine import ---
+from src.rag_brain import smart_rag_answer  # wrapper robuste: *args/**kwargs
 
 # ---- Optional deps (handled gracefully) ----
 _HAS_CHROMA = False
@@ -349,7 +351,7 @@ class QAResult:
     used_queries: List[str]
 
 
-def grounded_answer(question: str, lang: str = "fr", k: int = 6) -> QAResult:
+def grounded_answer(question: str, lang: str = "fr", k: int = 12) -> QAResult:
     # Modules guard
     if not _HAS_CHROMA or not _HAS_ST:
         msg = (
@@ -548,7 +550,7 @@ def render_generate_docs_tab():
             for sec in names:
                 q = f"{topic} — {sec}"
                 with st.spinner(f"{sec} …"):
-                    res = grounded_answer(q, lang=lang if lang!="auto" else "fr", k=k)
+                    res = grounded_answer(question=q, lang=lang, mode=mode)
                 outputs.append((sec, res.answer))
                 st.subheader(sec)
                 st.write(res.answer)
@@ -597,6 +599,82 @@ def render_generate_docs_tab():
                 st.subheader("Résumé (extraits)")
                 st.write("\n".join([f"- {s}" for s in sents]))
 
+# src/ui/tabs/generate_docs_rag.py
+# UI Streamlit – Onglet "Générer réponse (RAG)" avec moteur intelligent
 
-# Backward-compat alias (used by existing app)
-render = render_generate_docs_tab
+import os
+import streamlit as st
+
+# Import du cerveau RAG
+try:
+    from src.rag_brain import smart_rag_answer
+except Exception as e:
+    st.error(f"Erreur d’import RAG : {e}")
+    smart_rag_answer = None
+
+def _badge_conf(conf: float) -> str:
+    if conf >= 0.8:
+        return f"🟢 Confiance: **{conf:.2f}**"
+    if conf >= 0.65:
+        return f"🟡 Confiance: **{conf:.2f}**"
+    return f"🟠 Confiance: **{conf:.2f}**"
+
+def render_generate_docs_tab():
+    st.header("🧠 Générer réponse (RAG intelligent)")
+    st.caption("Réponses **ancrées** sur les documents indexés, avec extraits et sources. Zéro hallucination.")
+
+    # Lang
+    col1, col2 = st.columns([2,1])
+    with col1:
+        q = st.text_input("Question", placeholder="Ex: Quels bénéfices concrets du RAG pour un client énergie ?")
+    with col2:
+        lang = st.selectbox("Langue", ["fr","en"], index=0)
+
+    # Mode (auto/intention)
+    mode = st.selectbox("Mode", ["auto","benefits","definition","howto","architecture","budget","roadmap","risks","compare","summary"], index=0)
+
+    do = st.button("Générer", type="primary", use_container_width=True)
+
+    st.divider()
+
+    if do and smart_rag_answer:
+        with st.spinner("Génération ancrée…"):
+            res = smart_rag_answer(question=q, lang=lang, mode=mode)
+
+        st.subheader("🔍 Réponse ancrée")
+        st.markdown(res["answer"])
+
+        meta = st.columns([1,1,1,1])
+        meta[0].metric("Confiance", f"{res['confidence']:.2f}")
+        meta[1].metric("Grounding", f"{res['quality'].get('grounding',0):.2f}")
+        meta[2].metric("Couverture", f"{res['quality'].get('coverage',0):.2f}")
+        meta[3].metric("Style", f"{res['quality'].get('style',0):.2f}")
+
+        st.markdown(_badge_conf(res["confidence"]))
+
+        with st.expander("📑 Extraits (citations)"):
+            if res["quotes"]:
+                for i, qt in enumerate(res["quotes"], 1):
+                    st.markdown(f"**{i}.** *« {qt['quote']} »* — `{qt['source']}`")
+            else:
+                st.info("Aucun extrait disponible (fallback).")
+
+        with st.expander("📚 Sources utilisées (fichiers)"):
+            if res["sources"]:
+                st.write(", ".join(sorted(set(res["sources"]))))
+            else:
+                st.info("Aucune source unique détectée.")
+
+        with st.expander("🛠️ Debug"):
+            st.json(res["dbg"])
+            st.json(res["quality"])
+
+    elif do and not smart_rag_answer:
+        st.error("Le moteur RAG n’est pas disponible.")
+
+
+# Alias pour intégration simple
+def render():
+    render_generate_docs_tab()
+
+

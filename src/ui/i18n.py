@@ -318,6 +318,7 @@ I18N.update({
     "chat_sources_h":  {"en": "Sources",  "fr": "Sources"},
 })
 
+
 # Appliquer les clés du tab Generate Docs uniquement
 I18N.update(GD_I18N)
 
