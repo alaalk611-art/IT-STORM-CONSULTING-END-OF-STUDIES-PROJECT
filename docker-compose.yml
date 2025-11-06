@@ -1,0 +1,81 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports: ["11434:11434"]
+    environment:
+      - OLLAMA_KEEP_ALIVE=0
+    volumes:
+      - ollama:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+  chroma:
+    image: chromadb/chroma:latest
+    container_name: chroma
+    command: ["chroma", "run", "--path", "/chroma/data", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["8000:8000"]
+    volumes:
+      - chroma:/chroma/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/heartbeat"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    container_name: stormcopilot-backend
+    env_file:
+      - .env.docker
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chroma:
+        condition: service_healthy
+    environment:
+      - DATA_DIR=/app/data
+      - VECTOR_DB_DIR=/app/vectors
+    volumes:
+      # Monte tes données et tes vecteurs dans les chemins attendus par l'app
+      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/data:/app/data:ro"
+      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/vectors:/app/vectors"
+      # (optionnel) hot-reload du code :
+      # - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM:/app"
+    ports: ["8001:8001"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+  ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ui
+    container_name: stormcopilot-ui
+    env_file:
+      - .env.docker
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      - API_BASE_URL=http://backend:8001
+      - DATA_DIR=/app/data
+    volumes:
+      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/data:/app/data:ro"
+    ports: ["8501:8501"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  ollama:
+  chroma:

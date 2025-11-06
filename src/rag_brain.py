@@ -78,8 +78,6 @@ _SENT_SPLIT = re.compile(r"(?<=[\.\!\?])\s+")
 _WORD = re.compile(r"\w+", re.UNICODE)
 
 # ===== Boosts par intention (par nom de fichier "basename") =====
-# NB: Priorité *forte* au fichier QA pour capter les questions inédites.
-#     Les autres .txt gardent un poids normal pour enrichir si utile.
 INTENT_BOOSTS = {
     "benefits": {
         "Executive Summary.txt": 2.1,
@@ -112,7 +110,7 @@ INTENT_BOOSTS = {
     "definition": {
         "Executive Summary.txt": 1.9,
         "Contexte Objectifs.txt": 1.3,
-        "it_storm_1000_QA.txt": 2.8,  # très fort pour les définitions
+        "it_storm_1000_QA.txt": 2.8,
     },
     "howto": {
         "Architecture Solution.txt": 2.0,
@@ -130,7 +128,7 @@ INTENT_BOOSTS = {
     "default": {
         "Executive Summary.txt": 1.3,
         "Contexte Objectifs.txt": 1.2,
-        "it_storm_1000_QA.txt": 2.7,  # priorité forte par défaut
+        "it_storm_1000_QA.txt": 2.7,
     },
 }
 
@@ -156,7 +154,7 @@ def _ext(name: str) -> str:
 def is_blocked_source(src: str) -> bool:
     return _ext(src) in BLOCKED_EXTENSIONS
 
-# ===== Versions "lower" des tables pour comparaisons robustes =====
+# ===== Versions "lower" des tables =====
 def _lower_map(d: Dict[str, float]) -> Dict[str, float]:
     return {k.lower(): v for k, v in d.items()}
 
@@ -194,11 +192,11 @@ def tokens_fr(s: str) -> List[str]:
     return [w.lower() for w in _WORD.findall(s or "")]
 
 def humanize_fr(text: str) -> str:
-    # anti code-switching (FR only)
     text = re.sub(r"\b(and|the|for|y|in|of)\b", "", text, flags=re.IGNORECASE)
     text = re.sub(r"\s{2,}", " ", text)
     text = re.sub(r"\s+([,;:.])", r"\1", text)
     return text.strip()
+
 # --- Mode "paragraphe unique"
 SINGLE_PARAGRAPH = os.getenv("RAG_SINGLE_PARAGRAPH", "1") == "1"
 
@@ -214,27 +212,17 @@ def _take_quote_texts(quotes, max_parts=4):
     return parts
 
 def paragraphize_from_quotes(quotes: List[Dict[str,str]], intent: str) -> str:
-    """
-    Construit un seul paragraphe strictement à partir des citations (0 invention).
-    Préfère une phrase 'humaine' (assemble_human_sentence), sinon concat '« … »; « … ».'.
-    """
     parts = _take_quote_texts(quotes, max_parts=4)
     if not parts:
         return "Je ne sais pas."
     sent = assemble_human_sentence(parts)
     if not sent:
         sent = " ; ".join(f"« {p} »" for p in parts) + "."
-    # Petit habillage pour 'definition'
     if intent == "definition" and not sent.lower().startswith("it-storm"):
-        # tourne sans inventer : juste un préfixe fixe + citations cousues
         sent = "IT-STORM : " + " ; ".join(f"« {p} »" for p in parts) + "."
     return humanize_fr(sent)
 
 def assemble_human_sentence(parts: List[str]) -> str:
-    """
-    Assemble des segments courts pour former une phrase naturelle,
-    sans inventer de contenu (simple couture).
-    """
     if not parts:
         return ""
     uniq = []
@@ -252,7 +240,7 @@ def assemble_human_sentence(parts: List[str]) -> str:
         sent += "."
     return humanize_fr(sent)
 
-# ===== QA filtering helpers (ignore Q:, préfère A:) =====
+# ===== QA filtering helpers =====
 QA_QUESTION_PREFIXES = ("q:", "question:")
 QA_ANSWER_PREFIXES   = ("a:", "réponse:", "reponse:", "answer:")
 
@@ -435,9 +423,7 @@ class SmartRAG:
             best, best_val = None, -1e9
             for x in cand:
                 base = _norm_base(x.source)
-                # pénalité de diversité (plus forte si c'est déjà beaucoup la même source)
                 div_pen = 0.18 * used[base]
-                # si la source est le QA, petite pénalité additionnelle pour éviter la domination
                 if base == QA_BASENAME_L:
                     div_pen += 0.07 * used[base]
                 val = MMR_LAMBDA * x.score_final - (1 - MMR_LAMBDA) * div_pen
@@ -489,7 +475,7 @@ class SmartRAG:
             # D) Ultime fallback
             return truncate_words(text, 12)
 
-    # 1) Prépare les candidats nettoyés
+        # 1) Prépare les candidats nettoyés
         cands = []
         for c in chunks:
             if is_blocked_source(c.source):
@@ -535,7 +521,7 @@ class SmartRAG:
                     per_source[cand["source"]] += 1
                 i_qa += 1
 
-        # 5) Si out est vide ou trop court, complète par ce qui reste (respectant MAX_QUOTES_PER_SOURCE)
+        # 5) Complète si besoin
         i = 0
         while len(out) < max_quotes and i < len(cands):
             cand = cands[i]
@@ -658,10 +644,6 @@ class SmartRAG:
         return humanize_fr("\n".join(out)), sorted(set(q["source"] for q in quotes)), quotes
 
     def build_definition(self, chunks: List[RetrievedChunk]) -> Tuple[str, List[str], List[Dict[str,str]]]:
-        """
-        Cas 'definition' : phrase-synthèse 100% extractive (couture de citations, 2–3),
-        puis liste d'extraits. Zéro hallucination.
-        """
         quotes = self.make_quotes(chunks, MAX_QUOTES)
         if not quotes or len(quotes) < MIN_QUOTES_OK:
             return "Je ne sais pas.", [], []
@@ -671,7 +653,6 @@ class SmartRAG:
         if not headline:
             headline = self._aggregated_definition(quotes, max_parts=3)
         if not headline.lower().startswith("it-storm"):
-            # tenter une intro naturelle
             headline = "IT-STORM est " + headline[0].lower() + headline[1:]
 
         body = ["", "Extraits documentaires :", ""]
@@ -737,7 +718,7 @@ class SmartRAG:
             elif intent == "howto":
                 ans, srcs, qts = self.build_generic_from_quotes("Procédure recommandée", ranked)
             elif intent == "definition":
-                ans, srcs, qts = self.build_definition(ranked)  # phrase-synthèse naturelle (couture)
+                ans, srcs, qts = self.build_definition(ranked)
             elif intent == "risks":
                 ans, srcs, qts = self.build_generic_from_quotes("Risques & atténuations", ranked)
             elif intent == "architecture":
@@ -758,7 +739,8 @@ class SmartRAG:
                     ans = humanize_fr("\n".join(out))
                     srcs = sorted(set(q["source"] for q in quotes))
                     qts = quotes
-                # --- Post-traitement : tout en un seul paragraphe (zéro hallucination)
+
+        # --- Post-traitement : tout en un seul paragraphe (zéro hallucination)
         if SINGLE_PARAGRAPH and qts and len(qts) >= MIN_QUOTES_OK:
             ans = paragraphize_from_quotes(qts, intent)
 
@@ -774,6 +756,159 @@ class SmartRAG:
             "conf_threshold": CONF_MIN,
         }
         return SmartRAGResult(answer=ans, sources=srcs, quotes=qts, confidence=conf, quality=quality, dbg=dbg)
+
+# === Jury Ollama (optionnel) =================================================
+def ask_multi_ollama(
+    question: str,
+    models: Optional[List[str]] = None,
+    topk_context: int = 6,
+    timeout: float = 60.0
+) -> Dict[str, Any]:
+    """
+    Pose la même question à plusieurs modèles Ollama avec un contexte EXTRACTIF
+    (snippets RAG), calcule des métriques et recommande le meilleur.
+    Retourne:
+      {
+        "question": ...,
+        "context_snippets": [...],
+        "results": [{"model","answer","time","metrics","score"}...],
+        "suggestion": {"model","score","time"}
+      }
+    """
+    models = models or [
+        "mistral:7b-instruct",
+        "llama3.2:3b",
+        "qwen2.5:7b",
+    ]
+
+    # 1) Récupère un petit contexte strictement extractif via le moteur existant
+    eng = get_engine()
+    ranked = eng.rerank_balance(
+        eng.late_fusion(eng.retrieve_dense(question, k=TOP_K_DENSE), question),
+        intent=detect_intent(question)
+    )
+    quotes = eng.make_quotes(ranked, max_quotes=min(max(3, topk_context), MAX_QUOTES))
+    snippets = [q["quote"] for q in quotes]
+    context = "\n\n".join(f"- {s}" for s in snippets) if snippets else ""
+
+    if not context.strip():
+        return {
+            "question": question,
+            "context_snippets": [],
+            "results": [],
+            "suggestion": None
+        }
+
+    # 2) Prompt "réponse UNIQUEMENT depuis le contexte"
+    prompt = (
+        "Tu es un assistant interne. Réponds UNIQUEMENT depuis le contexte ci-dessous.\n"
+        "- Réponse courte (1 paragraphe, 2–4 phrases), claire, sans puces.\n"
+        "- Si l'info manque, réponds: \"Je ne sais pas.\".\n"
+        "- Ajoute une citation [Source: extrait] à la fin.\n\n"
+        f"Question : {question}\n\nContexte :\n{context}\n\nRéponse :"
+    )
+
+    # 3) Appels Ollama
+    try:
+        from src.llm.ollama_client import generate_ollama, ping, list_models
+    except Exception as e:
+        return {
+            "question": question,
+            "context_snippets": snippets,
+            "results": [{"model":"(ollama)", "answer": f"[Erreur import ollama_client] {e}", "time": 0.0, "metrics": {}}],
+            "suggestion": None
+        }
+
+    try:
+        if not ping():
+            raise RuntimeError("Ollama n'est pas joignable (ping KO).")
+    except Exception as e:
+        return {
+            "question": question,
+            "context_snippets": snippets,
+            "results": [{"model":"(ollama)", "answer": f"[Ping Ollama KO] {e}", "time": 0.0, "metrics": {}}],
+            "suggestion": None
+        }
+
+    import time, re
+
+    def _coverage(ans: str, ctx_parts: List[str]) -> float:
+        if not ans or not ctx_parts: return 0.0
+        ans_low = ans.lower()
+        total = 0.0
+        for s in ctx_parts:
+            s_low = s.lower()
+            if not s_low.strip(): continue
+            aw = set(re.findall(r"\w+", ans_low))
+            sw = set(re.findall(r"\w+", s_low))
+            if not sw: continue
+            inter = len(aw & sw); union = len(sw)
+            total += inter / max(1, union)
+        return round(total / max(1, len(ctx_parts)), 2)
+
+    def _style(ans: str) -> float:
+        if not ans: return 0.0
+        L = len(ans.strip())
+        has_src = "[source:" in ans.lower()
+        punc = 1.0 if re.search(r"[.;!?]", ans) else 0.8
+        if 60 <= L <= 400: base = 1.0
+        elif L < 40: base = 0.6
+        else: base = 0.8
+        return round(min(1.0, base * (1.05 if has_src else 1.0) * punc), 2)
+
+    def _grounding(ans: str) -> float:
+        has_src = "[source:" in (ans or "").lower()
+        cov = _coverage(ans, snippets)
+        if has_src and cov >= 0.10: return round(min(1.0, 0.85 + 0.15*cov), 2)
+        return round(max(0.0, 0.6*cov), 2)
+
+    def _confidence(ans: str) -> float:
+        g = _grounding(ans); cov = _coverage(ans, snippets); sty = _style(ans)
+        L = len((ans or "").strip())
+        len_score = 1.0 if 60 <= L <= 400 else (0.7 if L > 400 else 0.6)
+        conf = 0.45*g + 0.25*cov + 0.20*len_score + 0.10*sty
+        if g >= 0.95 and cov >= 0.30 and 60 <= L <= 220:
+            conf = max(conf, 0.95)
+        return round(min(1.0, max(0.0, conf)), 2)
+
+    def _score(m):
+        return round(0.4*m.get("confidence",0) + 0.3*m.get("grounding",0) + 0.2*m.get("coverage",0) + 0.1*m.get("style",0), 3)
+
+    results = []
+    for mdl in models:
+        t0 = time.time()
+        try:
+            ans = generate_ollama(
+                mdl, prompt,
+                temperature=0.0,
+                max_tokens=180,
+                stream=True,
+                timeout=float(timeout),
+                options={"num_ctx": 1536, "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1}
+            )
+            if "[source:" not in ans.lower():
+                ans = ans.rstrip() + " [Source: extrait]"
+            dt = time.time() - t0
+            metrics = {
+                "coverage": _coverage(ans, snippets),
+                "grounding": _grounding(ans),
+                "style": _style(ans),
+            }
+            metrics["confidence"] = _confidence(ans)
+            score = _score(metrics)
+            results.append({"model": mdl, "answer": ans, "time": round(dt,2), "metrics": metrics, "score": score})
+        except Exception as e:
+            dt = time.time() - t0
+            results.append({"model": mdl, "answer": f"[Erreur LLM {mdl}] {e}", "time": round(dt,2), "metrics": {}, "score": 0.0})
+
+    valid = [r for r in results if not r["answer"].strip().startswith("[Erreur LLM")]
+    suggestion = max(valid, key=lambda x: x["score"]) if valid else None
+    return {
+        "question": question,
+        "context_snippets": snippets,
+        "results": results,
+        "suggestion": {"model": suggestion["model"], "score": suggestion["score"], "time": suggestion["time"]} if suggestion else None
+    }
 
 # ===== Singleton & wrapper =====
 _engine_singleton: Optional[SmartRAG] = None

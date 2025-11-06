@@ -2,49 +2,45 @@
 # ============================================================
 # Path: src/ui/tabs/generate_docs_rag.py
 # Role: Streamlit tab for grounded doc generation & QA.
-# Focus: ambiguity handling → auto‑reformulation → retrieval →
-#        creative but NON‑hallucinatory generation with hard fallbacks.
-#        (Local only: Chroma + SentenceTransformers + optional HF LLM)
+# Focus: ambiguity handling → strict retrieval → grounded answers (0-hallucination)
+#        Uses src.rag_brain.smart_rag_answer + optional ask_multi_ollama jury.
 # ============================================================
+
 from __future__ import annotations
-import os, re, io, json, uuid, textwrap
+import os, re, io, textwrap, uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple, Dict, Any
 
 import streamlit as st
-# --- RAG strict engine import ---
-from src.rag_brain import smart_rag_answer  # wrapper robuste: *args/**kwargs
+# --- RAG strict engine (imports robustes) ---
+try:
+    import src.rag_brain as _rb
+    smart_rag_answer = getattr(_rb, 'smart_rag_answer', None)
+    ask_multi_ollama = getattr(_rb, 'ask_multi_ollama', None)
+    _IMPORT_ERR = None if smart_rag_answer else RuntimeError('smart_rag_answer introuvable dans src.rag_brain')
+except Exception as e:
+    smart_rag_answer = None
+    ask_multi_ollama = None
+    _IMPORT_ERR = e
 
-# ---- Optional deps (handled gracefully) ----
-_HAS_CHROMA = False
-_HAS_ST = False
-_HAS_HF = False
+# Optional: Ollama model listing (robuste)
+try:
+    from src.llm.ollama_client import list_models as _ollama_list, ping as _ollama_ping
+except Exception:
+    _ollama_list = None
+    _ollama_ping = None
+except Exception as e:
+    smart_rag_answer = None
+    ask_multi_ollama = None
+    _IMPORT_ERR = e
+
+# ---- Optional deps for exports / PDF read (handled gracefully) ----
 _HAS_DOCX = False
 _HAS_PPTX = False
-_HAS_PDF = False
+_HAS_PDF  = False
 
-try:  # chroma
-    import chromadb
-    from chromadb.config import Settings as _ChromaSettings
-    _HAS_CHROMA = True
-except Exception:
-    pass
-
-try:  # sentence-transformers (+ numpy)
-    from sentence_transformers import SentenceTransformer
-    import numpy as np
-    _HAS_ST = True
-except Exception:
-    pass
-
-try:  # transformers (seq2seq)
-    from transformers import AutoTokenizer, AutoModelForSeq2SeqLM, pipeline
-    _HAS_HF = True
-except Exception:
-    pass
-
-try:  # exports
+try:
     from docx import Document
     _HAS_DOCX = True
 except Exception:
@@ -57,7 +53,7 @@ try:
 except Exception:
     pass
 
-try:  # reading PDFs (summary mode)
+try:
     from PyPDF2 import PdfReader
     _HAS_PDF = True
 except Exception:
@@ -65,371 +61,63 @@ except Exception:
 
 # ---- ENV & Defaults ----
 ROOT = Path(__file__).resolve().parents[3]
-VECTOR_DB = os.getenv("VECTOR_DB_DIR", str(ROOT / "vectors"))
-COLLECTION = os.getenv("COLLECTION_NAME", "itstorm_docs")  # must match app.py
-EMB_MODEL = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
-LLM_MODEL = os.getenv("LLM_MODEL", "google/flan-t5-base")
 OUTPUT_DIR = os.getenv("OUTPUT_DIR", str(ROOT / "out"))
-DATA_DIR = Path(os.getenv("DATA_DIR", str(ROOT / "data")))
-RAW_DIR = DATA_DIR / "raw"
 
-SUPPORTED = {"Auto": "auto", "Français": "fr", "English": "en"}
-
-# Domain guard (soft): we try to help, but won’t invent out of scope
-ALLOWED_TOKENS = {
-    "it storm","it-storm","devops","cloud","data","pipeline","pipelines",
-    "rag","pfe","consulting","kubernetes","aws","gcp","azure","ml","ia","ai",
-}
+SUPPORTED = {"Français": "fr", "English": "en"}
 
 # ============================================================
-# Utilities
+# Utilities (UI helpers)
 # ============================================================
 
 def _clean(x: str) -> str:
     return re.sub(r"\s+", " ", (x or "").strip())
 
-
-def _tokenize(s: str) -> List[str]:
-    return [t for t in re.split(r"[^\w]+", (s or "").lower()) if t]
-
-
-def _is_ambiguous(q: str, min_chars: int = 18, min_tokens: int = 3) -> bool:
-    qn = _clean(q)
-    return len(qn) < min_chars or len(_tokenize(qn)) < min_tokens
+def _safe_filename(x: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_\- ]+", "", x).strip().replace(" ", "_") or f"export_{uuid.uuid4().hex[:8]}"
 
 
-def _allowed(q: str) -> bool:
-    ql = q.lower()
-    return any(k in ql for k in ALLOWED_TOKENS)
 
-
-# ============================================================
-# Embeddings + Retrieval (cached)
-# ============================================================
-@dataclass
-class Hit:
-    text: str
-    source: str
-    score: float
-
-
-@st.cache_resource(show_spinner=False)
-def _get_embedder(model_name: str = EMB_MODEL):
-    if not _HAS_ST:
-        raise RuntimeError("sentence-transformers manquant — pip install sentence-transformers")
-    return SentenceTransformer(model_name)
-
-
-class Embedder:
-    def __init__(self, model_name: str = EMB_MODEL):
-        self.model = _get_embedder(model_name)
-
-    def encode(self, texts: List[str], normalize: bool = True):
-        vecs = self.model.encode(
-            texts,
-            batch_size=64,
-            show_progress_bar=False,
-            convert_to_numpy=True,
-            normalize_embeddings=normalize,
-        )
-        return vecs
-
-
-@st.cache_resource(show_spinner=False)
-def _get_chroma_client(persist_dir: str = VECTOR_DB):
-    if not _HAS_CHROMA:
-        raise RuntimeError("ChromaDB manquant — pip install chromadb")
-    os.makedirs(persist_dir, exist_ok=True)
-    return chromadb.PersistentClient(path=persist_dir, settings=_ChromaSettings())
-
-
-class VectorDB:
-    def __init__(self, persist_dir: str = VECTOR_DB, collection: str = COLLECTION):
-        self.client = _get_chroma_client(persist_dir)
-        try:
-            self.col = self.client.get_collection(collection)
-        except Exception:
-            self.col = self.client.create_collection(collection, metadata={"hnsw:space": "cosine"})
-        self.embedder = Embedder()
-
-    def search(self, query: str, k: int = 6) -> List[Hit]:
-        qv = self.embedder.encode([query])[0].tolist()
-        res = self.col.query(query_embeddings=[qv], n_results=int(k))
-        docs = res.get("documents", [[]])[0]
-        metas = res.get("metadatas", [[]])[0]
-        dists = res.get("distances", [[]])[0]
-        out: List[Hit] = []
-        for i, txt in enumerate(docs):
-            src = (metas[i] or {}).get("source") if i < len(metas) else None
-            dist = dists[i] if i < len(dists) else None
-            score = 1.0 - (float(dist) if dist is not None else 0.0)
-            out.append(Hit(text=_clean(txt or ""), source=Path(str(src or "unknown")).name, score=score))
-        return out
-
-    def top_score(self, query: str) -> float:
-        hits = self.search(query, k=1)
-        return float(hits[0].score) if hits else 0.0
-
-
-# ============================================================
-# LLM (grounded)
-# ============================================================
-@st.cache_resource(show_spinner=False)
-def _get_hf_pipe(model_name: str = LLM_MODEL):
-    if not _HAS_HF:
-        return None
+def _get_ollama_models(defaults=None):
+    """Retourne la liste des modèles Ollama disponibles (robuste)."""
+    defaults = defaults or ['mistral:7b-instruct','llama3.2:3b','qwen2.5:7b']
     try:
-        tok = AutoTokenizer.from_pretrained(model_name)
-        mdl = AutoModelForSeq2SeqLM.from_pretrained(model_name)
-        return pipeline(
-            task="text2text-generation",
-            model=mdl,
-            tokenizer=tok,
-            max_new_tokens=300,
-            min_new_tokens=120,
-            num_beams=4,
-            early_stopping=True,
-            length_penalty=1.0,
-            do_sample=False,
-            no_repeat_ngram_size=4,
-            repetition_penalty=1.15,
-            truncation=True,
-            clean_up_tokenization_spaces=True,
-        )
+        if _ollama_ping and _ollama_ping():
+            ms = _ollama_list() if _ollama_list else []
+            # Normaliser en liste simple
+            if isinstance(ms, dict) and 'models' in ms:
+                names = [m.get('name') for m in ms.get('models', [])]
+            elif isinstance(ms, (list, tuple)):
+                names = [str(m) for m in ms]
+            else:
+                names = []
+            names = [m for m in names if isinstance(m, str) and m.strip()]
+            return names or defaults
     except Exception:
-        return None
+        pass
+    # Fallbacks
+    if ask_multi_ollama is not None:
+        return defaults
+    return []
+def _badge_conf(conf: float) -> str:
+    try:
+        c = float(conf)
+    except Exception:
+        c = 0.0
+    if c >= 0.80: return f"🟢 Confiance: **{c:.2f}**"
+    if c >= 0.65: return f"🟡 Confiance: **{c:.2f}**"
+    return f"🟠 Confiance: **{c:.2f}**"
 
-
-class GroundedGen:
-    """
-    Wraps a seq2seq LLM (FLAN‑T5 by default). If not available, falls back to extractive.
-    Enforces: short, grounded, no-invention. Post‑checks ensure coverage; otherwise, fallback to snippets.
-    """
-    def __init__(self, model_name: str = LLM_MODEL):
-        self.pipe = _get_hf_pipe(model_name)
-        self.ok = self.pipe is not None
-
-    @staticmethod
-    def _prompt(question: str, context: str, lang: str = "fr") -> str:
-        if lang == "en":
-            return (
-                "You are an internal consulting assistant. Answer ONLY using the context.\n"
-                "- Keep it concise (4–6 sentences).\n"
-                "- If information is missing, say you don't know.\n"
-                "- Cite sources like [Source: filename].\n\n"
-                f"Question: {question}\n\nContext:\n{context}\n\nAnswer:"
-            )
-        else:
-            return (
-                "Tu es un assistant interne. Réponds UNIQUEMENT depuis le contexte.\n"
-                "- Réponse concise (4–6 phrases).\n"
-                "- Si l'info manque, dis que tu ne sais pas.\n"
-                "- Cite les sources comme [Source: fichier].\n\n"
-                f"Question : {question}\n\nContexte :\n{context}\n\nRéponse :"
-            )
-
-    @staticmethod
-    def _postprocess(raw: str, sources: List[str], lang: str = "fr") -> str:
-        txt = _clean(raw)
-        if not txt:
-            return ""
-        # Limit 6 sentences max
-        sents = re.split(r"(?<=[\.!?])\s+(?=[A-ZÀ-ÖØ-Þ0-9])", txt)
-        if len(sents) > 6:
-            txt = " ".join(sents[:6]).strip()
-        # Ensure at least one source
-        if sources:
-            has_src = any(f"[Source: {Path(s).name}]" in txt for s in sources)
-            if not has_src:
-                txt += f"\n[Source: {Path(sources[0]).name}]"
-        return txt
-
-    @staticmethod
-    def _coverage_score(answer: str, ctx_snippets: List[str]) -> float:
-        if not answer or not ctx_snippets:
-            return 0.0
-        ans = _clean(answer).lower()
-        total = 0.0
-        for sn in ctx_snippets:
-            sn = _clean(sn).lower()
-            if not sn:
-                continue
-            ta = set(_tokenize(ans))
-            ts = set(_tokenize(sn))
-            if not ts:
-                continue
-            inter = len(ta & ts)
-            union = len(ts)
-            total += inter / max(1, union)
-        return total / max(1, len(ctx_snippets))
-
-    def generate(self, question: str, context: str, ctx_snippets: List[str], sources: List[str], lang: str) -> str:
-        if self.ok and self.pipe is not None:
-            prompt = self._prompt(question, context, lang)
-            out = self.pipe(prompt)
-            cand = out[0].get("generated_text", "") if isinstance(out, list) and out and isinstance(out[0], dict) else str(out)
-            cand = self._postprocess(cand, sources, lang)
-            cov = self._coverage_score(cand, ctx_snippets)
-            if cov >= 0.10:  # modest bar
-                return cand
-        # Extractive fallback (human-friendly)
-        bullets = [f"• {s}" for s in ctx_snippets[:6] if s]
-        if not bullets:
-            return ("Je ne sais pas." if lang == "fr" else "I don't know.")
-        intro = ("Réponse (extraits, basées sur les documents) :\n" if lang == "fr" else "Answer (extracts from documents):\n")
-        ans = intro + "\n".join(bullets)
-        if sources:
-            ans += f"\n[Source: {Path(sources[0]).name}]"
-        return ans
-
-
-# ============================================================
-# Ambiguity handling → auto‑reformulation (silent)
-# ============================================================
-_DEFAULT_SUGGEST = {
-    "it storm": [
-        "Quel est le cœur de métier d’IT Storm ?",
-        "Quelles solutions IT Storm développe‑t‑elle pour la donnée ?",
-        "Quelles priorités IT Storm met‑elle en avant (sécurité, coûts, fiabilité) ?",
-    ],
-    "data": [
-        "Quels pipelines de données IT Storm met‑elle en place ?",
-        "Quelles solutions data IT Storm propose‑t‑elle (collecte, qualité, exploitation) ?",
-    ],
-    "rag": [
-        "Comment IT Storm met‑elle en œuvre une solution RAG pour un client ?",
-        "Quelle valeur apporte le RAG aux consultants IT Storm ?",
-    ],
-}
-
-
-def _load_suggest_map() -> Dict[str, List[str]]:
-    p = Path(os.getenv("SUGGEST_PATH", "./src/data/suggest_keywords.json"))
-    if p.exists():
-        try:
-            return json.loads(p.read_text(encoding="utf-8"))
-        except Exception:
-            return _DEFAULT_SUGGEST
-    return _DEFAULT_SUGGEST
-
-
-def make_reformulations(q: str, lang: str = "fr", max_vars: int = 4) -> List[str]:
-    base = _clean(q)
-    out = [base]
-    m = _load_suggest_map()
-    low = base.lower()
-    for k, lst in m.items():
-        if k in low:
-            out.extend(lst)
-    # Generic clarifiers
-    if lang == "en":
-        out.extend([
-            f"{base} — please answer from internal IT‑STORM documents only",
-            f"In one paragraph: {base}",
-        ])
-    else:
-        out.extend([
-            f"{base} — réponse basée uniquement sur les documents IT‑STORM",
-            f"En un paragraphe : {base}",
-        ])
-    # Dedup & cap
-    seen = set(); uniq = []
-    for s in out:
-        s = _clean(s)
-        if s and s not in seen:
-            seen.add(s); uniq.append(s)
-    return uniq[: max_vars]
-
-
-# ============================================================
-# Core QA / Generation
-# ============================================================
-@dataclass
-class QAResult:
-    answer: str
-    sources: List[str]
-    used_queries: List[str]
-
-
-def grounded_answer(question: str, lang: str = "fr", k: int = 12) -> QAResult:
-    # Modules guard
-    if not _HAS_CHROMA or not _HAS_ST:
-        msg = (
-            "Modules manquants : chromadb et/ou sentence-transformers. Installe-les pour activer le RAG."
-            if lang == "fr" else
-            "Missing modules: chromadb and/or sentence-transformers. Install them to enable RAG."
-        )
-        return QAResult(answer=msg, sources=[], used_queries=[])
-
-    # Soft domain guard
-    if not _allowed(question):
-        msg = (
-            "Ce moteur couvre le périmètre IT‑STORM (cloud/devops/data/IA). Merci de reformuler dans ce contexte."
-            if lang == "fr" else
-            "This engine covers IT‑STORM scope (cloud/devops/data/AI). Please reformulate within scope."
-        )
-        return QAResult(answer=msg, sources=[], used_queries=[])
-
-    db = VectorDB(VECTOR_DB, COLLECTION)
-    gen = GroundedGen(LLM_MODEL)
-
-    # Reformulations si ambigu (silencieux)
-    queries = [question]
-    if _is_ambiguous(question):
-        queries = make_reformulations(question, lang=lang, max_vars=4)
-
-    # Retrieve per reformulation; keep best by mean top-3 score
-    best_ctx: List[Hit] = []
-    best_q: str = queries[0]
-    best_score = -1.0
-    for q in queries:
-        hits = db.search(q, k=k)
-        if _HAS_ST:
-            mean3 = float(np.mean([h.score for h in hits[:3]])) if hits else 0.0
-        else:
-            mean3 = sum(h.score for h in hits[:3]) / max(1, len(hits[:3])) if hits else 0.0
-        if mean3 > best_score:
-            best_score = mean3
-            best_ctx = hits
-            best_q = q
-
-    if not best_ctx:
-        return QAResult(answer=("Je ne sais pas." if lang == "fr" else "I don't know."), sources=[], used_queries=queries)
-
-    # Balance snippets across sources (round‑robin)
-    by_src: Dict[str, List[Hit]] = {}
-    for h in best_ctx:
-        by_src.setdefault(h.source, []).append(h)
-    snippets: List[str] = []
-    src_order = list(by_src.keys())
-    cursor = {s: 0 for s in src_order}
-    while len(snippets) < min(k, sum(len(v) for v in by_src.values())):
-        progressed = False
-        for s in src_order:
-            i = cursor[s]
-            arr = by_src[s]
-            if i < len(arr):
-                snippets.append(arr[i].text)
-                cursor[s] += 1
-                progressed = True
-                if len(snippets) >= k:
-                    break
-        if not progressed:
-            break
-
-    context = "\n\n---\n\n".join(snippets)
-    sources = [h.source for h in best_ctx]
-    ans = gen.generate(question, context, snippets, sources, lang if lang != "auto" else "fr")
-    return QAResult(answer=ans, sources=sources[:3], used_queries=[best_q] if queries else [])
-
+def _q_to_paragraph(q: str) -> str:
+    q = _clean(q)
+    if not q:
+        return q
+    if not q.lower().startswith(("en un paragraphe", "in one paragraph")):
+        return f"En un paragraphe : {q}"
+    return q
 
 # ============================================================
 # Exports
 # ============================================================
-
-def _safe_filename(x: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_\- ]+", "", x).strip().replace(" ", "_") or f"export_{uuid.uuid4().hex[:8]}"
-
 
 def export_docx(title: str, sections: List[Tuple[str, str]]) -> str:
     if not _HAS_DOCX:
@@ -445,7 +133,6 @@ def export_docx(title: str, sections: List[Tuple[str, str]]) -> str:
     doc.save(path)
     return path
 
-
 def export_pptx(title: str, sections: List[Tuple[str, str]]) -> str:
     if not _HAS_PPTX:
         return "(python-pptx manquant)"
@@ -454,78 +141,248 @@ def export_pptx(title: str, sections: List[Tuple[str, str]]) -> str:
     prs = Presentation()
     slide = prs.slides.add_slide(prs.slide_layouts[0])
     slide.shapes.title.text = title
-    slide.placeholders[1].text = "Hosted by IT‑STORM — RAG Local"
+    slide.placeholders[1].text = "IT-STORM · RAG local (réponses ancrées)"
     layout = prs.slide_layouts[1]
     for name, content in sections:
         s = prs.slides.add_slide(layout)
         s.shapes.title.text = name
         tf = s.placeholders[1].text_frame
         tf.clear()
-        for line in textwrap.wrap(_clean(str(content)), width=110)[:14]:
+        text = _clean(str(content))
+        # Max ~14 lignes pour lisibilité
+        for line in textwrap.wrap(text, width=110)[:14]:
             p = tf.add_paragraph(); p.text = line; p.level = 0
     prs.save(path)
     return path
 
+# ============================================================
+# Core wrappers (use smart_rag_answer from rag_brain)
+# ============================================================
+
+@dataclass
+class QAResult:
+    answer: str
+    sources: List[str]
+    quotes: List[Dict[str, str]]
+    confidence: float
+    quality: Dict[str, float]
+    dbg: Dict[str, Any]
+
+def _ask_strict_grounded(question: str) -> QAResult:
+    """
+    Ask the strict RAG engine. 'smart_rag_answer' ignore lang/mode,
+    et renvoie une réponse en 1 paragraphe si RAG_SINGLE_PARAGRAPH=1.
+    """
+    if smart_rag_answer is None:
+        raise RuntimeError(f"Moteur RAG indisponible: {_IMPORT_ERR}")
+    res = smart_rag_answer(question=_q_to_paragraph(str(question)))
+    # Robust defaults to avoid KeyErrors / ZeroDivisionError visuals
+    return QAResult(
+        answer = res.get("answer", "Je ne sais pas."),
+        sources = res.get("sources", []) or [],
+        quotes = res.get("quotes", []) or [],
+        confidence = float(res.get("confidence", 0.0) or 0.0),
+        quality = res.get("quality", {}) or {},
+        dbg = res.get("dbg", {}) or {},
+    )
 
 # ============================================================
 # Streamlit UI
 # ============================================================
 
-def _modules_banner():
-    missing = []
-    if not _HAS_CHROMA: missing.append("chromadb")
-    if not _HAS_ST: missing.append("sentence-transformers (+ numpy)")
-    txt = ", ".join(missing)
-    if missing:
-        st.warning(
-            f"Modules requis absents: {txt}. Installe-les pour activer la recherche RAG.")
-
-
 def render_generate_docs_tab():
-    st.header("🧠 Génération automatique de documents RAG (local, sans hallucination)")
-    st.caption("Chroma + SentenceTransformers + HF (optionnel) · Ambiguïté → Reformulation auto → Réponse ancrée")
+    st.header("🧠 Génération automatique de documents RAG (local, 0-hallucination)")
+    st.caption("Moteur strict ancré sur vos documents (smart_rag_answer) · Jury Ollama en option")
 
-    _modules_banner()
+    if _IMPORT_ERR is not None:
+        st.error(f"Erreur d’import du moteur RAG: {_IMPORT_ERR}")
+        st.stop()
 
-    lang_lbl = st.selectbox("Langue / Language", list(SUPPORTED.keys()), index=1)
+    lang_lbl = st.selectbox("Langue / Language", list(SUPPORTED.keys()), index=0)
     lang = SUPPORTED[lang_lbl]
 
     mode = st.radio(
         "Mode",
-        ["Question libre (RAG)", "Complet (8 sections)", "Résumé de document (PDF/TXT)"],
+        ["Question libre (RAG)", "Question + Jury (choix modèles)", "Complet (8 sections)", "Résumé de document (PDF/TXT)"],
         horizontal=True,
     )
 
     st.divider()
 
-    # === Question libre ===
+    # === Mode 1: Question libre (RAG strict, 1 paragraphe) ===
     if mode == "Question libre (RAG)":
         q = st.text_input(
             "Question",
-            placeholder=("Pose une question (même vague) — je clarifie et je réponds sans inventer" if lang=="fr" else "Ask anything (even vague) — I'll clarify and answer without inventing"),
+            placeholder=("Ex: Quels bénéfices concrets du RAG pour un client énergie chez IT-STORM ?")
         )
-        k = st.slider("Top chunks (k)", 3, 12, 6, 1)
-        if st.button("🔎 Répondre" if lang=="fr" else "🔎 Answer") and q:
-            with st.spinner("Recherche et génération en cours…" if lang=="fr" else "Retrieving and generating…"):
-                res = grounded_answer(q, lang=lang if lang!="auto" else "fr", k=k)
-            st.subheader("Réponse" if lang=="fr" else "Answer")
-            st.write(res.answer)
-            if res.sources:
-                st.caption("Sources: " + ", ".join(sorted(set(res.sources))))
-            if res.used_queries:
-                st.caption(("Reformulation utilisée: " if lang=="fr" else "Used reformulation: ") + res.used_queries[0])
-        with st.expander("Pourquoi cette réponse est fiable ? / Why grounded?"):
-            st.markdown(
-                "- **Ambiguïté gérée automatiquement** (reformulations silencieuses).\n"
-                "- **Récupération multi-sources équilibrée** (round‑robin) pour éviter les biais.\n"
-                "- **Décodage contraint** (4–6 phrases) avec **contrôle de couverture** contextuelle.\n"
-                "- **Fallback extractif** si la génération n’est pas suffisamment ancrée."
-            )
+        use_jury = st.toggle(
+            "Activer jury Ollama (mistral · llama · qwen)",
+            value=True,
+            help="Compare 3 modèles locaux sur le même contexte RAG et recommande le meilleur."
+        )
 
-    # === Génération complète ===
+        if st.button("🔎 Répondre") and q:
+            with st.spinner("Recherche et réponse ancrée…"):
+                res = _ask_strict_grounded(q)
+
+            st.subheader("🔍 Réponse ancrée (paragraphe unique)")
+            st.write(res.answer)
+
+            # KPIs (sans risque de division par zéro)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Confiance", f"{res.confidence:.2f}")
+            c2.metric("Grounding", f"{float(res.quality.get('grounding',0.0) or 0.0):.2f}")
+            c3.metric("Couverture", f"{float(res.quality.get('coverage',0.0) or 0.0):.2f}")
+            c4.metric("Style", f"{float(res.quality.get('style',0.0) or 0.0):.2f}")
+
+            st.markdown(_badge_conf(res.confidence))
+
+            with st.expander("📑 Extraits (citations)"):
+                if res.quotes:
+                    for i, qt in enumerate(res.quotes, 1):
+                        st.markdown(f"**{i}.** *« {qt.get('quote','').strip()} »* — `{qt.get('source','')}`")
+                else:
+                    st.info("Aucun extrait disponible.")
+            with st.expander("📚 Sources (fichiers)"):
+                if res.sources:
+                    st.write(", ".join(sorted(set(res.sources))))
+                else:
+                    st.info("Aucune source unique détectée.")
+            with st.expander("🛠️ Debug"):
+                st.json(res.dbg)
+                st.json(res.quality)
+
+            # Jury Ollama (optionnel)
+            if use_jury and ask_multi_ollama is not None:
+                st.markdown("---")
+                st.subheader("Jury Ollama (comparaison locale)")
+                with st.spinner("Interrogation des modèles Ollama…"):
+                    jury = ask_multi_ollama(
+                        q,
+                        models=["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"],
+                        topk_context=6,
+                        timeout=60.0
+                    )
+                results = jury.get("results", [])
+                if results:
+                    try:
+                        import pandas as pd
+                        rows = []
+                        for r in results:
+                            m = r.get("metrics", {}) or {}
+                            rows.append({
+                                "Modèle": r.get("model",""),
+                                "Score": r.get("score", 0.0),
+                                "Confiance": float(m.get("confidence", 0.0) or 0.0),
+                                "Grounding": float(m.get("grounding", 0.0) or 0.0),
+                                "Couverture": float(m.get("coverage", 0.0) or 0.0),
+                                "Style": float(m.get("style", 0.0) or 0.0),
+                                "Temps (s)": float(r.get("time", 0.0) or 0.0),
+                            })
+                        st.dataframe(pd.DataFrame(rows).sort_values("Score", ascending=False), use_container_width=True)
+                    except Exception:
+                        # Fallback simple si pandas indispo
+                        for r in results:
+                            st.markdown(f"**{r.get('model','')}** · score {r.get('score',0.0)} · {r.get('time',0.0)}s")
+                            st.write(r.get("answer",""))
+                            st.markdown("---")
+
+                    sug = jury.get("suggestion")
+                    if sug:
+                        st.success(f"✅ Suggestion: privilégier **{sug['model']}** (score {sug['score']}, {sug['time']}s)")
+                else:
+                    st.info("Aucun résultat jury (Ollama non disponible ?)")
+            elif use_jury and ask_multi_ollama is None:
+                st.warning("Le module jury Ollama n'est pas disponible dans cette installation.")
+
+    # === Mode 2: Génération complète (8 sections) — strictement ancrée ===
+    
+    # === Mode: Question + Jury (choix modèles) ===
+    elif mode == "Question + Jury (choix modèles)":
+        q = st.text_input("Question (contexte IT‑STORM)", placeholder="Ex: C'est quoi IT-STORM ?")
+        c1, c2 = st.columns([1,1])
+        with c1:
+            if st.button("🔄 Rafraîchir modèles Ollama"):
+                st.session_state.setdefault('ollama_models', _get_ollama_models())
+        models_default = st.session_state.get('ollama_models', _get_ollama_models())
+        selected = st.multiselect("Modèles à comparer", options=models_default, default=models_default)
+        colx, coly, colz = st.columns([1,1,1])
+        with colx:
+            timeout = st.number_input("Timeout (s)", min_value=10, max_value=180, value=60, step=5)
+        with coly:
+            topk = st.slider("Top extraits (k)", 3, 12, 6, 1)
+        with colz:
+            do_export = st.checkbox("Exporter comparatif (DOCX/PPTX)", value=False)
+
+        run = st.button("⚖️ Comparer & recommander", type="primary")
+        if run:
+            if not q:
+                st.warning("Renseigne la question."); st.stop()
+            if ask_multi_ollama is None:
+                st.error("Le jury Ollama n'est pas disponible sur cette installation."); st.stop()
+            if not selected:
+                st.warning("Sélectionne au moins un modèle."); st.stop()
+            with st.spinner("Interrogation des modèles…"):
+                jury = ask_multi_ollama(q, models=selected, topk_context=topk, timeout=float(timeout))
+
+            # Affichage résultats
+            results = jury.get("results", [])
+            if not results:
+                st.info("Aucune réponse (Ollama non joignable ?)"); st.stop()
+            try:
+                import pandas as pd
+                rows = []
+                for r in results:
+                    m = r.get("metrics", {}) or {}
+                    rows.append({
+                        "Modèle": r.get("model",""),
+                        "Score": r.get("score", 0.0),
+                        "Confiance": float(m.get("confidence", 0.0) or 0.0),
+                        "Grounding": float(m.get("grounding", 0.0) or 0.0),
+                        "Couverture": float(m.get("coverage", 0.0) or 0.0),
+                        "Style": float(m.get("style", 0.0) or 0.0),
+                        "Temps (s)": float(r.get("time", 0.0) or 0.0),
+                    })
+                df = pd.DataFrame(rows).sort_values("Score", ascending=False)
+                st.dataframe(df, use_container_width=True)
+            except Exception:
+                for r in results:
+                    st.markdown(f"**{r.get('model','')}** · score {r.get('score',0.0)} · {r.get('time',0.0)}s")
+                st.markdown("---")
+
+            sug = jury.get("suggestion")
+            if sug:
+                st.success(f"✅ Modèle recommandé: **{sug['model']}** (score {sug['score']}, {sug['time']}s)")
+
+            with st.expander("Voir les réponses brutes par modèle"):
+                for r in results:
+                    st.markdown(f"**{r['model']}** · score {r.get('score',0.0)} · {r.get('time',0.0)}s")
+                    st.write(r.get("answer",""))
+                    st.markdown("---")
+
+            # Exports comparatif (optionnel)
+            if do_export:
+                sections = [("Comparatif Jury", "")]
+                # Table textuelle simple pour DOCX/PPTX
+                lines = ["Modèle | Score | Confiance | Grounding | Couverture | Style | Temps (s)"]
+                for r in results:
+                    m = r.get("metrics", {}) or {}
+                    line = f"{r.get('model','')} | {r.get('score',0.0)} | {m.get('confidence',0.0)} | {m.get('grounding',0.0)} | {m.get('coverage',0.0)} | {m.get('style',0.0)} | {r.get('time',0.0)}"
+                    lines.append(line)
+                table_txt = "\n".join(lines)
+                best = jury.get("suggestion")
+                summary = f"Modèle recommandé: {best['model']} (score {best['score']}, {best['time']}s)" if best else "Aucune recommandation."
+                sections.append(("Synthèse", summary))
+                sections.append(("Détail", table_txt))
+                title = f"Comparatif_Jury_{_safe_filename(q)[:40]}"
+                docx_path = export_docx(title, sections)
+                pptx_path = export_pptx(title, sections)
+                st.success("✅ Exports créés :")
+                st.write(f"• DOCX: {docx_path}")
+                st.write(f"• PPTX: {pptx_path}")
+
     elif mode == "Complet (8 sections)":
-        topic = st.text_input("Sujet / Topic", placeholder=("Ex: Proposition RAG pour client énergie"))
-        k = st.slider("Top chunks (k)", 3, 12, 6, 1, help="Nombre d'extraits par section")
+        topic = st.text_input("Sujet / Topic", placeholder="Ex: Proposition RAG pour client énergie")
         c1, c2, c3 = st.columns([1,1,1])
         with c1:
             run = st.button("🚀 Générer le livrable")
@@ -537,7 +394,7 @@ def render_generate_docs_tab():
 
         if run and topic:
             sections_names_fr = [
-                "Executive Summary","Contexte & Objectifs","Pain Points","Architecture Solution",
+                "Executive Summary","Contexte & Objectifs","Pain Points","Architecture & Solution",
                 "Données & Qualité","Plan de Mise en œuvre","Sécurité & Conformité","Prochaines Étapes"
             ]
             sections_names_en = [
@@ -550,10 +407,17 @@ def render_generate_docs_tab():
             for sec in names:
                 q = f"{topic} — {sec}"
                 with st.spinner(f"{sec} …"):
-                    res = grounded_answer(question=q, lang=lang, mode=mode)
+                    res = _ask_strict_grounded(q)
                 outputs.append((sec, res.answer))
+                # UI per section
                 st.subheader(sec)
                 st.write(res.answer)
+                # Tiny KPIs row
+                cols = st.columns(4)
+                cols[0].caption(f"Confiance: {res.confidence:.2f}")
+                cols[1].caption(f"Grounding: {float(res.quality.get('grounding',0.0) or 0.0):.2f}")
+                cols[2].caption(f"Couverture: {float(res.quality.get('coverage',0.0) or 0.0):.2f}")
+                cols[3].caption(f"Style: {float(res.quality.get('style',0.0) or 0.0):.2f}")
                 st.markdown("---")
 
             exports = {}
@@ -569,13 +433,14 @@ def render_generate_docs_tab():
                 for kx, vx in exports.items():
                     st.write(f"• {kx}: {vx}")
 
-    # === Résumé de document ===
+    # === Mode 3: Résumé de document (PDF/TXT) — extractif / concis ===
     else:
         path = st.text_input("Chemin du document (PDF/TXT)", placeholder="./docs/mon_fichier.pdf")
         if st.button("📄 Résumer") and path:
             p = Path(path)
             if not p.exists():
-                st.warning("Fichier introuvable."); return
+                st.warning("Fichier introuvable.")
+                st.stop()
             try:
                 if _HAS_PDF and p.suffix.lower() == ".pdf":
                     reader = PdfReader(str(p))
@@ -583,98 +448,21 @@ def render_generate_docs_tab():
                 else:
                     txt = p.read_text(encoding="utf-8", errors="ignore")
             except Exception as e:
-                st.error(f"Erreur lecture: {e}"); return
-            txt = _clean(txt)[:10000]
+                st.error(f"Erreur lecture: {e}")
+                st.stop()
+
+            txt = _clean(txt)[:20000]
             if not txt:
-                st.warning("Document vide."); return
-            gen = GroundedGen(LLM_MODEL)
-            prompt = (f"Résumé factuel (6 phrases max) :\n{txt}" if lang!="en" else f"Summarize factually in <=6 sentences:\n{txt}")
-            if gen.ok and gen.pipe is not None:
-                out = gen.pipe(prompt)
-                ans = out[0]["generated_text"] if isinstance(out, list) else str(out)
-                st.subheader("Résumé"); st.write(_clean(ans))
-            else:
-                # Extractive fallback
-                sents = [s.strip() for s in re.split(r"(?<=[\.!?])\s+", txt) if s.strip()][:6]
-                st.subheader("Résumé (extraits)")
-                st.write("\n".join([f"- {s}" for s in sents]))
+                st.warning("Document vide.")
+                st.stop()
 
-# src/ui/tabs/generate_docs_rag.py
-# UI Streamlit – Onglet "Générer réponse (RAG)" avec moteur intelligent
+            # Résumé extractif ultra-simple (0 hallucination)
+            sents = [s.strip() for s in re.split(r"(?<=[\.!?])\s+", txt) if s.strip()]
+            # Prendre 5–8 phrases max
+            summary = " ".join(sents[:8])
+            st.subheader("Résumé")
+            st.write(summary or ("Je ne sais pas." if lang == "fr" else "I don't know."))
 
-import os
-import streamlit as st
-
-# Import du cerveau RAG
-try:
-    from src.rag_brain import smart_rag_answer
-except Exception as e:
-    st.error(f"Erreur d’import RAG : {e}")
-    smart_rag_answer = None
-
-def _badge_conf(conf: float) -> str:
-    if conf >= 0.8:
-        return f"🟢 Confiance: **{conf:.2f}**"
-    if conf >= 0.65:
-        return f"🟡 Confiance: **{conf:.2f}**"
-    return f"🟠 Confiance: **{conf:.2f}**"
-
-def render_generate_docs_tab():
-    st.header("🧠 Générer réponse (RAG intelligent)")
-    st.caption("Réponses **ancrées** sur les documents indexés, avec extraits et sources. Zéro hallucination.")
-
-    # Lang
-    col1, col2 = st.columns([2,1])
-    with col1:
-        q = st.text_input("Question", placeholder="Ex: Quels bénéfices concrets du RAG pour un client énergie ?")
-    with col2:
-        lang = st.selectbox("Langue", ["fr","en"], index=0)
-
-    # Mode (auto/intention)
-    mode = st.selectbox("Mode", ["auto","benefits","definition","howto","architecture","budget","roadmap","risks","compare","summary"], index=0)
-
-    do = st.button("Générer", type="primary", use_container_width=True)
-
-    st.divider()
-
-    if do and smart_rag_answer:
-        with st.spinner("Génération ancrée…"):
-            res = smart_rag_answer(question=q, lang=lang, mode=mode)
-
-        st.subheader("🔍 Réponse ancrée")
-        st.markdown(res["answer"])
-
-        meta = st.columns([1,1,1,1])
-        meta[0].metric("Confiance", f"{res['confidence']:.2f}")
-        meta[1].metric("Grounding", f"{res['quality'].get('grounding',0):.2f}")
-        meta[2].metric("Couverture", f"{res['quality'].get('coverage',0):.2f}")
-        meta[3].metric("Style", f"{res['quality'].get('style',0):.2f}")
-
-        st.markdown(_badge_conf(res["confidence"]))
-
-        with st.expander("📑 Extraits (citations)"):
-            if res["quotes"]:
-                for i, qt in enumerate(res["quotes"], 1):
-                    st.markdown(f"**{i}.** *« {qt['quote']} »* — `{qt['source']}`")
-            else:
-                st.info("Aucun extrait disponible (fallback).")
-
-        with st.expander("📚 Sources utilisées (fichiers)"):
-            if res["sources"]:
-                st.write(", ".join(sorted(set(res["sources"]))))
-            else:
-                st.info("Aucune source unique détectée.")
-
-        with st.expander("🛠️ Debug"):
-            st.json(res["dbg"])
-            st.json(res["quality"])
-
-    elif do and not smart_rag_answer:
-        st.error("Le moteur RAG n’est pas disponible.")
-
-
-# Alias pour intégration simple
+# Alias pour intégration simple dans app.py
 def render():
     render_generate_docs_tab()
-
-
