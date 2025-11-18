@@ -1244,8 +1244,8 @@ with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "
 # --------------------------------------------------------------------------------------
 # TABS
 # --------------------------------------------------------------------------------------
-tab_chat, tab_upload, tab_generate, tab_market, tab_qa = st.tabs(
-    [t("tab_chat"), t("tab_upload"), t("tab_generate"), t("tab_market"), t("tab_qa")]
+tab_chat, tab_upload, tab_generate, tab_market = st.tabs(
+    [t("tab_chat"), t("tab_upload"), t("tab_generate"), t("tab_market")]
 )
 render_chatbot()
 # ---- TAB 1: CHAT ----
@@ -1361,9 +1361,6 @@ with tab_generate:
 with tab_market:
     market.render()
 
-# ---- TAB 5: RAG EN QA ----
-with tab_qa:
-    rag_en_tab.render()
 
 
 # --------------------------------------------------------------------------------------

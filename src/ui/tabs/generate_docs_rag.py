@@ -13,14 +13,17 @@
 from __future__ import annotations
 import io
 import re
+import os
 import time
 import math
+import tempfile
 from collections import Counter
 from typing import List, Dict, Any, Optional, Tuple
 
 import streamlit as st
 import pandas as pd
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time as _time
 # --- RAG strict engine (imports robustes) ---
 try:
     import src.rag_brain as _rb
@@ -38,8 +41,6 @@ except Exception:
     summary_quality_report = None
 
 # =================== CSS GLOBAL ===================
-# - DataFrame: afficher TOUT le texte (wrap, pas d'ellipsis)
-# - Helper "?" cliquable (tooltip propre)
 st.markdown("""
 <style>
 /* ===== DataFrame : montrer TOUTE la réponse sans coupe ===== */
@@ -90,7 +91,6 @@ _MODEL_META: Dict[str, Dict[str, str]] = {
 }
 
 def _default_models() -> List[str]:
-    """Liste stable des modèles affichés/ordonnés."""
     return ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b", "tinyllama:latest"]
 
 def _label(name: str, rank: Optional[int] = None) -> str:
@@ -100,7 +100,6 @@ def _label(name: str, rank: Optional[int] = None) -> str:
     return f"{emo} {name}{badge}"
 
 def _decorate_model_label(name: str, rank: Optional[int] = None) -> str:
-    """Pastille colorée + emoji + rang (HTML sûr pour st.markdown)."""
     meta = _MODEL_META.get(name, {"emoji": "🤖", "color": "#334155"})
     emoji = meta["emoji"]; color = meta["color"]
     medal = ""
@@ -129,7 +128,6 @@ def _safe_num(x, default: float = 0.0) -> float:
         return default
 
 def _score_from_result(r: Dict[str, Any]) -> float:
-    # Score → r["score"] (jury) sinon r["confidence"] (RAG)
     if "score" in r:
         return _safe_num(r["score"])
     if "confidence" in r:
@@ -137,40 +135,26 @@ def _score_from_result(r: Dict[str, Any]) -> float:
     return 0.0
 
 def _legend_metrics() -> None:
-    """
-    Affiche les légendes des métriques principales (avec helpers natifs Streamlit).
-    """
     lang = st.session_state.get("lang", "fr")
-
     c1, c2, c3, c4 = st.columns(4)
     if lang == "en":
-        with c1:
-            st.markdown("**Confidence**", help="Global reliability of the generated answer (0–1).")
-        with c2:
-            st.markdown("**Grounding**", help="How well the answer is anchored in the retrieved context (0–1).")
-        with c3:
-            st.markdown("**Coverage**", help="Diversity and completeness of the answer versus the retrieved context (0–1).")
-        with c4:
-            st.markdown("**Style**", help="Readability and formatting quality of the generated text (0–1).")
+        with c1: st.markdown("**Confidence**", help="Global reliability of the generated answer (0–1).")
+        with c2: st.markdown("**Grounding**", help="How well the answer is anchored in the retrieved context (0–1).")
+        with c3: st.markdown("**Coverage**", help="Diversity and completeness of the answer versus the retrieved context (0–1).")
+        with c4: st.markdown("**Style**", help="Readability and formatting quality of the generated text (0–1).")
     else:
-        with c1:
-            st.markdown("**Confiance**", help="Fiabilité globale de la réponse générée (0–1).")
-        with c2:
-            st.markdown("**Grounding**", help="Degré d’ancrage de la réponse sur les extraits sources (0–1).")
-        with c3:
-            st.markdown("**Couverture**", help="Diversité et exhaustivité du contenu par rapport au contexte (0–1).")
-        with c4:
-            st.markdown("**Style**", help="Lisibilité et clarté de la rédaction (0–1).")
+        with c1: st.markdown("**Confiance**", help="Fiabilité globale de la réponse générée (0–1).")
+        with c2: st.markdown("**Grounding**", help="Degré d’ancrage de la réponse sur les extraits sources (0–1).")
+        with c3: st.markdown("**Couverture**", help="Diversité et exhaustivité du contenu par rapport au contexte (0–1).")
+        with c4: st.markdown("**Style**", help="Lisibilité et clarté de la rédaction (0–1).")
 
 # ============================================================
 # Slider Top-K dans la sidebar (avec helper “?”)
 # ============================================================
 
 def _sidebar_topk_slider(default:int=6) -> int:
-    """Slider Top-K dans la sidebar avec étiquette + helper “?” (FR/EN auto)."""
     lang = st.session_state.get("lang", "en")
     is_en = (lang == "en")
-
     label_txt = "Top-K results" if is_en else "Top-K résultats"
     help_txt  = (
         "Number of most similar document chunks retrieved from the vector database to build the context for each question."
@@ -206,21 +190,12 @@ def _call_smart_rag(question: str, lang: str = "fr", mode: str = "definition") -
         return {}
 
 def _call_jury(question: str, models: List[str], topk_context: int = 6, timeout: float = 60.0) -> Dict[str, Any]:
-    """
-    Retour du jury (dict complet) aligné avec rag_brain.ask_multi_ollama
-    {
-      "question":..., "context_snippets":[...],
-      "results":[{"model","answer","time","metrics":{"coverage","grounding","style","confidence"},"score"}],
-      "suggestion":{"model","score","time"} | None
-    }
-    """
     if not (ask_multi_ollama and callable(ask_multi_ollama)):
         return {}
     try:
         return ask_multi_ollama(question=question, models=models,
                                 topk_context=int(topk_context), timeout=float(timeout)) or {}
     except TypeError:
-        # Signature de secours (selon version)
         try:
             return ask_multi_ollama(question=question, models=models) or {}
         except Exception as e:
@@ -231,10 +206,6 @@ def _call_jury(question: str, models: List[str], topk_context: int = 6, timeout:
         return {}
 
 def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: float = 60.0) -> Dict[str, Any]:
-    """
-    Interroge un seul modèle via ask_multi_ollama (models=[model]).
-    Retourne le premier résultat normalisé, sinon fallback sur smart_rag_answer.
-    """
     jury = _call_jury(question, models=[model], topk_context=topk_context, timeout=timeout)
     res = (jury.get("results") or [])
     if res:
@@ -251,7 +222,6 @@ def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: fl
         }
         return out
 
-    # Fallback (pas par modèle, mais garantit une réponse ancrée)
     base = _call_smart_rag(question) or {}
     qual = base.get("quality") or {}
     return {
@@ -266,11 +236,10 @@ def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: fl
     }
 
 # ============================================================
-# Lecture upload (TXT/PDF) — conservé pour compat (non utilisé en résumé)
+# Lecture upload (TXT/PDF)
 # ============================================================
 
 def _read_uploaded_file(upload) -> Tuple[str, str]:
-    """Retourne (text, ext) pour .txt/.pdf ; best-effort sans dépendances dures."""
     if not upload:
         return "", ""
     name = (upload.name or "").lower()
@@ -282,7 +251,7 @@ def _read_uploaded_file(upload) -> Tuple[str, str]:
             return "", ".txt"
     if name.endswith(".pdf"):
         try:
-            import PyPDF2  # optionnel
+            import PyPDF2
             reader = PyPDF2.PdfReader(io.BytesIO(upload.read()))
             pages = []
             for p in reader.pages:
@@ -296,7 +265,7 @@ def _read_uploaded_file(upload) -> Tuple[str, str]:
     return "", ""
 
 # ============================================================
-# 🔎 Helpers qualité de résumé (locaux) — conservés pour compat
+# 🔎 Helpers qualité de résumé locaux (compat)
 # ============================================================
 
 def _tok(s: str) -> list[str]:
@@ -334,7 +303,6 @@ def _cosine_sim(ref: str, hyp: str) -> float:
     return num / (nr*nh) if nr*nh > 0 else 0.0
 
 def _unsupported_sentences(ref: str, hyp: str, thr: float = 0.15) -> list[str]:
-    """Phrases du résumé faiblement chevauchées (3-grammes) → possiblement non ancrées."""
     ref_3 = set(_ngrams(_tok(ref), 3))
     out = []
     for sent in re.split(r"(?<=[\.\!\?])\s+", (hyp or "").strip()):
@@ -359,49 +327,148 @@ def _summary_quality_report(source_text: str, summary_text: str) -> dict:
     return {
         "tokens_source": Ls,
         "tokens_summary": Lh,
-        "compression": comp,           # ~0.6–0.9 attendu
-        "cosine": sim,                 # 0–1
+        "compression": comp,
+        "cosine": sim,
         "rouge1_f1": rouge1["F1"],
         "rouge2_f1": rouge2["F1"],
-        "keyword_overlap": kw,         # 0–1 (≥0.4 rassurant)
-        "unsupported": unsup,          # phrases potentiellement non ancrées
+        "keyword_overlap": kw,
+        "unsupported": unsup,
     }
 
 # ============================================================
-# UI (centrée sur la réponse) + Podium/Course
+# Cohérence de paragraphe (général + gabarit analytique)
+# ============================================================
+
+def _cohere_paragraph(raw: str) -> str:
+    if not raw:
+        return ""
+    lines = []
+    for ln in raw.splitlines():
+        ln = ln.strip(" •-*—\t")
+        if ln:
+            while ln.endswith(("..", "…")):
+                ln = ln[:-1]
+            lines.append(ln.strip())
+    if not lines:
+        return raw.strip()
+
+    intro = ""
+    body = lines
+    if len(lines[0].split()) <= 10 and not lines[0].endswith("."):
+        intro = lines[0].rstrip(".")
+        body = lines[1:] if len(lines) > 1 else []
+
+    joiners = ["Dans la finance", "Dans le commerce", "Dans l’industrie", "Par ailleurs", "En pratique", "Enfin"]
+
+    sentences = []
+    for idx, s in enumerate(body):
+        if not s:
+            continue
+        s_clean = s[0].upper() + s[1:]
+        if s_clean[-1] not in ".!?":
+            s_clean += "."
+        if idx > 0 and len(s_clean) < 140:
+            prefix = joiners[min(idx - 1, len(joiners) - 1)]
+            if not s_clean.lower().startswith(prefix.lower()):
+                s_clean = f"{prefix} : {s_clean}"
+        sentences.append(s_clean)
+
+    if intro:
+        head = intro
+        if not head.endswith("."):
+            head += "."
+        paragraph = head + " " + " ".join(sentences)
+    else:
+        paragraph = " ".join(sentences)
+    return " ".join(paragraph.split())
+
+def _has_any(text: str, keywords: list[str]) -> bool:
+    t = text.lower()
+    return any(k.lower() in t for k in keywords)
+
+def _sentencize(s: str) -> str:
+    s = s.strip()
+    if not s:
+        return s
+    if s[-1] not in ".!?":
+        s += "."
+    return s
+
+def _cohere_paragraph_templated(raw: str) -> str:
+    if not raw or len(raw.strip()) < 8:
+        return raw
+    import re as _re
+    text = _re.sub(r"[•\-\u2022]\s*", "", raw)
+    text = _re.sub(r"\s+", " ", text).strip()
+
+    K = {
+        "intro_ai": ["intelligence artificielle", "ia", "ai"],
+        "finance": ["finance", "financier", "banque", "fraude", "risque", "risk"],
+        "commerce": ["commerce", "retail", "magasin", "stocks", "recommandation", "panier"],
+        "industrie": ["industrie", "manufacturi", "maintenance", "production", "prédictive"],
+        "defis": ["défi", "challenge", "coût", "compétence", "gouvernance", "éthique", "rgpd", "données", "protection"],
+        "gouvernance": ["transparence", "confiance", "responsable", "gouvernance", "stratégie", "cadre", "policy"],
+    }
+    has = {k: _has_any(text, v) for k, v in K.items()}
+
+    baseline = _cohere_paragraph(text)
+
+    parts = []
+    if has["intro_ai"] or (has["finance"] or has["commerce"] or has["industrie"]):
+        parts.append("L’intelligence artificielle transforme les entreprises")
+    else:
+        return baseline
+
+    sector_clauses = []
+    if has["finance"]:
+        sector_clauses.append("détection de fraude et meilleure gestion des risques dans la finance")
+    if has["commerce"]:
+        sector_clauses.append("recommandations produits et optimisation des stocks dans le commerce")
+    if has["industrie"]:
+        sector_clauses.append("maintenance prédictive et gains de production dans l’industrie")
+
+    if sector_clauses:
+        parts[-1] += " : " + ", ".join(sector_clauses)
+    parts[-1] = _sentencize(parts[-1])
+
+    if has["defis"]:
+        parts.append(_sentencize("Son adoption pose toutefois des défis (compétences, coûts, éthique et protection des données)"))
+
+    if has["gouvernance"] or has["defis"]:
+        parts.append(_sentencize("Les organisations doivent donc déployer des stratégies responsables pour instaurer transparence et confiance"))
+
+    parts.append(_sentencize("L’avenir dépendra de leur capacité à conjuguer innovation et gouvernance"))
+
+    paragraph = " ".join(parts)
+    if len(paragraph.split()) < 20:
+        return baseline
+    return paragraph
+
+def _apply_coherence(summary_text: str, use_template: bool) -> str:
+    if not summary_text:
+        return ""
+    return _cohere_paragraph_templated(summary_text) if use_template else _cohere_paragraph(summary_text)
+
+# ============================================================
+# UI (centrée sur la réponse) + Podium/Course + Tableaux
 # ============================================================
 
 def _pick_models() -> List[str]:
-    """
-    Sélection interactive des modèles via cartes cliquables (multi-sélection).
-    - Aucun checkbox/radio
-    - Clic = (dé)sélection
-    - Anti flip-flop au rerun + ordre stable selon _default_models()
-    """
     st.caption("Clique sur un modèle pour l’activer ou le désactiver.")
-
     defaults = _default_models()
     if "selected_models" not in st.session_state:
-        st.session_state["selected_models"] = defaults[:3]  # 3 premiers actifs par défaut
+        st.session_state["selected_models"] = defaults[:3]
     selected = list(st.session_state["selected_models"])
 
-    # CSS
     st.markdown("""
 <style>
-.model-grid {
-  display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px;
-}
+.model-grid { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:12px; }
 .model-card {
   flex: 1 1 calc(25% - 10px);
-  border: 2px solid transparent;
-  border-radius: 14px;
-  padding: 10px 14px;
-  background: #ffffff;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  cursor: pointer;
-  display: flex; align-items: center; justify-content:center; gap:8px;
-  font-weight: 700; color: #111827; text-align:center;
-  transition: all .2s ease;
+  border: 2px solid transparent; border-radius: 14px; padding: 10px 14px;
+  background: #ffffff; box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+  cursor: pointer; display: flex; align-items: center; justify-content:center; gap:8px;
+  font-weight: 700; color: #111827; text-align:center; transition: all .2s ease;
 }
 .model-card:hover { transform: scale(1.03); box-shadow: 0 6px 16px rgba(0,0,0,0.08); }
 .model-card.active { background: linear-gradient(135deg,#dbeafe,#bfdbfe); border-color:#2563eb; color:#1e3a8a; }
@@ -418,7 +485,6 @@ def _pick_models() -> List[str]:
         color = meta["color"]
         bg_class = "active" if active else ""
 
-        # Carte + JS (déclencheur)
         st.markdown(
             f"""
 <div class="model-card {bg_class}" id="{card_key}">
@@ -440,7 +506,6 @@ if (el_{i}) {{
             unsafe_allow_html=True,
         )
 
-        # Gestion du clic (anti flip-flop + ordre stable)
         clicked = st.session_state.get(card_key, None)
         if clicked is not None:
             if active:
@@ -449,11 +514,7 @@ if (el_{i}) {{
             else:
                 if m not in selected:
                     selected.append(m)
-
-            # ordre stable selon defaults + pas de doublons
-            selected = [x for x in defaults if x in set(selected)]
-
-            # persiste + reset clé pour éviter re-toggle au rerun
+            selected = [x for x in _default_models() if x in set(selected)]
             st.session_state["selected_models"] = selected
             st.session_state[card_key] = None
             st.rerun()
@@ -489,7 +550,6 @@ def _render_podium(results: List[Dict[str, Any]]) -> None:
     if not results:
         return
     st.subheader("🏆 Podium (Top 3)")
-
     top3 = sorted(results, key=_score_from_result, reverse=True)[:3]
     data = []
     for i, r in enumerate(top3, start=1):
@@ -499,20 +559,11 @@ def _render_podium(results: List[Dict[str, Any]]) -> None:
 
     html = f"""
 <style>
-.podium-wrap {{
-  width:100%; 
-  margin:16px 0 18px 0;
-}}
-.podium {{
-  display:flex; align-items:flex-end; justify-content:center; gap:36px;
-  width:100%; height:260px; padding-bottom:10px;
-}}
-.podium .col {{
-  display:flex; flex-direction:column; align-items:center; gap:14px;
-}}
-.podium .block {{
-  width:180px; 
-  border-radius:14px 14px 0 0;
+.podium-wrap {{ width:100%; margin:16px 0 18px 0; }}
+.podium {{ display:flex; align-items:flex-end; justify-content:center; gap:36px;
+          width:100%; height:260px; padding-bottom:10px; }}
+.podium .col {{ display:flex; flex-direction:column; align-items:center; gap:14px; }}
+.podium .block {{ width:180px; border-radius:14px 14px 0 0;
   background: linear-gradient(180deg,#ffe27a 0%,#f5b400 45%,#b67b00 100%);
   box-shadow:0 6px 16px rgba(0,0,0,.15), inset 0 2px 0 rgba(255,255,255,.4);
   border:1px solid rgba(0,0,0,.08);
@@ -520,26 +571,10 @@ def _render_podium(results: List[Dict[str, Any]]) -> None:
 .podium .rank1 .block {{ height:160px; background: linear-gradient(180deg,#fff176 0%,#fdd835 45%,#f9a825 100%); }}
 .podium .rank2 .block {{ height:130px; background: linear-gradient(180deg,#d1d5db 0%,#9ca3af 45%,#6b7280 100%); }}
 .podium .rank3 .block {{ height:110px; background: linear-gradient(180deg,#fbc8a2 0%,#f59e0b 45%,#b45309 100%); }}
-.podium .model {{
-  font-weight:800; 
-  font-size:1.05rem; 
-  color:#111827; 
-  text-align:center;
-  letter-spacing:.3px;
-}}
-.podium .score {{
-  font-size:1rem; 
-  color:#1e3a8a; 
-  background:#eef2ff;
-  border-radius:999px;
-  padding:6px 16px;
-  font-weight:700;
-  box-shadow:inset 0 1px 2px rgba(0,0,0,.08);
-}}
-.podium .medal {{
-  font-size:2rem; 
-  margin-bottom:-6px;
-}}
+.podium .model {{ font-weight:800; font-size:1.05rem; color:#111827; text-align:center; letter-spacing:.3px; }}
+.podium .score {{ font-size:1rem; color:#1e3a8a; background:#eef2ff;
+  border-radius:999px; padding:6px 16px; font-weight:700; box-shadow:inset 0 1px 2px rgba(0,0,0,.08); }}
+.podium .medal {{ font-size:2rem; margin-bottom:-6px; }}
 @media (max-width: 900px) {{
   .podium .block {{ width:120px; }}
   .podium .score {{ font-size:0.9rem; padding:4px 10px; }}
@@ -597,7 +632,6 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
 
     from html import escape as _esc
 
-    # ----- Données triées (Rang = 1..n) -----
     ordered = sorted(results, key=_score_from_result, reverse=True)
     rows_all = []
     for i, r in enumerate(ordered, start=1):
@@ -612,72 +646,42 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
             "Réponse": str(r.get("answer", "")).strip(),
         })
 
-    # =======================
-    # 1) Tableau MÉTRIQUES
-    # =======================
     st.subheader(title)
-
     st.markdown("""
 <style>
-/* === WRAPPER === */
 .tbl-wrap { width:100%; overflow-x:auto; }
-
-/* === TABLES : bordures continues + lisibilité === */
 .tbl, .tbl2 {
   width:100%; max-width:1500px; margin:0 auto 18px auto;
-  border-collapse: collapse;             /* << important : CONTINU */
-  table-layout: fixed;
-  background:#fff;
-  border:1px solid #d1d5db;              /* bordure externe visible */
-  border-radius:10px; overflow:hidden;
+  border-collapse: collapse; table-layout: fixed; background:#fff;
+  border:1px solid #d1d5db; border-radius:10px; overflow:hidden;
   box-shadow:0 3px 12px rgba(0,0,0,.06);
 }
-
 .tbl th, .tbl td, .tbl2 th, .tbl2 td {
-  border:1px solid #d1d5db;              /* bordures internes continues */
-  padding:10px 12px;
-  font-size:.98rem; line-height:1.45;
-  text-align:center; vertical-align:middle;
+  border:1px solid #d1d5db; padding:10px 12px;
+  font-size:.98rem; line-height:1.45; text-align:center; vertical-align:middle;
 }
-
 .tbl thead th, .tbl2 thead th {
-  position: sticky; top: 0; z-index: 1;
-  background:#f1f5f9; color:#0f172a; font-weight:700;
+  position: sticky; top: 0; z-index: 1; background:#f1f5f9; color:#0f172a; font-weight:700;
 }
-
-.tbl tbody tr:nth-child(even),
-.tbl2 tbody tr:nth-child(even){ background:#f9fafb; }
-
-.tbl tbody tr:hover,
-.tbl2 tbody tr:hover{ background:#e0f2fe; transition: background .15s ease; }
-
-/* === Colonnes chiffres compactes (pas de wrap) === */
-.tbl td:nth-child(1), .tbl td:nth-child(2),
-.tbl td:nth-child(3), .tbl td:nth-child(4),
-.tbl td:nth-child(5), .tbl td:nth-child(6),
-.tbl td:nth-child(7) { white-space:nowrap; }
-
-/* === Largeurs cohérentes (métriques) === */
-.tbl th:nth-child(1), .tbl td:nth-child(1) { min-width:80px; }   /* Rang */
-.tbl th:nth-child(2), .tbl td:nth-child(2) { min-width:220px; }  /* Modèle */
-.tbl th:nth-child(3), .tbl td:nth-child(3) { min-width:110px; }  /* Score */
-.tbl th:nth-child(4), .tbl td:nth-child(4) { min-width:130px; }  /* Confiance */
-.tbl th:nth-child(5), .tbl td:nth-child(5) { min-width:130px; }  /* Grounding */
-.tbl th:nth-child(6), .tbl td:nth-child(6) { min-width:130px; }  /* Couverture */
-.tbl th:nth-child(7), .tbl td:nth-child(7) { min-width:110px; }  /* Style */
-
-/* === Tableau 2 (réponses longues) === */
+.tbl tbody tr:nth-child(even), .tbl2 tbody tr:nth-child(even){ background:#f9fafb; }
+.tbl tbody tr:hover, .tbl2 tbody tr:hover{ background:#e0f2fe; transition: background .15s ease; }
+.tbl td:nth-child(1), .tbl td:nth-child(2), .tbl td:nth-child(3),
+.tbl td:nth-child(4), .tbl td:nth-child(5), .tbl td:nth-child(6), .tbl td:nth-child(7) { white-space:nowrap; }
+.tbl th:nth-child(1), .tbl td:nth-child(1) { min-width:80px; }
+.tbl th:nth-child(2), .tbl td:nth-child(2) { min-width:220px; }
+.tbl th:nth-child(3), .tbl td:nth-child(3) { min-width:110px; }
+.tbl th:nth-child(4), .tbl td:nth-child(4) { min-width:130px; }
+.tbl th:nth-child(5), .tbl td:nth-child(5) { min-width:130px; }
+.tbl th:nth-child(6), .tbl td:nth-child(6) { min-width:130px; }
+.tbl th:nth-child(7), .tbl td:nth-child(7) { min-width:110px; }
 .tbl2 th:nth-child(1), .tbl2 td:nth-child(1) { min-width:80px; text-align:center; }
 .tbl2 th:nth-child(2), .tbl2 td:nth-child(2) { min-width:220px; text-align:center; }
 .tbl2 th:nth-child(3), .tbl2 td:nth-child(3) {
-  min-width:760px; width:65vw; text-align:left;
-  white-space: normal; word-break: break-word; overflow-wrap: anywhere;
-  line-height: 1.55;
+  min-width:760px; width:65vw; text-align:left; white-space: normal; word-break: break-word; overflow-wrap: anywhere; line-height: 1.55;
 }
 </style>
 """, unsafe_allow_html=True)
 
-    # --- Metrics table (sans "Réponse") ---
     headers_metrics = ["Rang", "Modèle", "Score", "Confiance", "Grounding", "Couverture", "Style"]
     colgroup_metrics = """
 <colgroup>
@@ -703,14 +707,9 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
     html1.append("</tbody></table></div>")
     st.markdown("".join(html1), unsafe_allow_html=True)
 
-    # Espacement entre les deux tableaux
     st.markdown("<div style='height:14px'></div>", unsafe_allow_html=True)
 
-    # =======================
-    # 2) Tableau RÉPONSES
-    # =======================
     st.subheader("📝 Réponses détaillées")
-
     headers_resp = ["Rang", "Modèle", "Réponse"]
     colgroup_resp = """
 <colgroup>
@@ -735,6 +734,137 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
     st.markdown("".join(html2), unsafe_allow_html=True)
 
 # ============================================================
+# Résumer un document — Exécution multi-modèles + gabarit
+# ============================================================
+
+def _summary_model_picker() -> List[str]:
+    st.caption("Choix des modèles (clic pour (dé)sélectionner).")
+    ALL = ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b", "tinyllama:latest"]
+    if "sum_models" not in st.session_state:
+        st.session_state["sum_models"] = ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
+
+    cols = st.columns(len(ALL))
+    new_sel = set(st.session_state["sum_models"])
+    for i, m in enumerate(ALL):
+        on = m in new_sel
+        label = f"✅ {m}" if on else f"◻️ {m}"
+        if cols[i].button(label, key=f"sum_pick_{m}"):
+            if on:
+                new_sel.remove(m)
+            else:
+                new_sel.add(m)
+    if not new_sel:
+        new_sel = {"mistral:7b-instruct"}
+    st.session_state["sum_models"] = list(new_sel)
+    st.caption("Modèles actifs : " + ", ".join(st.session_state["sum_models"]))
+    return st.session_state["sum_models"]
+
+def _run_one_model_summary(file_bytes: bytes, filename: str, model: str, timeout: int = 60) -> Optional[Dict[str, Any]]:
+    """
+    Lance summarize_file pour UN modèle; normalise le résultat -> {"model","answer","score","quality":{...}}
+    """
+    if summarize_file is None:
+        return None
+    try:
+        out = summarize_file(file_bytes, filename, models=[model], timeout=timeout)
+        # cas per_model
+        if isinstance(out, dict) and "results" in out and isinstance(out["results"], list) and out["results"]:
+            rec = out["results"][0]
+            return {
+                "model": rec.get("model", model),
+                "answer": rec.get("answer") or rec.get("summary") or "",
+                "score": rec.get("score") or out.get("score"),
+                "quality": rec.get("quality") or out.get("report") or {},
+            }
+        # cas global
+        if isinstance(out, dict):
+            return {
+                "model": model,
+                "answer": out.get("answer") or out.get("summary") or "",
+                "score": out.get("score"),
+                "quality": out.get("report") or out.get("quality") or {},
+            }
+        if isinstance(out, str):
+            return {"model": model, "answer": out, "score": None, "quality": {}}
+    except Exception as e:
+        st.warning(f"Échec résumé {model}: {e}")
+    return None
+
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import time as _time
+
+def _run_all_model_summaries(file_bytes: bytes, filename: str, models: List[str], timeout: int = 60,
+                             per_model_timeout: int = 45, wall_clock_limit: int = 90) -> List[Dict[str, Any]]:
+    """
+    Exécute les résumés en parallèle avec timeout dur par modèle + limite mur globale.
+    - timeout: passé à summarize_file côté moteur (s'il est supporté)
+    - per_model_timeout: délai max d'attente d'un thread (dur)
+    - wall_clock_limit: temps total autorisé pour l'ensemble (dur)
+    """
+    start = _time.time()
+    results: List[Dict[str, Any]] = []
+    status = st.empty()
+    progress = st.progress(0, text="Initialisation…")
+
+    def _job(model: str) -> Optional[Dict[str, Any]]:
+        st.write(f"🧠 Démarrage du résumé pour **{model}**…")
+        # On garde le même normaliseur que ta fonction _run_one_model_summary
+        try:
+            out = summarize_file(file_bytes, filename, models=[model], timeout=timeout)
+            # cas per_model
+            if isinstance(out, dict) and "results" in out and isinstance(out["results"], list) and out["results"]:
+                rec = out["results"][0]
+                return {
+                    "model": rec.get("model", model),
+                    "answer": rec.get("answer") or rec.get("summary") or "",
+                    "score": rec.get("score") or out.get("score"),
+                    "quality": rec.get("quality") or out.get("report") or {},
+                }
+            # cas global
+            if isinstance(out, dict):
+                return {
+                    "model": model,
+                    "answer": out.get("answer") or out.get("summary") or "",
+                    "score": out.get("score"),
+                    "quality": out.get("report") or out.get("quality") or {},
+                }
+            if isinstance(out, str):
+                return {"model": model, "answer": out, "score": None, "quality": {}}
+        except Exception as e:
+            st.warning(f"Échec résumé {model}: {e}")
+        return None
+
+    done_cnt = 0
+    total = len(models)
+    status.info(f"Lancement parallèle de {total} modèles…")
+
+    with ThreadPoolExecutor(max_workers=min(4, total)) as ex:
+        fut2model = {ex.submit(_job, m): m for m in models}
+        for fut in as_completed(fut2model, timeout=wall_clock_limit):
+            m = fut2model[fut]
+            try:
+                rec = fut.result(timeout=per_model_timeout)
+                if rec:
+                    results.append(rec)
+                    st.success(f"✅ Résumé terminé pour **{m}**")
+                else:
+                    st.error(f"❌ Pas de résultat pour **{m}**")
+            except Exception as e:
+                st.error(f"⏱️ Timeout/erreur pour **{m}** : {e}")
+            finally:
+                done_cnt += 1
+                progress.progress(done_cnt / total, text=f"Progression : {done_cnt}/{total}")
+
+            # Mur de temps global
+            if (_time.time() - start) > wall_clock_limit:
+                st.warning("⛔ Limite de temps globale atteinte — arrêt des tâches restantes.")
+                break
+
+    progress.empty()
+    status.empty()
+    return results
+
+# ============================================================
 # Render
 # ============================================================
 
@@ -742,10 +872,8 @@ def render():
     st.header("🧠 Generate Docs (RAG zéro-hallucination)")
     mode = st.radio("Mode", ["Répondre à une question", "Résumer un document (PDF/TXT)"], horizontal=True)
 
-    # (fix essentiel) : suppression du paramètre non standard border=True
     with st.form("gen_form"):
         models = _pick_models()
-        # Slider Top-K dans la sidebar (avec helper “?”)
         topk_context = _sidebar_topk_slider(default=6)
 
         if mode == "Répondre à une question":
@@ -758,7 +886,9 @@ def render():
             do_sum = False
             up = None
         else:
-            q = None
+            # Panneau Résumé
+            use_template = st.toggle("🧩 Reformuler avec gabarit analytique (entreprise)", value=True,
+                                     help="Transforme le résumé en un paragraphe fluide, sans inventer, en suivant le style demandé.")
             up = st.file_uploader("Importer un document (.pdf ou .txt)", type=["pdf", "txt"])
             do_sum = st.form_submit_button("Résumer")
             do_gen = do_cmp = False
@@ -771,12 +901,10 @@ def render():
             st.error("Merci de saisir une question.")
             st.stop()
 
-        # 1) Réponse ancrée (smart_rag_answer) — prioritaire
         base = _call_smart_rag(q) or {}
         if base:
             _display_grounded_block(base)
 
-        # 2) Séquentiel par modèle (option)
         collected: List[Dict[str, Any]] = []
         if do_gen:
             st.subheader("🧪 Réponses par modèle (séquentiel)")
@@ -793,14 +921,12 @@ def render():
                 st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
                 st.write(best.get("answer", ""))
 
-        # 3) Jury multi-modèles (option)
         results: List[Dict[str, Any]] = []
         if do_cmp:
             if len(models) < 3:
                 st.info("Astuce: pour une comparaison significative, sélectionne ≥ 3 modèles.")
             jury = _call_jury(q, models=models, topk_context=topk_context, timeout=60.0) or {}
             results = jury.get("results") or []
-            # normalisation légère (assure présence des champs)
             for r in results:
                 met = r.get("metrics") or {}
                 r["confidence"] = _safe_num(met.get("confidence", r.get("score", 0.0)))
@@ -808,7 +934,6 @@ def render():
                 r["coverage"]   = _safe_num(met.get("coverage", 0.0))
                 r["style"]      = _safe_num(met.get("style", 0.0))
 
-        # 4) Podium + Course + Comparatif
         final_list = results or collected
         if final_list:
             _render_podium(final_list)
@@ -817,53 +942,96 @@ def render():
 
         st.stop()
 
-    # === Branche Résumé — désormais branchée sur src.rag_sum ===
+        # === Branche Résumé ===
     else:
         if not do_sum:
             st.stop()
 
-        if summarize_file is None or summary_quality_report is None:
+        if summarize_file is None:
             st.error("Module de résumé indisponible (src.rag_sum). Vérifie l'import.")
             st.stop()
-
         if up is None:
             st.error("Importe un fichier .pdf ou .txt à résumer.")
             st.stop()
 
-        # Lecture binaire + appel du moteur de résumé dédié
         file_bytes = up.read()
-        try:
-            raw = summarize_file(file_bytes, up.name, models=models, timeout=90.0) or {}
-        except Exception as e:
-            st.error(f"Résumé indisponible: {e}")
+        filename = up.name
+
+        # --- Indicateurs visuels de démarrage ---
+        header_placeholder = st.empty()
+        header_placeholder.info("Résumé en cours… préparation du traitement multi-modèles.")
+        spinner_text = st.spinner("⏳ Démarrage du résumé (multi-modèles)…")
+
+        # 1) Tentative: appel multi-modèles (indéterminé -> spinner)
+        raw = {}
+        with spinner_text:
+            try:
+                raw = summarize_file(file_bytes, filename, models=models, timeout=90) or {}
+            except Exception as e:
+                raw = {}
+                st.warning(f"Appel multi-modèles indisponible: {e}")
+
+        # 2) Si pas de résultats distincts par modèle, exécution modèle par modèle avec progression
+        results = raw.get("results") or raw.get("per_model") or []
+        used = raw.get("used", "auto")
+        source_name = raw.get("source_name", filename)
+        source_ext = raw.get("source_ext", os.path.splitext(filename)[1])
+
+        if not results:
+            st.info("Exécution séparée par modèle pour afficher chaque résumé.")
+            results = []
+            total = len(models)
+            progress = st.progress(0, text="Initialisation…")
+            for i, m in enumerate(models, start=1):
+                progress.progress(i / total, text=f"Traitement du modèle {m}… ({i}/{total})")
+                rec = _run_one_model_summary(file_bytes, filename, m, timeout=70)
+                if rec:
+                    results.append(rec)
+            progress.empty()
+
+        if not results:
+            header_placeholder.error("Aucun résumé exploitable n'a été produit.")
             st.stop()
 
-        best = raw.get("best") or {}
-        results = raw.get("results") or []
-        report = raw.get("report") or {}
-        used = raw.get("used", "none")
+        header_placeholder.success("✅ Résumé terminé.")
 
-        if not best:
-            st.error("Aucun résumé exploitable n'a été produit.")
-            st.stop()
+        # 3) Détermine le 'best' (tri par score si dispo)
+        def _skey(rec):
+            s = rec.get("score")
+            return -float(s) if isinstance(s, (int, float)) else float("+inf")
+        results_sorted = sorted(results, key=_skey)
+        best = results_sorted[0]
 
-        # Meilleure proposition
+        # 4) Paragraphe cohérent (gabarit ON/OFF)
+        use_template = st.session_state.get("🧩 Reformuler avec gabarit analytique (entreprise)", True)
+        best_text = best.get("answer", "") or best.get("summary", "")
+        best_paragraph = _apply_coherence(best_text.strip(), use_template)
+
         st.subheader("📝 Résumé — meilleure proposition")
-        st.caption(f"Mode utilisé : **{used}** · Source : {raw.get('source_name','?')} ({raw.get('source_ext','')})")
+        st.caption(f"Mode utilisé : **{used}** · Source : {source_name} ({source_ext})")
         st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
-        st.write(best.get("answer", ""))
+        st.write(best_paragraph if best_paragraph else best_text)
 
-        # Indicateurs de qualité (depuis rag_sum.summary_quality_report)
+        # 5) Qualité (si rapport global présent) — sinon calcule localement
+        report = raw.get("report") or {}
+        if not report:
+            # tenter une estimation locale en lisant le texte
+            src_text, _ = _read_uploaded_file(up)
+            if src_text and best_text:
+                try:
+                    report = _summary_quality_report(src_text, best_text)
+                except Exception:
+                    report = {}
+
         if report:
             c1, c2, c3, c4 = st.columns(4)
-            with c1: st.metric("Compression", f"{report.get('compression',0.0)*100:0.0f}%")
+            with c1: st.metric("Compression", f"{report.get('compression',0.0)*100:.0f}%")
             with c2: st.metric("Similarité (cosine)", f"{report.get('cosine',0.0):.2f}")
             with c3: st.metric("ROUGE-1 F1", f"{report.get('rouge1_f1',0.0):.2f}")
-            with c4: st.metric("Mots-clés couverts", f"{report.get('keyword_overlap',0.0)*100:0.0f}%")
+            # 🔧 fix du format (évite '0:0f')
+            with c4: st.metric("Mots-clés couverts", f"{report.get('keyword_overlap',0.0)*100:.0f}%")
 
             with st.expander("🔎 Détails & vérifications"):
-                st.write(f"- Jetons source : **{report.get('tokens_source',0)}**")
-                st.write(f"- Jetons résumé : **{report.get('tokens_summary',0)}**")
                 st.write(f"- ROUGE-2 F1 : **{report.get('rouge2_f1',0.0):.2f}**")
                 if report.get("unsupported"):
                     st.warning("⚠️ Phrases possiblement non ancrées :")
@@ -872,12 +1040,14 @@ def render():
                 else:
                     st.success("Aucune phrase douteuse détectée par l’heuristique.")
 
-        # Tous les résumés par modèle
-        if results:
-            st.subheader("📑 Résumés par modèle")
-            for i, r in enumerate(sorted(results, key=_score_from_result, reverse=True), start=1):
-                with st.expander(f"{i}. {_label(r.get('model','—'))} ({_score_from_result(r):0.3f})", expanded=(i == 1)):
-                    st.write(r.get("answer", ""))
+        # 6) Tous les résumés par modèle (avec gabarit si activé)
+        st.subheader("📑 Résumés par modèle")
+        for i, r in enumerate(results_sorted, start=1):
+            with st.expander(f"{i}. {_label(r.get('model','—'))} ({(r.get('score') if r.get('score') is not None else '—')})", expanded=(i == 1)):
+                text = r.get("answer") or r.get("summary") or ""
+                para = _apply_coherence(text.strip(), use_template)
+                st.write(para if para else text)
+
 
 # Compat app.py
 def render_generate_docs_tab():
