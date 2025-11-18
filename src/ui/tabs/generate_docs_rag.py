@@ -2,12 +2,9 @@
 # ============================================================
 # Path: src/ui/tabs/generate_docs_rag.py
 # Role: Streamlit tab – RAG ancré + Jury multi-LLM via Ollama
-# Aligné avec src/rag_brain.py :
-#   - smart_rag_answer(question=..., ...) -> {answer, sources, quotes, confidence, quality, dbg}
-#   - ask_multi_ollama(question=..., models=[...], topk_context=6, timeout=60.0)
-#       -> {"question","context_snippets","results":[{"model","answer","time","metrics","score"}], "suggestion":{...}
-# Priorité: qualité de la réponse (génération ancrée) > UI.
-# Aucune modification de app.py. Fourni: render_generate_docs_tab()
+# + Résumé de documents aligné sur src/rag_sum.py
+#   - Question → smart_rag_answer / ask_multi_ollama (comme avant)
+#   - Résumé → même logique que la CLI: _summarize_text_three_cli
 # ============================================================
 
 from __future__ import annotations
@@ -16,14 +13,12 @@ import re
 import os
 import time
 import math
-import tempfile
 from collections import Counter
 from typing import List, Dict, Any, Optional, Tuple
 
 import streamlit as st
 import pandas as pd
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import time as _time
+
 # --- RAG strict engine (imports robustes) ---
 try:
     import src.rag_brain as _rb
@@ -35,10 +30,18 @@ except Exception:
 
 # --- Résumé (module dédié) ---
 try:
-    from src.rag_sum import summarize_file, summary_quality_report
+    # on importe AUSSI read_any_text + _summarize_text_three_cli pour coller au mode CLI
+    from src.rag_sum import (
+        summarize_file,
+        summary_quality_report,
+        read_any_text,
+        _summarize_text_three_cli,
+    )
 except Exception:
     summarize_file = None
     summary_quality_report = None
+    read_any_text = None
+    _summarize_text_three_cli = None
 
 # =================== CSS GLOBAL ===================
 st.markdown("""
@@ -236,7 +239,7 @@ def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: fl
     }
 
 # ============================================================
-# Lecture upload (TXT/PDF)
+# Lecture upload de secours (TXT/PDF) – rarement utilisé
 # ============================================================
 
 def _read_uploaded_file(upload) -> Tuple[str, str]:
@@ -265,7 +268,7 @@ def _read_uploaded_file(upload) -> Tuple[str, str]:
     return "", ""
 
 # ============================================================
-# 🔎 Helpers qualité de résumé locaux (compat)
+# Helpers qualité locaux (fallback si besoin)
 # ============================================================
 
 def _tok(s: str) -> list[str]:
@@ -293,7 +296,7 @@ def _keyword_overlap(ref: str, hyp: str, k: int = 20) -> float:
     return hit / max(1, len(top))
 
 def _cosine_sim(ref: str, hyp: str) -> float:
-    r, h = Counter(_tok(ref)), Counter(_tok(h))
+    r, h = Counter(_tok(ref)), Counter(_tok(hyp))
     if not r or not h:
         return 0.0
     inter = set(r) & set(h)
@@ -450,7 +453,7 @@ def _apply_coherence(summary_text: str, use_template: bool) -> str:
     return _cohere_paragraph_templated(summary_text) if use_template else _cohere_paragraph(summary_text)
 
 # ============================================================
-# UI (centrée sur la réponse) + Podium/Course + Tableaux
+# UI (modèles cliquables) + Podium/Course + Tableaux
 # ============================================================
 
 def _pick_models() -> List[str]:
@@ -478,6 +481,7 @@ def _pick_models() -> List[str]:
 
     st.markdown('<div class="model-grid">', unsafe_allow_html=True)
 
+    # NOTE : ce JS dépend de streamlitApi (optionnel); si non dispo, au pire on garde la sélection initiale.
     for i, m in enumerate(defaults):
         meta = _MODEL_META.get(m, {"emoji": "🤖", "color": "#334155"})
         active = m in selected
@@ -520,6 +524,11 @@ if (el_{i}) {{
             st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
+
+    if not selected:
+        selected = ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
+        st.session_state["selected_models"] = selected
+
     return selected
 
 def _display_grounded_block(block: Dict[str, Any]) -> None:
@@ -734,150 +743,27 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
     st.markdown("".join(html2), unsafe_allow_html=True)
 
 # ============================================================
-# Résumer un document — Exécution multi-modèles + gabarit
-# ============================================================
-
-def _summary_model_picker() -> List[str]:
-    st.caption("Choix des modèles (clic pour (dé)sélectionner).")
-    ALL = ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b", "tinyllama:latest"]
-    if "sum_models" not in st.session_state:
-        st.session_state["sum_models"] = ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
-
-    cols = st.columns(len(ALL))
-    new_sel = set(st.session_state["sum_models"])
-    for i, m in enumerate(ALL):
-        on = m in new_sel
-        label = f"✅ {m}" if on else f"◻️ {m}"
-        if cols[i].button(label, key=f"sum_pick_{m}"):
-            if on:
-                new_sel.remove(m)
-            else:
-                new_sel.add(m)
-    if not new_sel:
-        new_sel = {"mistral:7b-instruct"}
-    st.session_state["sum_models"] = list(new_sel)
-    st.caption("Modèles actifs : " + ", ".join(st.session_state["sum_models"]))
-    return st.session_state["sum_models"]
-
-def _run_one_model_summary(file_bytes: bytes, filename: str, model: str, timeout: int = 60) -> Optional[Dict[str, Any]]:
-    """
-    Lance summarize_file pour UN modèle; normalise le résultat -> {"model","answer","score","quality":{...}}
-    """
-    if summarize_file is None:
-        return None
-    try:
-        out = summarize_file(file_bytes, filename, models=[model], timeout=timeout)
-        # cas per_model
-        if isinstance(out, dict) and "results" in out and isinstance(out["results"], list) and out["results"]:
-            rec = out["results"][0]
-            return {
-                "model": rec.get("model", model),
-                "answer": rec.get("answer") or rec.get("summary") or "",
-                "score": rec.get("score") or out.get("score"),
-                "quality": rec.get("quality") or out.get("report") or {},
-            }
-        # cas global
-        if isinstance(out, dict):
-            return {
-                "model": model,
-                "answer": out.get("answer") or out.get("summary") or "",
-                "score": out.get("score"),
-                "quality": out.get("report") or out.get("quality") or {},
-            }
-        if isinstance(out, str):
-            return {"model": model, "answer": out, "score": None, "quality": {}}
-    except Exception as e:
-        st.warning(f"Échec résumé {model}: {e}")
-    return None
-
-from concurrent.futures import ThreadPoolExecutor, as_completed
-import time as _time
-
-def _run_all_model_summaries(file_bytes: bytes, filename: str, models: List[str], timeout: int = 60,
-                             per_model_timeout: int = 45, wall_clock_limit: int = 90) -> List[Dict[str, Any]]:
-    """
-    Exécute les résumés en parallèle avec timeout dur par modèle + limite mur globale.
-    - timeout: passé à summarize_file côté moteur (s'il est supporté)
-    - per_model_timeout: délai max d'attente d'un thread (dur)
-    - wall_clock_limit: temps total autorisé pour l'ensemble (dur)
-    """
-    start = _time.time()
-    results: List[Dict[str, Any]] = []
-    status = st.empty()
-    progress = st.progress(0, text="Initialisation…")
-
-    def _job(model: str) -> Optional[Dict[str, Any]]:
-        st.write(f"🧠 Démarrage du résumé pour **{model}**…")
-        # On garde le même normaliseur que ta fonction _run_one_model_summary
-        try:
-            out = summarize_file(file_bytes, filename, models=[model], timeout=timeout)
-            # cas per_model
-            if isinstance(out, dict) and "results" in out and isinstance(out["results"], list) and out["results"]:
-                rec = out["results"][0]
-                return {
-                    "model": rec.get("model", model),
-                    "answer": rec.get("answer") or rec.get("summary") or "",
-                    "score": rec.get("score") or out.get("score"),
-                    "quality": rec.get("quality") or out.get("report") or {},
-                }
-            # cas global
-            if isinstance(out, dict):
-                return {
-                    "model": model,
-                    "answer": out.get("answer") or out.get("summary") or "",
-                    "score": out.get("score"),
-                    "quality": out.get("report") or out.get("quality") or {},
-                }
-            if isinstance(out, str):
-                return {"model": model, "answer": out, "score": None, "quality": {}}
-        except Exception as e:
-            st.warning(f"Échec résumé {model}: {e}")
-        return None
-
-    done_cnt = 0
-    total = len(models)
-    status.info(f"Lancement parallèle de {total} modèles…")
-
-    with ThreadPoolExecutor(max_workers=min(4, total)) as ex:
-        fut2model = {ex.submit(_job, m): m for m in models}
-        for fut in as_completed(fut2model, timeout=wall_clock_limit):
-            m = fut2model[fut]
-            try:
-                rec = fut.result(timeout=per_model_timeout)
-                if rec:
-                    results.append(rec)
-                    st.success(f"✅ Résumé terminé pour **{m}**")
-                else:
-                    st.error(f"❌ Pas de résultat pour **{m}**")
-            except Exception as e:
-                st.error(f"⏱️ Timeout/erreur pour **{m}** : {e}")
-            finally:
-                done_cnt += 1
-                progress.progress(done_cnt / total, text=f"Progression : {done_cnt}/{total}")
-
-            # Mur de temps global
-            if (_time.time() - start) > wall_clock_limit:
-                st.warning("⛔ Limite de temps globale atteinte — arrêt des tâches restantes.")
-                break
-
-    progress.empty()
-    status.empty()
-    return results
-
-# ============================================================
-# Render
+# Render principal
 # ============================================================
 
 def render():
     st.header("🧠 Generate Docs (RAG zéro-hallucination)")
-    mode = st.radio("Mode", ["Répondre à une question", "Résumer un document (PDF/TXT)"], horizontal=True)
+    mode = st.radio(
+        "Mode",
+        ["Répondre à une question", "Résumer un document (PDF/TXT)"],
+        horizontal=True,
+    )
 
     with st.form("gen_form"):
         models = _pick_models()
         topk_context = _sidebar_topk_slider(default=6)
 
         if mode == "Répondre à une question":
-            q = st.text_area("Question", placeholder="Ex: C'est quoi IT-STORM ?", height=100)
+            q = st.text_area(
+                "Question",
+                placeholder="Ex: C'est quoi IT-STORM ?",
+                height=100,
+            )
             c1, c2 = st.columns([1, 1])
             with c1:
                 do_gen = st.form_submit_button("Générer (séquentiel)")
@@ -885,15 +771,27 @@ def render():
                 do_cmp = st.form_submit_button("Comparer (jury)")
             do_sum = False
             up = None
+            # ce toggle ne sert que pour la partie résumé
+            st.session_state.setdefault("sum_use_template", True)
         else:
-            # Panneau Résumé
-            use_template = st.toggle("🧩 Reformuler avec gabarit analytique (entreprise)", value=True,
-                                     help="Transforme le résumé en un paragraphe fluide, sans inventer, en suivant le style demandé.")
-            up = st.file_uploader("Importer un document (.pdf ou .txt)", type=["pdf", "txt"])
+            # Choix du type de reformulation pour le résumé
+            st.session_state.setdefault("sum_use_template", True)
+            st.toggle(
+                "🧩 Reformuler avec gabarit analytique (entreprise)",
+                value=st.session_state["sum_use_template"],
+                key="sum_use_template",
+                help="Transforme le résumé en un paragraphe fluide (sans inventer), dans un style plus analytique.",
+            )
+            up = st.file_uploader(
+                "Importer un document (.pdf ou .txt)", type=["pdf", "txt"]
+            )
             do_sum = st.form_submit_button("Résumer")
             do_gen = do_cmp = False
+            q = ""
 
-    # === Branche Question / RAG ===
+    # =======================
+    # Branche QUESTION / RAG
+    # =======================
     if mode == "Répondre à une question":
         if not (do_gen or do_cmp):
             st.stop()
@@ -942,112 +840,90 @@ def render():
 
         st.stop()
 
-        # === Branche Résumé ===
-    else:
-        if not do_sum:
-            st.stop()
+    # =======================
+    # Branche RÉSUMÉ (PDF/TXT) – ALIGNÉE AVEC CLI --three
+    # =======================
+    if not do_sum:
+        st.stop()
 
-        if summarize_file is None:
-            st.error("Module de résumé indisponible (src.rag_sum). Vérifie l'import.")
-            st.stop()
-        if up is None:
-            st.error("Importe un fichier .pdf ou .txt à résumer.")
-            st.stop()
+    if _summarize_text_three_cli is None or read_any_text is None:
+        st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
+        st.stop()
 
-        file_bytes = up.read()
-        filename = up.name
+    if up is None:
+        st.error("Importe un fichier .pdf ou .txt à résumer.")
+        st.stop()
 
-        # --- Indicateurs visuels de démarrage ---
-        header_placeholder = st.empty()
-        header_placeholder.info("Résumé en cours… préparation du traitement multi-modèles.")
-        spinner_text = st.spinner("⏳ Démarrage du résumé (multi-modèles)…")
+    file_bytes = up.read()
+    filename = up.name or "document"
+    text, ext = read_any_text(file_bytes, filename)
 
-        # 1) Tentative: appel multi-modèles (indéterminé -> spinner)
-        raw = {}
-        with spinner_text:
-            try:
-                raw = summarize_file(file_bytes, filename, models=models, timeout=90) or {}
-            except Exception as e:
-                raw = {}
-                st.warning(f"Appel multi-modèles indisponible: {e}")
+    if not text or not text.strip():
+        st.error(f"Impossible de lire le contenu de « {filename} ».")
+        st.stop()
 
-        # 2) Si pas de résultats distincts par modèle, exécution modèle par modèle avec progression
-        results = raw.get("results") or raw.get("per_model") or []
-        used = raw.get("used", "auto")
-        source_name = raw.get("source_name", filename)
-        source_ext = raw.get("source_ext", os.path.splitext(filename)[1])
+    st.info(f"Longueur texte : {len(text)} caractères")
 
-        if not results:
-            st.info("Exécution séparée par modèle pour afficher chaque résumé.")
-            results = []
-            total = len(models)
-            progress = st.progress(0, text="Initialisation…")
-            for i, m in enumerate(models, start=1):
-                progress.progress(i / total, text=f"Traitement du modèle {m}… ({i}/{total})")
-                rec = _run_one_model_summary(file_bytes, filename, m, timeout=70)
-                if rec:
-                    results.append(rec)
-            progress.empty()
+    # on utilise exactement la même logique que la CLI: _summarize_text_three_cli
+    models_for_sum = models or ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
 
-        if not results:
-            header_placeholder.error("Aucun résumé exploitable n'a été produit.")
-            st.stop()
+    with st.spinner("⏳ Génération des résumés (mode three-direct, 1 par modèle)…"):
+        summaries = _summarize_text_three_cli(text, models=models_for_sum, timeout=200.0) or []
 
-        header_placeholder.success("✅ Résumé terminé.")
+    if not summaries:
+        st.error("Aucun résumé n'a été produit (summaries vide).")
+        st.stop()
 
-        # 3) Détermine le 'best' (tri par score si dispo)
-        def _skey(rec):
-            s = rec.get("score")
-            return -float(s) if isinstance(s, (int, float)) else float("+inf")
-        results_sorted = sorted(results, key=_skey)
-        best = results_sorted[0]
+    # sélection du meilleur résumé (comme la CLI)
+    best = max(summaries, key=lambda x: x.get("score", 0.0))
+    best_report = best.get("report", {}) or {}
+    use_template = bool(st.session_state.get("sum_use_template", True))
 
-        # 4) Paragraphe cohérent (gabarit ON/OFF)
-        use_template = st.session_state.get("🧩 Reformuler avec gabarit analytique (entreprise)", True)
-        best_text = best.get("answer", "") or best.get("summary", "")
-        best_paragraph = _apply_coherence(best_text.strip(), use_template)
+    raw_best_text = best.get("answer", "") or ""
+    best_paragraph = _apply_coherence(raw_best_text.strip(), use_template)
 
-        st.subheader("📝 Résumé — meilleure proposition")
-        st.caption(f"Mode utilisé : **{used}** · Source : {source_name} ({source_ext})")
-        st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
-        st.write(best_paragraph if best_paragraph else best_text)
+    st.subheader("📝 Résumé — meilleure proposition")
+    st.caption(f"Mode utilisé : **three-direct** · Source : {filename} ({ext})")
+    st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
+    st.write(best_paragraph if best_paragraph else raw_best_text)
 
-        # 5) Qualité (si rapport global présent) — sinon calcule localement
-        report = raw.get("report") or {}
-        if not report:
-            # tenter une estimation locale en lisant le texte
-            src_text, _ = _read_uploaded_file(up)
-            if src_text and best_text:
-                try:
-                    report = _summary_quality_report(src_text, best_text)
-                except Exception:
-                    report = {}
+    # métriques de qualité (issues de rag_sum.report)
+    rep = best_report
+    if rep:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.metric("Compression", f"{rep.get('compression',0.0)*100:.0f}%")
+        with c2:
+            st.metric("Similarité (cosine)", f"{rep.get('cosine',0.0):.2f}")
+        with c3:
+            st.metric("ROUGE-1 F1", f"{rep.get('rouge1_f1',0.0):.2f}")
+        with c4:
+            st.metric("Mots-clés couverts", f"{rep.get('keyword_overlap',0.0)*100:.0f}%")
 
-        if report:
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: st.metric("Compression", f"{report.get('compression',0.0)*100:.0f}%")
-            with c2: st.metric("Similarité (cosine)", f"{report.get('cosine',0.0):.2f}")
-            with c3: st.metric("ROUGE-1 F1", f"{report.get('rouge1_f1',0.0):.2f}")
-            # 🔧 fix du format (évite '0:0f')
-            with c4: st.metric("Mots-clés couverts", f"{report.get('keyword_overlap',0.0)*100:.0f}%")
+        with st.expander("🔎 Détails & vérifications"):
+            st.write(f"- ROUGE-2 F1 : **{rep.get('rouge2_f1',0.0):.2f}**")
+            st.write(f"- Phrases complètes : **{rep.get('complete_ratio',0.0)*100:.0f}%**")
+            if rep.get("unsupported"):
+                st.warning("⚠️ Phrases possiblement non ancrées :")
+                for s_ in rep["unsupported"]:
+                    st.write(f"- {s_}")
+            else:
+                st.success("Aucune phrase douteuse détectée par l’heuristique.")
 
-            with st.expander("🔎 Détails & vérifications"):
-                st.write(f"- ROUGE-2 F1 : **{report.get('rouge2_f1',0.0):.2f}**")
-                if report.get("unsupported"):
-                    st.warning("⚠️ Phrases possiblement non ancrées :")
-                    for s in report["unsupported"]:
-                        st.write(f"- {s}")
-                else:
-                    st.success("Aucune phrase douteuse détectée par l’heuristique.")
+    # Podium + course + tableau comparatif (avec les scores de rag_sum)
+    _render_podium(summaries)
+    _render_race(summaries)
+    _table_results(summaries, title="📊 Comparatif des modèles (three-direct)")
 
-        # 6) Tous les résumés par modèle (avec gabarit si activé)
-        st.subheader("📑 Résumés par modèle")
-        for i, r in enumerate(results_sorted, start=1):
-            with st.expander(f"{i}. {_label(r.get('model','—'))} ({(r.get('score') if r.get('score') is not None else '—')})", expanded=(i == 1)):
-                text = r.get("answer") or r.get("summary") or ""
-                para = _apply_coherence(text.strip(), use_template)
-                st.write(para if para else text)
-
+    # Tous les résumés par modèle (après gabarit éventuel)
+    st.subheader("📑 Résumés par modèle")
+    for i, r in enumerate(sorted(summaries, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
+        score = r.get("score", 0.0)
+        label = f"{i}. {_label(r.get('model','—'))} ({score:.3f})"
+        with st.expander(label, expanded=(i == 1)):
+            txt = r.get("answer") or ""
+            para = _apply_coherence(txt.strip(), use_template)
+            st.write(para if para else txt)
 
 # Compat app.py
 def render_generate_docs_tab():

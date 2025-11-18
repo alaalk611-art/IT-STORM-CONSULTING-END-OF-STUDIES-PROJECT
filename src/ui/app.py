@@ -11,6 +11,7 @@ from streamlit_javascript import st_javascript
 from src.ui.components.floating_chatbot import render_chatbot
 from src.ui.tabs import generate_docs_rag 
 from src.utils.doc_tools import make_docx, make_ppt, summarize_text
+from src.ui.sections import market
 
 # === UI principale ===
 import os, io, base64, time, sys
@@ -20,7 +21,6 @@ from typing import List, Tuple, Optional
 import io
 from datetime import datetime
 from typing import List, Dict
-from src.ui.sections.generate_docs import render_generate_docs
 import os
 import streamlit as st
 
@@ -182,7 +182,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.graph_objects as go
-from src.ui.sections import market 
 from dotenv import load_dotenv
 API_BASE = os.getenv("MARKET_API_BASE_URL", "http://127.0.0.1:8001")
 TIMEOUT = float(os.getenv("FINANCE_TIMEOUT", "10"))
@@ -1245,10 +1244,9 @@ with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "
 # TABS
 # --------------------------------------------------------------------------------------
 tab_chat, tab_upload, tab_generate, tab_market = st.tabs(
-    [t("tab_chat"), t("tab_upload"), t("tab_generate"), t("tab_market")]
+    ["💬 Knowledge Chat", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"]
 )
 render_chatbot()
-# ---- TAB 1: CHAT ----
 # ---- TAB 1: CHAT ----
 with tab_chat:
     st.markdown("### " + t("chat_title"))
@@ -1360,9 +1358,7 @@ with tab_generate:
 # ---- TAB 4: MARKET WATCH ----
 with tab_market:
     market.render()
-
-
-
+    
 # --------------------------------------------------------------------------------------
 # END OF FILE
 # --------------------------------------------------------------------------------------
