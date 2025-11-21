@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 import inspect
 import streamlit as st
-from src.ui.sections.generate_docs import render_generate_docs as render
+
 # =============================
 # Helpers — apply runtime config
 # =============================

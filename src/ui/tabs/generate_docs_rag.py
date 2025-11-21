@@ -1129,12 +1129,13 @@ def render():
     # Branche QUESTION / RAG
     # =======================
     if mode == "Répondre à une question":
+        # Aucun bouton cliqué → on ne fait rien mais on laisse les autres tabs vivre
         if not (do_gen or do_cmp):
-            st.stop()
+            return
 
         if not q or not q.strip():
             st.error("Merci de saisir une question.")
-            st.stop()
+            return
 
         base = _call_smart_rag(q) or {}
         if base:
@@ -1144,7 +1145,7 @@ def render():
         if do_gen:
             st.subheader("🧪 Réponses par modèle (séquentiel)")
             for m in models:
-                with st.spinner(f"{m} génère une réponse..."):
+                with st.spinner(f"{m} génère une réponse."):
                     r = _ask_one_model(q, model=m, topk_context=topk_context, timeout=60.0)
                 st.markdown(_decorate_model_label(r.get("model", "—")), unsafe_allow_html=True)
                 st.write(r.get("answer", ""))
@@ -1175,18 +1176,15 @@ def render():
             _render_race(final_list)
             _table_results(final_list, title="📊 Comparatif des réponses")
 
-        st.stop()
+        # On a fini la branche question → on sort proprement
+        return
 
     # =======================
-    # Branche RÉSUMÉ (PDF/TXT) – ALIGNÉE AVEC CLI --three
+    # Branche RÉSUMÉ (PDF/TXT)
     # =======================
-    # Deux cas :
-    #  1) do_sum = True → on calcule un NOUVEAU résumé, on met à jour sum_state
-    #  2) do_sum = False mais sum_state existe → on réaffiche le dernier résumé (pour les downloads)
-    #  3) ni l’un ni l’autre → on attend que l’utilisateur clique sur "Résumer"
     if _summarize_text_three_cli is None or read_any_text is None:
         st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
-        st.stop()
+        return
 
     use_template = bool(st.session_state.get("sum_use_template", True))
 
@@ -1194,7 +1192,7 @@ def render():
         # ----- Nouveau calcul de résumé -----
         if up is None:
             st.error("Importe un fichier .pdf ou .txt à résumer.")
-            st.stop()
+            return
 
         file_bytes = up.read()
         filename = up.name or "document"
@@ -1202,7 +1200,7 @@ def render():
 
         if not text or not text.strip():
             st.error(f"Impossible de lire le contenu de « {filename} ».")
-            st.stop()
+            return
 
         text_len = len(text or "")
         st.info(f"Longueur texte : {text_len} caractères")
@@ -1214,7 +1212,7 @@ def render():
 
         if not summaries:
             st.error("Aucun résumé n'a été produit (summaries vide).")
-            st.stop()
+            return
 
         # Meilleur résumé interne rag_sum
         best = max(summaries, key=lambda x: x.get("score", 0.0))
@@ -1255,7 +1253,7 @@ def render():
         # Aucun nouveau "Résumer" cliqué : on réutilise ce qui est déjà en mémoire
         if not sum_state:
             st.info("Importe un document puis clique sur « Résumer » pour générer un résumé.")
-            st.stop()
+            return
 
     # À partir d'ici, on travaille UNIQUEMENT avec sum_state (nouveau ou ancien)
     filename = sum_state.get("filename", "document")

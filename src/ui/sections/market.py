@@ -6,6 +6,19 @@ import requests
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from datetime import date
+from collections import deque
+import random
+
+# Import DL optionnel (autoencoder + DQN)
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+except ImportError:
+    torch = None
+    nn = None
+    optim = None
 
 # ===============================
 # Helpers quant existants + nouveaux
@@ -53,7 +66,7 @@ def _compute_indicators(df: pd.DataFrame, interval: str) -> pd.DataFrame:
     roll_down = pd.Series(loss, index=df.index).rolling(14).mean()
     rs = roll_up / (roll_down.replace(0, np.nan))
     df["rsi14"] = 100 - (100 / (1 + rs))
-    df["rsi14"] = df["rsi14"].fillna(method="bfill")
+    df["rsi14"] = df["rsi14"].bfill()
 
     # MACD
     ema12 = df["close"].ewm(span=12, adjust=False).mean()
@@ -179,7 +192,14 @@ def _bt_stats(strat_ret: pd.Series, interval: str) -> dict:
     vol = float(strat_ret.std() * np.sqrt(ann)) if n > 1 else 0.0
     sharpe = float((strat_ret.mean() * ann) / vol) if vol > 1e-12 else 0.0
     mdd = _max_drawdown(equity)
-    return {"equity": equity, "total_return": tot_ret, "cagr": cagr, "vol": vol, "sharpe": sharpe, "maxdd": mdd}
+    return {
+        "equity": equity,
+        "total_return": tot_ret,
+        "cagr": cagr,
+        "vol": vol,
+        "sharpe": sharpe,
+        "maxdd": mdd,
+    }
 
 
 def _backtest_sma(df: pd.DataFrame, fast: int = 20, slow: int = 50, fee_bps: float = 5.0) -> pd.DataFrame:
@@ -214,31 +234,58 @@ def _rolling_zscore_anomalies(df: pd.DataFrame, window: int = 20, z_thresh: floa
 
 def _trend_slope_and_projection(df: pd.DataFrame, lookback: int = 60, horizon: int = 10):
     """
-    Calcule slope via régression linéaire (numpy.polyfit) sur la dernière fenêtre
-    et renvoie (indices_x, y_reg_line, indices_proj, y_proj_line, slope_annualized_pct).
-    slope_annualized_pct ≈ pente relative annualisée (grossière) pour lecture rapide.
+    Calcule la tendance via régression linéaire (numpy.polyfit) sur les
+    'lookback' derniers points de clôture et renvoie :
+
+        (x_hist_time, y_reg_line, x_proj_time, y_proj_line, slope_annualized_pct)
     """
+    if "time" not in df.columns or "close" not in df.columns:
+        return None
     if len(df) < max(5, lookback):
         return None
 
-    sub = df.tail(lookback).reset_index(drop=True)
-    x = np.arange(len(sub))
-    y = sub["close"].values.astype(float)
+    time_series = pd.to_datetime(df["time"], utc=True, errors="coerce")
+    close_series = pd.to_numeric(df["close"], errors="coerce")
 
-    # Régression linéaire
+    mask_valid = time_series.notna() & close_series.notna()
+    if mask_valid.sum() < max(5, lookback // 2):
+        return None
+
+    time_series = time_series[mask_valid]
+    close_series = close_series[mask_valid]
+
+    sub_time = time_series.tail(lookback)
+    sub_close = close_series.tail(lookback)
+
+    if sub_close.count() < 5:
+        return None
+
+    x = np.arange(len(sub_close))
+    y = sub_close.values.astype(float)
+
     b1, b0 = np.polyfit(x, y, 1)  # y ≈ b1*x + b0
     y_fit = b1 * x + b0
 
-    # Projection naïve
-    x_proj = np.arange(len(sub), len(sub) + horizon)
-    y_proj = b1 * x_proj + b0
-
-    # “Annualiser” la pente relative ~ (b1 / prix_moyen) * périodes_par_an
     periods_per_year = _annualization_factor("1d")
     slope_rel = (b1 / max(np.mean(y), 1e-8)) * periods_per_year
     slope_pct = float(slope_rel * 100.0)
 
-    return sub["time"], y_fit, df["time"].iloc[len(df)-1+1-len(x_proj):len(df)-1+1], y_proj, slope_pct
+    diffs = sub_time.diff().dropna()
+    if not diffs.empty and diffs.median() > pd.Timedelta(0):
+        step = diffs.median()
+    else:
+        step = pd.Timedelta(days=1)
+
+    last_time = sub_time.iloc[-1]
+    proj_times = pd.to_datetime(
+        [last_time + (i + 1) * step for i in range(horizon)],
+        utc=True,
+    )
+
+    x_proj_idx = np.arange(len(sub_close), len(sub_close) + horizon)
+    y_proj = b1 * x_proj_idx + b0
+
+    return sub_time, y_fit, proj_times, y_proj, slope_pct
 
 
 def _kmeans_regimes(df: pd.DataFrame, n_clusters: int = 3):
@@ -253,7 +300,7 @@ def _kmeans_regimes(df: pd.DataFrame, n_clusters: int = 3):
 
     X = pd.DataFrame({
         "ret": df["ret"].fillna(0.0),
-        "vol20": df["vol20"].fillna(df["vol20"].median() if not df["vol20"].dropna().empty else 0.0)
+        "vol20": df["vol20"].fillna(df["vol20"].median() if not df["vol20"].dropna().empty else 0.0),
     })
     try:
         km = KMeans(n_clusters=n_clusters, n_init="auto", random_state=0)
@@ -261,38 +308,413 @@ def _kmeans_regimes(df: pd.DataFrame, n_clusters: int = 3):
         km = KMeans(n_clusters=n_clusters, n_init=10, random_state=0)
     labels = km.fit_predict(X)
 
-    # Couleurs simples (Plotly choisira sa palette si None, mais on donne un mapping stable)
-    palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]  # bleus/orange/vert/rouge
+    palette = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728"]
     colors = [palette[l % len(palette)] for l in labels]
     return labels, colors
 
 
 # ===============================
-# Sauvegarde quotidienne OHLCV
+# Deep Learning : Autoencoder anomalies
 # ===============================
-def _save_daily_csv(df: pd.DataFrame, symbol: str, interval: str, period: str):
+class _TinyAutoencoder(nn.Module):
+    def __init__(self, n_features: int):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(n_features, 8),
+            nn.ReLU(),
+            nn.Linear(8, 3),
+            nn.ReLU(),
+        )
+        self.decoder = nn.Sequential(
+            nn.Linear(3, 8),
+            nn.ReLU(),
+            nn.Linear(8, n_features),
+        )
+
+    def forward(self, x):
+        z = self.encoder(x)
+        out = self.decoder(z)
+        return out
+
+
+def _dl_autoencoder_anomaly_scores(
+    df: pd.DataFrame,
+    n_epochs: int = 20,
+    batch_size: int = 32,
+):
     """
-    Sauvegarde automatique quotidienne: outputs/market/{YYYY-MM-DD}/{symbol}_{interval}_{period}.csv
-    Évite d’écraser si déjà existant pour la date du jour.
+    Entraîne un minuscule autoencoder sur quelques features techniques
+    et retourne une série 'reconstruction_error' alignée sur df.index.
     """
-    # Dossier outputs cohérent avec app (on crée outputs/market)
-    root = Path(__file__).resolve().parents[3]  # .../intelligent_copilot IT-STORM
-    out_dir = root / "outputs" / "market"
+    if torch is None or nn is None:
+        return None, "PyTorch n'est pas installé dans l'environnement."
+
+    feat_cols = ["ret", "vol20", "rsi14", "macd", "macd_signal"]
+    feat_cols = [c for c in feat_cols if c in df.columns]
+    if len(feat_cols) < 3:
+        return None, "Pas assez de features techniques pour l'autoencoder."
+
+    feats = df[feat_cols].dropna()
+    if len(feats) < 100:
+        return None, "Trop peu de données pour entraîner un autoencoder (min ≈100 lignes)."
+
+    X = feats.values.astype("float32")
+    mu = X.mean(axis=0, keepdims=True)
+    sigma = X.std(axis=0, keepdims=True)
+    sigma[sigma == 0] = 1.0
+    Xn = (X - mu) / sigma
+
+    x_tensor = torch.from_numpy(Xn)
+    n_features = Xn.shape[1]
+
+    model = _TinyAutoencoder(n_features)
+    opt = torch.optim.Adam(model.parameters(), lr=1e-3)
+    loss_fn = nn.MSELoss()
+
+    model.train()
+    n = len(x_tensor)
+    for _ in range(n_epochs):
+        perm = torch.randperm(n)
+        for i in range(0, n, batch_size):
+            idx = perm[i: i + batch_size]
+            batch = x_tensor[idx]
+            opt.zero_grad()
+            recon = model(batch)
+            loss = loss_fn(recon, batch)
+            loss.backward()
+            opt.step()
+
+    model.eval()
+    with torch.no_grad():
+        recon = model(x_tensor)
+        errors = ((x_tensor - recon) ** 2).mean(dim=1).cpu().numpy()
+
+    scores = pd.Series(errors, index=feats.index, name="ae_recon_error")
+    return scores, None
+
+
+# ===============================
+# Reinforcement Learning : Q-learning sur SMA (aligné TradingEnvSMA)
+# ===============================
+def _train_q_learning_sma(
+    bt: pd.DataFrame,
+    fee_bps: float = 5.0,
+    episodes: int = 50,
+    gamma: float = 0.95,
+    alpha: float = 0.1,
+    epsilon: float = 0.1,
+):
+    """
+    Agent RL (Q-learning tabulaire) aligné avec TradingEnvSMA.
+
+    - États: (position, sign_sma, rsi_bin, vol_bin)
+        position ∈ {-1,0,1}
+        sign_sma ∈ {-1,0,1}  (signe de sma_fast - sma_slow)
+        rsi_bin ∈ {-1,0,1}   (<40, entre 40 et 60, >60)
+        vol_bin ∈ {0,1}      (vol <= médiane, vol > médiane)
+
+    - Actions: -1 (short), 0 (cash), 1 (long)
+    - Récompense: position_future * ret_{t+1} - frais si changement de position
+
+    Retourne:
+        - q_table: dict[(pos, sign_sma, rsi_bin, vol_bin)][action] = Q
+        - liste_pnl_episodes: liste des PnL cumulés par épisode
+    """
+    required_cols = ["ret", "sma_fast", "sma_slow", "rsi14", "vol20"]
+    if any(c not in bt.columns for c in required_cols):
+        return None, []
+
+    data = bt.dropna(subset=required_cols).copy()
+    if len(data) < 50:
+        return None, []
+
+    # Pré-calcul des signaux
+    sign_sma = np.sign(data["sma_fast"] - data["sma_slow"]).astype(int).values
+    rets = data["ret"].values
+    rsi_vals = data["rsi14"].values
+    vol_vals = data["vol20"].values
+
+    # Binarisation RSI
+    rsi_bin = np.zeros_like(rsi_vals, dtype=int)
+    rsi_bin[rsi_vals > 60] = 1
+    rsi_bin[rsi_vals < 40] = -1
+
+    # Binarisation Volatilité
+    vol_median = np.nanmedian(vol_vals) if not np.isnan(vol_vals).all() else 0.0
+    vol_bin = (vol_vals > vol_median).astype(int)
+
+    fee = fee_bps / 10000.0
+
+    positions = [-1, 0, 1]
+    sign_vals = [-1, 0, 1]
+    rsi_vals_set = [-1, 0, 1]
+    vol_vals_set = [0, 1]
+    actions = [-1, 0, 1]
+
+    # Q-table: dict[state][action]
+    Q: dict[tuple[int, int, int, int], dict[int, float]] = {}
+    for p in positions:
+        for s in sign_vals:
+            for rb in rsi_vals_set:
+                for vb in vol_vals_set:
+                    Q[(p, s, rb, vb)] = {a: 0.0 for a in actions}
+
+    episode_pnls: list[float] = []
+
+    n = len(data)
+    for _ in range(episodes):
+        pos = 0
+        pnl = 0.0
+
+        for t in range(n - 1):
+            s_sma = int(sign_sma[t])
+            rb = int(rsi_bin[t])
+            vb = int(vol_bin[t])
+            state = (pos, s_sma, rb, vb)
+
+            # ε-greedy
+            if np.random.rand() < epsilon:
+                act = int(np.random.choice(actions))
+            else:
+                qvals = Q[state]
+                act = max(qvals, key=qvals.get)
+
+            new_pos = act
+            trade_cost = fee if new_pos != pos else 0.0
+            r = new_pos * rets[t + 1] - trade_cost
+            pnl += r
+
+            s_sma_next = int(sign_sma[t + 1])
+            rb_next = int(rsi_bin[t + 1])
+            vb_next = int(vol_bin[t + 1])
+            next_state = (new_pos, s_sma_next, rb_next, vb_next)
+
+            best_next = max(Q[next_state].values())
+            old_q = Q[state][act]
+            Q[state][act] = old_q + alpha * (r + gamma * best_next - old_q)
+
+            pos = new_pos
+
+        episode_pnls.append(float(pnl))
+
+    return Q, episode_pnls
+
+
+# ===============================
+# Environnement RL basé sur SMA (DQN)
+# ===============================
+class TradingEnvSMA:
+    """
+    Environnement de trading simple pour RL:
+    - action ∈ {-1, 0, 1} → short, cash, long
+    - état = [position, sign_sma, rsi_bin, vol_bin]
+    """
+
+    def __init__(self, df: pd.DataFrame, fee_bps: float = 5.0):
+        # On suppose que df contient déjà: time, close, ret, sma_fast, sma_slow, rsi14, vol20
+        self.df = df.dropna(subset=["ret", "sma_fast", "sma_slow", "rsi14", "vol20"]).reset_index(drop=True)
+        self.fee = fee_bps / 10000.0
+        self.t = 0
+        self.position = 0  # -1 short, 0 cash, 1 long
+
+    def reset(self):
+        self.t = 0
+        self.position = 0
+        return self._get_state()
+
+    def step(self, action: int):
+        """
+        action ∈ {-1, 0, 1}
+        Retourne: (state_next, reward, done, info)
+        """
+        reward = 0.0
+        done = False
+
+        if self.t < len(self.df) - 1:
+            ret_tp1 = float(self.df.loc[self.t + 1, "ret"])
+        else:
+            done = True
+            return self._get_state(), 0.0, True, {}
+
+        new_position = int(action)
+        trade_cost = self.fee if new_position != self.position else 0.0
+        reward = new_position * ret_tp1 - trade_cost
+
+        self.position = new_position
+        self.t += 1
+
+        if self.t >= len(self.df) - 2:
+            done = True
+
+        return self._get_state(), float(reward), bool(done), {}
+
+    def _get_state(self) -> np.ndarray:
+        row = self.df.loc[self.t]
+
+        sign_sma = int(np.sign(row["sma_fast"] - row["sma_slow"]))
+
+        if row["rsi14"] > 60:
+            rsi_bin = 1
+        elif row["rsi14"] < 40:
+            rsi_bin = -1
+        else:
+            rsi_bin = 0
+
+        if row["vol20"] > self.df["vol20"].median():
+            vol_bin = 1
+        else:
+            vol_bin = 0
+
+        return np.array([self.position, sign_sma, rsi_bin, vol_bin], dtype=np.float32)
+
+
+# ===============================
+# Réseau DQN + Replay Buffer
+# ===============================
+if nn is not None:
+    class DQN(nn.Module):
+        def __init__(self, state_dim: int = 4, action_dim: int = 3):
+            super().__init__()
+            self.net = nn.Sequential(
+                nn.Linear(state_dim, 32),
+                nn.ReLU(),
+                nn.Linear(32, 32),
+                nn.ReLU(),
+                nn.Linear(32, action_dim),
+            )
+
+        def forward(self, x):
+            return self.net(x)
+else:
+    class DQN:
+        def __init__(self, *args, **kwargs):
+            raise RuntimeError("PyTorch n'est pas installé → DQN indisponible.")
+
+
+class ReplayBuffer:
+    def __init__(self, size: int = 5000):
+        self.buffer = deque(maxlen=size)
+
+    def add(self, exp):
+        self.buffer.append(exp)
+
+    def sample(self, batch_size: int = 64):
+        batch = random.sample(self.buffer, batch_size)
+        s, a, r, sn, d = zip(*batch)
+        return (
+            torch.tensor(s, dtype=torch.float32),
+            torch.tensor(a, dtype=torch.int64),
+            torch.tensor(r, dtype=torch.float32),
+            torch.tensor(sn, dtype=torch.float32),
+            torch.tensor(d, dtype=torch.float32),
+        )
+
+    def __len__(self):
+        return len(self.buffer)
+
+
+def train_dqn(env: TradingEnvSMA, episodes: int = 50):
+    """
+    Entraîne un DQN sur l'environnement TradingEnvSMA.
+    - Policy ε-greedy
+    - réseau cible
+    - γ = 0.95, lr = 1e-3, batch = 64
+    Retourne: (q_net, liste_rewards_episodes)
+    """
+    if torch is None or nn is None or optim is None:
+        raise RuntimeError("PyTorch n'est pas disponible pour entraîner le DQN.")
+
+    state_dim = 4
+    action_dim = 3
+
+    q_net = DQN(state_dim, action_dim)
+    target_net = DQN(state_dim, action_dim)
+    target_net.load_state_dict(q_net.state_dict())
+    target_net.eval()
+
+    optimizer = optim.Adam(q_net.parameters(), lr=1e-3)
+    gamma = 0.95
+    epsilon = 0.2
+    batch_size = 64
+    buffer = ReplayBuffer()
+
+    episode_rewards: list[float] = []
+
+    for ep in range(episodes):
+        s = env.reset()
+        done = False
+        total_reward = 0.0
+
+        while not done:
+            if np.random.rand() < epsilon:
+                a = np.random.randint(0, 3)
+            else:
+                with torch.no_grad():
+                    qs = q_net(torch.tensor(s, dtype=torch.float32).unsqueeze(0))
+                a = int(qs.argmax(dim=1).item())
+
+            mapped_a = [-1, 0, 1][a]
+            sn, r, done, _ = env.step(mapped_a)
+
+            buffer.add((s, a, r, sn, done))
+            s = sn
+            total_reward += r
+
+            if len(buffer) > batch_size:
+                S, A, R, SN, D = buffer.sample(batch_size)
+
+                with torch.no_grad():
+                    target_q = target_net(SN).max(1)[0]
+                    Y = R + gamma * target_q * (1.0 - D)
+
+                q_values = q_net(S).gather(1, A.unsqueeze(1)).squeeze()
+                loss = nn.MSELoss()(q_values, Y)
+
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+
+        episode_rewards.append(float(total_reward))
+
+        if ep % 5 == 0:
+            target_net.load_state_dict(q_net.state_dict())
+
+    return q_net, episode_rewards
+
+
+# ===============================
+# Sauvegarde quotidienne OHLCV (ancienne version, gardée pour compat)
+# ===============================
+def _save_daily_csv(
+    df: pd.DataFrame,
+    symbol: str,
+    interval: str,
+    period: str,
+    root_dir: str = "data/market",
+) -> Path:
+    """
+    Sauvegarde un CSV quotidien pour un symbole donné.
+
+    Structure de sortie:
+        data/market/YYYY-MM-DD/INDEX_FCHI_1d_1y.csv
+        data/market/YYYY-MM-DD/BNP.PA_1d_1y.csv
+    """
+    df = df.copy()
+
+    if "time" in df.columns:
+        df["time"] = pd.to_datetime(df["time"])
+        df = df.sort_values("time")
+
+    today_str = date.today().isoformat()
+    out_dir = Path(root_dir) / today_str
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    today = pd.Timestamp.now(tz="Europe/Paris").date().isoformat()
-    dated_dir = out_dir / today
-    dated_dir.mkdir(parents=True, exist_ok=True)
+    safe_symbol = symbol.replace("^", "INDEX_")
+    fname = f"{safe_symbol}_{interval}_{period}.csv"
+    out_path = out_dir / fname
 
-    fname = f"{symbol.replace('/', '-')}_{interval}_{period}.csv".replace("^", "INDEX_")
-    fpath = dated_dir / fname
-
-    if not fpath.exists():
-        # Colonnes utiles
-        cols = ["time", "open", "high", "low", "close", "volume"]
-        extra = [c for c in ["sma20", "sma50", "ema20", "rsi14", "macd", "macd_signal", "vol20"] if c in df.columns]
-        df[cols + extra].to_csv(fpath, index=False, encoding="utf-8")
-        st.toast(f"💾 Données sauvegardées : {fpath.name}", icon="💾")
+    df.to_csv(out_path, index=False)
+    return out_path
 
 
 # ===============================
@@ -321,6 +743,9 @@ def _glossary_ui():
 # ===============================
 # UI principale
 # ===============================
+DEFAULT_SYMBOLS = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
+
+
 def render() -> None:
     """Tableau de bord 'Market Watch' avec mini-ML, reco & backtest."""
     API_BASE = os.getenv("MARKET_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
@@ -334,293 +759,821 @@ def render() -> None:
             st.error(f"API error: {e}")
             return None
 
-    st.header("📈 Market Watch — CAC40 (Quant)")
+    # ------------------------------------------------------------------
+    # Liste fixe des 6 actifs à suivre (pour la sauvegarde auto)
+    # ------------------------------------------------------------------
+    DEFAULT_SYMBOLS = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
 
-    # ---- Choix de symboles ----
-    symbols = st.multiselect(
-        "Choisissez des symboles (Yahoo Finance, suffixe .PA)",
-        ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"],
-        ["^FCHI", "BNP.PA", "MC.PA"],
-    )
+    st.caption("💾 Sauvegarde automatique des données quotidiennes (1d, 1y) en local si API OK.")
 
-    # ---- Indicateurs rapides ----
-    cols = st.columns(min(len(symbols), 4) or 1)
-    for i, sym in enumerate(symbols):
-        data = api_get(f"/v1/quote/{sym}")
-        with cols[i % len(cols)]:
-            if data:
-                price = data.get("price", 0)
-                currency = data.get("currency") or ""
-                chg = data.get("change_percent")
-                delta_txt = f"{float(chg):+.2f}%" if isinstance(chg, (int, float)) else "+0.00%"
-                st.metric(label=sym, value=f"{price:,.2f} {currency}", delta=delta_txt)
-            else:
-                st.error(f"Erreur pour {sym}")
+    # ------------------------------------------------------------------
+    # Sélection de l'actif / période
+    # ------------------------------------------------------------------
+    col_asset, col_interval, col_period = st.columns([2, 1, 1])
+    with col_asset:
+        symbol = st.selectbox(
+            "Actif",
+            ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"],
+            index=0,
+        )
+    with col_interval:
+        interval = st.selectbox(
+            "Intervalle",
+            ["1d", "1h"],
+            index=0,
+            help="Résolution des chandeliers.",
+        )
+    with col_period:
+        period = st.selectbox(
+            "Période",
+            ["6mo", "1y", "2y"],
+            index=1,
+            help="Fenêtre historique globale.",
+        )
 
-    st.divider()
-
-    # ---- Historique + indicateurs + reco ----
-    st.subheader("Historique, indicateurs & recommandations")
-    chosen = st.selectbox("Symbole :", options=symbols or ["^FCHI"])
-    interval = st.selectbox("Intervalle :", options=["1d", "1wk", "1mo"], index=0)
-    period = st.selectbox("Période :", options=["1mo", "3mo", "6mo", "1y"], index=2)
-
-    # Mini-ML options
-    st.markdown("### 🧠 Mini-ML (léger)")
-    c_ml1, c_ml2, c_ml3, c_ml4 = st.columns(4)
-    with c_ml1:
-        show_ma = st.checkbox("SMA/EMA", value=True, help="SMA20/SMA50/EMA20")
-    with c_ml2:
-        show_anom = st.checkbox("Anomalies (z-score)", value=True, help="Pics de volatilité via z-score(ret).")
-    with c_ml3:
-        show_trend = st.checkbox("Tendance + projection", value=True, help="Régression linéaire sur fenêtre.")
-    with c_ml4:
-        show_regimes = st.checkbox("Régimes (K-Means)", value=True, help="Clustering sur [ret, vol20] si sklearn dispo.")
-
-    # Affichages sup
-    show_rsi = st.checkbox("RSI(14)", value=True)
-    show_macd = st.checkbox("MACD(12,26,9)", value=True)
-    show_table = st.checkbox("Tableau brut (dernières lignes)", value=True)
-
-    hist = api_get(f"/v1/ohlcv/{chosen}", interval=interval, period=period)
-    if not hist:
-        st.info("Pas de données disponibles pour ce symbole / intervalle.")
+    # ------------------------------------------------------------------
+    # Récupération des données marché via l'API FastAPI
+    # ------------------------------------------------------------------
+    data = api_get(f"/v1/ohlcv/{symbol}", interval=interval, period=period)
+    if not data or "candles" not in data:
+        st.error("Impossible de récupérer les données de marché.")
         _glossary_ui()
         return
 
-    candles = hist.get("candles") or hist.get("data")
+    candles = data["candles"]
     if not candles:
-        st.warning("Aucune donnée renvoyée par l'API.")
+        st.warning("Pas de chandelles retournées par l'API.")
         _glossary_ui()
         return
 
     df = pd.DataFrame(candles)
+
+    # Sauvegarde auto sur disque (1d, 1y seulement, pour les 6 actifs)
+    if interval == "1d" and period == "1y" and symbol in DEFAULT_SYMBOLS:
+        try:
+            _save_daily_csv(df, symbol, interval=interval, period=period)
+        except Exception as e:
+            st.warning(f"Impossible de sauvegarder le CSV localement : {e}")
+
+    if df.empty:
+        st.warning("DataFrame vide après conversion.")
+        _glossary_ui()
+        return
+
+    # Indicateurs techniques
     df = _compute_indicators(df, interval=interval)
 
-    # --- Diagnostics Mini-ML ---
-    with st.expander("🧪 Diagnostics Mini-ML (preuves & chiffres)"):
-    # 3.1 Anomalies (z-score)
-        z_window = st.slider("Fenêtre z-score (ret)", 10, 60, 20, 1, help="Fenêtre pour la moyenne/écart-type des rendements.")
-        z_thresh = st.slider("Seuil absolu |z|", 1.0, 3.5, 2.0, 0.1, help="Plus bas = plus d'anomalies visibles.")
-        z_mask = _rolling_zscore_anomalies(df, window=z_window, z_thresh=z_thresh)
-    st.write(f"Anomalies détectées: **{int(z_mask.sum())}** sur **{len(df)}** barres (|z|>{z_thresh}).")
-    if z_mask.any():
-        st.dataframe(df.loc[z_mask, ["time","close","ret"]].tail(10), use_container_width=True)
+    if df.empty or "close" not in df.columns:
+        st.warning("Impossible de calculer les indicateurs sur ces données.")
+        _glossary_ui()
+        return
 
-    # 3.2 Tendance (régression linéaire)
-        lb = st.slider("Lookback tendance (points)", 30, 120, 60, 5, help="Fenêtre pour la régression linéaire.")
-        hz = st.slider("Projection (points)", 5, 30, 10, 1, help="Longueur de la projection.")
-        trend = _trend_slope_and_projection(df, lookback=lb, horizon=hz)
-    if trend is None:
-        st.warning("Trop peu de données pour estimer la tendance.")
-        slope_pct = None
-    else:
-        _, _, _, _, slope_pct = trend
-        st.write(f"Pente annualisée approx.: **{slope_pct:+.1f}%/an** (fenêtre={lb}, horizon={hz})")
+    # ------------------------------------------------------------------
+    # Signal & KPIs (ligne synthèse)
+    # ------------------------------------------------------------------
+    last = df.iloc[-1]
+    st.markdown("### 🔎 Synthèse instantanée")
 
-    # 3.3 Régimes (K-Means)
-        ncl = st.slider("Nombre de régimes (clusters KMeans)", 2, 5, 3, 1)
-        labels, _colors = _kmeans_regimes(df, n_clusters=ncl)
-    if labels is None:
-        st.info("ℹ️ scikit-learn non disponible → impossible de calculer les régimes.")
-    else:
-        # Comptage par cluster
-        import numpy as _np
-        uniq, cnt = _np.unique(labels, return_counts=True)
-        counts = {f"Régime {int(u)}": int(c) for u, c in zip(uniq, cnt)}
-        st.write("Répartition des points par régime:", counts)
-        # Aperçu joint labels
-        preview = df[["time","close","ret","vol20"]].copy()
-        preview["regime"] = labels
-        st.dataframe(preview.tail(15), use_container_width=True)
-
-    # 👉 Sauvegarde quotidienne auto
-    _save_daily_csv(df, chosen, interval, period)
-
-    # ---- Recommandation
-    reco = _score_and_reco(df)
-    c1, c2, c3 = st.columns([1, 2, 3])
-    with c1:
-        st.markdown("**Signal**")
-        st.markdown(f"### {reco['label']}")
-        st.caption(f"Score: {reco['score']:+.2f}")
-    with c2:
-        st.markdown("**Raisons principales**")
-        for b in reco["bullets"]:
-            st.write(f"- {b}")
-    with c3:
-        # KPIs
-        last = df.iloc[-1]
-        st.markdown("**KPIs**")
+    col_k1, col_k2, col_k3, col_k4 = st.columns(4)
+    with col_k1:
         if "close" in last:
             st.metric("Prix", f"{last['close']:,.2f}")
+    with col_k2:
         if "sma20" in last and not np.isnan(last["sma20"]) and "close" in last:
             st.metric("Écart vs SMA20", f"{(last['close']/last['sma20']-1):+.2%}")
+    with col_k3:
         if "vol20" in last and not np.isnan(last["vol20"]):
             st.metric("Vol(20, ann.)", f"{last['vol20']:.0%}")
+    with col_k4:
         if "rsi14" in last and not np.isnan(last["rsi14"]):
             st.metric("RSI(14)", f"{last['rsi14']:.1f}")
 
-    # =====================
-    # Graphes
-    # =====================
-    # 1) Chandelier (+ MAs, anomalies, tendance & projection)
-    fig_c = go.Figure(data=[go.Candlestick(
-        x=df.get("time"),
-        open=df.get("open"), high=df.get("high"), low=df.get("low"), close=df.get("close"),
-        name="OHLC",
-    )])
+    st.markdown("---")
 
-    if show_ma:
-        if "sma20" in df: fig_c.add_trace(go.Scatter(x=df["time"], y=df["sma20"], name="SMA20", mode="lines"))
-        if "sma50" in df: fig_c.add_trace(go.Scatter(x=df["time"], y=df["sma50"], name="SMA50", mode="lines"))
-        if "ema20" in df: fig_c.add_trace(go.Scatter(x=df["time"], y=df["ema20"], name="EMA20", mode="lines"))
-
-    # Anomalies (markers rouges)
-    if show_anom:
-        mask = _rolling_zscore_anomalies(df, window=20, z_thresh=2.0)
-        anom_df = df[mask]
-        if not anom_df.empty:
-            fig_c.add_trace(go.Scatter(
-                x=anom_df["time"], y=anom_df["close"],
-                mode="markers", name="Anomalies (z>2)",
-                marker=dict(size=8, symbol="x", color="#d62728"),
-            ))
-
-    # Tendance + projection courte (dashed)
-    slope_pct = None
-    if show_trend:
-        res = _trend_slope_and_projection(df, lookback=60, horizon=10)
-        if res is not None:
-            x_fit, y_fit, x_proj, y_proj, slope_pct = res
-            fig_c.add_trace(go.Scatter(x=x_fit, y=y_fit, name="Trend (last 60)", mode="lines"))
-            fig_c.add_trace(go.Scatter(x=x_proj, y=y_proj, name="Projection", mode="lines", line=dict(dash="dash")))
-    title_extra = f" · slope≈{slope_pct:+.1f}%/an" if slope_pct is not None else ""
-
-    fig_c.update_layout(
-        title=f"{chosen} — {interval} / {period}{title_extra}",
-        xaxis_title="Temps", yaxis_title="Prix",
-        margin=dict(l=10, r=10, t=40, b=10), height=480,
+    # ------------------------------------------------------------------
+    # Sous-onglets : graphes & analyses
+    # ------------------------------------------------------------------
+    tab_price, tab_mom, tab_diag, tab_bt, tab_data = st.tabs(
+        [
+            "📊 Prix & moyennes mobiles",
+            "📈 Momentum & oscillateurs",
+            "🧪 Diagnostics ML",
+            "📈 Backtest SMA & RL",
+            "📄 Données brutes",
+        ]
     )
-    st.plotly_chart(fig_c, use_container_width=True)
 
-    # 2) RSI
-    if show_rsi and "rsi14" in df:
-        fig_rsi = go.Figure(data=[go.Scatter(x=df["time"], y=df["rsi14"], name="RSI(14)", mode="lines")])
-        fig_rsi.add_hline(y=70, line_dash="dot")
-        fig_rsi.add_hline(y=30, line_dash="dot")
-        fig_rsi.update_layout(
-            xaxis_title="Temps", yaxis_title="RSI(14)",
-            margin=dict(l=10, r=10, t=40, b=10), height=220,
-        )
-        st.plotly_chart(fig_rsi, use_container_width=True)
+    # ===== TAB 1 : Prix & moyennes =====
+    with tab_price:
+        st.markdown("### 📊 Prix, moyennes mobiles et bandes")
 
-    # 3) MACD
-    if show_macd and {"macd", "macd_signal", "macd_hist"}.issubset(df.columns):
-        fig_macd = go.Figure()
-        fig_macd.add_trace(go.Bar(x=df["time"], y=df["macd_hist"], name="MACD hist"))
-        fig_macd.add_trace(go.Scatter(x=df["time"], y=df["macd"], name="MACD", mode="lines"))
-        fig_macd.add_trace(go.Scatter(x=df["time"], y=df["macd_signal"], name="Signal", mode="lines"))
-        fig_macd.update_layout(
-            xaxis_title="Temps", yaxis_title="MACD",
-            margin=dict(l=10, r=10, t=40, b=10), height=260,
-        )
-        st.plotly_chart(fig_macd, use_container_width=True)
-
-    # 4) Régimes (KMeans) — courbe close colorée
-    if show_regimes:
-        labels, colors = _kmeans_regimes(df, n_clusters=3)
-        if labels is None:
-            st.info("ℹ️ Installe scikit-learn pour activer les régimes : `pip install scikit-learn`")
-        else:
-            fig_reg = go.Figure()
-            # On découpe en segments par régime pour préserver les couleurs continues
-            for k in sorted(set(labels)):
-                mask = labels == k
-                fig_reg.add_trace(go.Scatter(
-                    x=df["time"][mask],
-                    y=df["close"][mask],
-                    mode="lines+markers",
-                    name=f"Régime {k}",
-                    line=dict(width=2),
-                ))
-            fig_reg.update_layout(
-                title="Régimes (K-Means sur ret/vol20) — courbe CLOSE colorée",
-                xaxis_title="Temps", yaxis_title="Prix",
-                margin=dict(l=10, r=10, t=40, b=10), height=320,
+        fig = go.Figure()
+        fig.add_trace(
+            go.Candlestick(
+                x=df["time"],
+                open=df["open"],
+                high=df["high"],
+                low=df["low"],
+                close=df["close"],
+                name="OHLC",
             )
-            st.plotly_chart(fig_reg, use_container_width=True)
-
-    # ---- Backtest SMA ----
-    st.subheader("Backtest — SMA crossover")
-    c_bt1, c_bt2, c_bt3 = st.columns([1, 1, 1])
-    with c_bt1:
-        fast = st.number_input("SMA rapide", min_value=5, max_value=100, value=20, step=1, help="Fenêtre de la SMA rapide.")
-    with c_bt2:
-        slow = st.number_input("SMA lente", min_value=10, max_value=250, value=50, step=1, help="Fenêtre de la SMA lente.")
-    with c_bt3:
-        fee_bps = st.number_input("Frais (bps par trade)", min_value=0.0, max_value=50.0, value=5.0, step=0.5,
-                                  help="1 bp = 0,01%. Exemple : 5 bps = 0,05%.")
-    if fast >= slow:
-        st.warning("⚠️ La SMA rapide doit être < à la SMA lente.")
-    else:
-        base = df[["time", "close"]].dropna().reset_index(drop=True)
-        bt = _backtest_sma(base, fast=fast, slow=slow, fee_bps=fee_bps)
-        stats_strat = _bt_stats(bt["strat_ret"], interval)
-        stats_bh    = _bt_stats(bt["bh_ret"], interval)
-
-        # Equity curve
-        fig_eq = go.Figure()
-        fig_eq.add_trace(go.Scatter(x=base["time"].iloc[-len(stats_strat["equity"]):],
-                                    y=stats_strat["equity"], name="Stratégie (SMA)", mode="lines"))
-        fig_eq.add_trace(go.Scatter(x=base["time"].iloc[-len(stats_bh["equity"]):],
-                                    y=stats_bh["equity"], name="Buy & Hold", mode="lines"))
-        fig_eq.update_layout(
-            title=f"Évolution de 1€ — SMA({fast},{slow}) vs Buy&Hold — frais {fee_bps:.1f} bps/trade",
-            xaxis_title="Temps", yaxis_title="Valeur du portefeuille (base 1.00)",
-            margin=dict(l=10, r=10, t=40, b=10), height=320
         )
-        st.plotly_chart(fig_eq, use_container_width=True)
 
-        # Stats
-        cs1, cs2, cs3, cs4, cs5, cs6, cs7 = st.columns(7)
-        cs1.metric("Strat — Total", f"{stats_strat['total_return']*100:,.2f}%")
-        cs2.metric("Strat — CAGR",  f"{stats_strat['cagr']*100:,.2f}%")
-        cs3.metric("Strat — Vol",   f"{stats_strat['vol']*100:,.2f}%")
-        cs4.metric("Strat — Sharpe", f"{stats_strat['sharpe']:.2f}")
-        cs5.metric("Strat — MaxDD", f"{stats_strat['maxdd']*100:,.2f}%")
+        # Moyennes mobiles
+        if "sma20" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df["time"],
+                    y=df["sma20"],
+                    name="SMA20",
+                    mode="lines",
+                )
+            )
+        if "sma50" in df.columns:
+            fig.add_trace(
+                go.Scatter(
+                    x=df["time"],
+                    y=df["sma50"],
+                    name="SMA50",
+                    mode="lines",
+                )
+            )
 
-        # Approx trades & win-rate
-        approx_trades = int(bt["pos"].diff().abs().sum())
-        seg_returns = []
-        in_trade = False
-        start_idx = None
-        for i in range(len(bt)):
-            if not in_trade and bt.loc[i, "pos"] == 1:
-                in_trade = True
-                start_idx = i
-            elif in_trade and (bt.loc[i, "pos"] == 0 or i == len(bt) - 1):
-                end_idx = i if bt.loc[i, "pos"] == 0 else i
-                segment = bt.loc[start_idx:end_idx, "strat_ret"]
-                seg_equity = (1.0 + segment.fillna(0.0)).prod() - 1.0
-                seg_returns.append(seg_equity)
-                in_trade = False
-                start_idx = None
-        if seg_returns:
-            wins = sum(1 for r in seg_returns if r > 0)
-            win_rate = wins / len(seg_returns)
-        else:
-            win_rate = 0.0
+        # Bollinger Bands (20, 2σ) sur le close
+        try:
+            bb_window = 20
+            ma = df["close"].rolling(bb_window).mean()
+            std = df["close"].rolling(bb_window).std()
+            upper = ma + 2 * std
+            lower = ma - 2 * std
 
-        cs6.metric("Trades (approx.)", f"{approx_trades}")
-        cs7.metric("Win-rate (approx.)", f"{win_rate*100:,.1f}%")
+            fig.add_trace(
+                go.Scatter(
+                    x=df["time"],
+                    y=upper,
+                    name="Bollinger +2σ",
+                    mode="lines",
+                    line=dict(dash="dot"),
+                )
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=df["time"],
+                    y=lower,
+                    name="Bollinger -2σ",
+                    mode="lines",
+                    line=dict(dash="dot"),
+                )
+            )
+        except Exception:
+            # En cas de données insuffisantes, on ignore les Bollinger
+            pass
 
-    # ---- Tableau brut
-    if show_table:
-        cols_show = ["time", "open", "high", "low", "close", "volume",
-                     "sma20", "sma50", "ema20", "rsi14", "macd", "macd_signal", "vol20"]
+        fig.update_layout(
+            margin=dict(l=10, r=10, t=40, b=10),
+            height=500,
+        )
+        st.plotly_chart(fig, use_container_width=True)
+
+        st.caption(
+            "Les moyennes mobiles et les bandes de Bollinger permettent de lisser le prix, "
+            "visualiser la tendance et repérer les phases de volatilité."
+        )
+
+    # ===== TAB 2 : Momentum & oscillateurs =====
+    with tab_mom:
+        st.markdown("### 📈 Momentum, RSI, MACD")
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.markdown("**RSI(14)**")
+            if "rsi14" in df:
+                fig_rsi = go.Figure(
+                    data=[
+                        go.Scatter(
+                            x=df["time"],
+                            y=df["rsi14"],
+                            name="RSI(14)",
+                            mode="lines",
+                        )
+                    ]
+                )
+                fig_rsi.add_hline(y=70, line_dash="dot")
+                fig_rsi.add_hline(y=30, line_dash="dot")
+                fig_rsi.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    height=260,
+                )
+                st.plotly_chart(fig_rsi, use_container_width=True)
+            else:
+                st.info("RSI(14) indisponible.")
+
+        with col_m2:
+            st.markdown("**MACD(12,26,9)**")
+            if "macd" in df and "macd_signal" in df:
+                macd_hist = (df["macd"] - df["macd_signal"]).fillna(0.0)
+
+                fig_macd = go.Figure()
+
+                # Histogramme MACD (barres)
+                fig_macd.add_trace(
+                    go.Bar(
+                        x=df["time"],
+                        y=macd_hist,
+                        name="Histogram",
+                    )
+                )
+
+                # Lignes MACD & signal
+                fig_macd.add_trace(
+                    go.Scatter(
+                        x=df["time"], y=df["macd"], name="MACD", mode="lines"
+                    )
+                )
+                fig_macd.add_trace(
+                    go.Scatter(
+                        x=df["time"],
+                        y=df["macd_signal"],
+                        name="Signal",
+                        mode="lines",
+                    )
+                )
+
+                fig_macd.add_hline(y=0, line_dash="dot")
+
+                fig_macd.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    height=260,
+                )
+                st.plotly_chart(fig_macd, use_container_width=True)
+            else:
+                st.info("MACD indisponible.")
+
+    # ===== TAB 3 : Diagnostics mini-ML =====
+    with tab_diag:
+        try:
+            st.markdown("### 🧪 Diagnostics Mini-ML")
+            st.caption("Détection d’anomalies (z-score, autoencoder), tendance et régimes de marché.")
+
+            # Masques / labels globaux pour le scoring composite
+            ae_mask_full = pd.Series(False, index=df.index, dtype=bool)
+            kmeans_labels = None
+
+            # 3.1 Anomalies (z-score)
+            z_window = st.slider(
+                "Fenêtre z-score (ret)",
+                10,
+                60,
+                20,
+                1,
+                help="Fenêtre pour la moyenne/écart-type des rendements.",
+            )
+            z_thresh = st.slider(
+                "Seuil absolu |z|",
+                1.0,
+                3.5,
+                2.0,
+                0.1,
+                help="Plus bas = plus d'anomalies visibles.",
+            )
+            z_mask = _rolling_zscore_anomalies(df, window=z_window, z_thresh=z_thresh)
+            st.write(
+                f"Anomalies détectées: **{int(z_mask.sum())}** "
+                f"sur **{len(df)}** barres (|z|>{z_thresh})."
+            )
+            if z_mask.any():
+                st.dataframe(
+                    df.loc[z_mask, ["time", "close", "ret"]].tail(10),
+                    use_container_width=True,
+                )
+
+            st.markdown("---")
+
+            # 3.2 Tendance (régression linéaire)
+            lb = st.slider(
+                "Lookback tendance (points)",
+                30,
+                120,
+                60,
+                5,
+                help="Fenêtre pour la régression linéaire.",
+            )
+            hz = st.slider(
+                "Projection (points)",
+                5,
+                30,
+                10,
+                1,
+                help="Longueur de la projection.",
+            )
+            trend = _trend_slope_and_projection(df, lookback=lb, horizon=hz)
+            if trend is None:
+                st.info("Trop peu de données pour estimer la tendance.")
+            else:
+                x_hist, y_hist, x_proj, y_proj, slope_annualized_pct = trend
+                fig_trend = go.Figure()
+                fig_trend.add_trace(
+                    go.Scatter(
+                        x=df["time"].iloc[-len(x_hist):],
+                        y=df["close"].iloc[-len(x_hist):],
+                        name="Close",
+                        mode="lines",
+                    )
+                )
+                fig_trend.add_trace(
+                    go.Scatter(
+                        x=df["time"].iloc[-len(x_hist):],
+                        y=y_hist,
+                        name="Régression",
+                        mode="lines",
+                    )
+                )
+                fig_trend.add_trace(
+                    go.Scatter(
+                        x=x_proj,
+                        y=y_proj,
+                        name="Projection",
+                        mode="lines",
+                        line=dict(dash="dot"),
+                    )
+                )
+
+                fig_trend.update_layout(
+                    title=f"Tendance estimée (pente annualisée ≈ {slope_annualized_pct:+.1f}%)",
+                    margin=dict(l=10, r=10, t=50, b=10),
+                    height=320,
+                )
+                st.plotly_chart(fig_trend, use_container_width=True)
+
+            st.markdown("---")
+
+            # 3.3 Régimes de marché (K-Means sur [ret, vol20])
+            ncl = st.slider(
+                "Nombre de régimes (clusters KMeans)",
+                2,
+                5,
+                3,
+                1,
+                help="Clustering sur [ret, vol20] si scikit-learn est installé.",
+            )
+            labels, _colors = _kmeans_regimes(df, n_clusters=ncl)
+            kmeans_labels = labels  # pour scoring global
+
+            if labels is None:
+                st.info(
+                    "ℹ️ scikit-learn non disponible → "
+                    "impossible de calculer les régimes (K-Means)."
+                )
+            else:
+                import numpy as _np
+
+                uniq, cnt = _np.unique(labels, return_counts=True)
+                counts = {f"Régime {int(u)}": int(c) for u, c in zip(uniq, cnt)}
+                st.write("Répartition des points par régime:", counts)
+                preview = df[["time", "close", "ret", "vol20"]].copy()
+                preview["regime"] = labels
+                st.dataframe(preview.tail(15), use_container_width=True)
+
+            st.markdown("---")
+
+            # 3.4 Autoencoder (DL) – anomalies avancées
+            st.markdown("#### 🤖 Autoencoder (Deep Learning) – détection d’anomalies")
+            if torch is None or nn is None:
+                st.info(
+                    "PyTorch n'est pas installé dans l'environnement → "
+                    "l’autoencoder DL est désactivé."
+                )
+            else:
+                use_ae = st.checkbox(
+                    "Activer l’autoencoder pour détecter les anomalies (DL)",
+                    value=False,
+                    help="Entraîne un petit autoencoder sur les indicateurs techniques.",
+                )
+                if use_ae:
+                    with st.spinner("Entraînement rapide de l’autoencoder..."):
+                        scores, msg = _dl_autoencoder_anomaly_scores(df, n_epochs=20)
+
+                    if scores is None:
+                        st.warning(msg or "Impossible de calculer les scores d'anomalie.")
+                    else:
+                        # On prend le top 3% comme anomalies
+                        q97 = float(np.quantile(scores.values, 0.97))
+                        mask_ae = scores > q97
+
+                        st.write(
+                            f"Anomalies DL détectées (top 3% reconstruction error) : "
+                            f"**{int(mask_ae.sum())}** points sur **{len(scores)}**."
+                        )
+
+                        if mask_ae.any():
+                            # Indices des anomalies dans l’échantillon utilisé par l’autoencoder
+                            anomalies_idx = scores.index[mask_ae]
+
+                            # Colonnes disponibles pour affichage
+                            cols = [c for c in ["time", "close", "ret", "vol20"] if c in df.columns]
+
+                            # Extraire les lignes correspondantes dans le df complet
+                            ae_preview = df.loc[anomalies_idx, cols].copy()
+
+                            # Ajouter les erreurs AE alignées
+                            ae_preview["ae_error"] = scores.loc[anomalies_idx]
+
+                            # Marquer ces anomalies dans le masque global (pour scoring/heatmap)
+                            ae_mask_full.loc[anomalies_idx] = True
+
+                            st.dataframe(
+                                ae_preview.sort_values("ae_error", ascending=False).head(15),
+                                use_container_width=True,
+                            )
+
+                            # ➕ Plotly : overlay des anomalies sur le prix
+                            fig_ae = go.Figure()
+                            fig_ae.add_trace(
+                                go.Scatter(
+                                    x=df["time"],
+                                    y=df["close"],
+                                    name="Close",
+                                    mode="lines",
+                                )
+                            )
+                            fig_ae.add_trace(
+                                go.Scatter(
+                                    x=df.loc[anomalies_idx, "time"],
+                                    y=df.loc[anomalies_idx, "close"],
+                                    name="Anomalies AE",
+                                    mode="markers",
+                                    marker=dict(size=9, symbol="circle-open"),
+                                )
+                            )
+                            fig_ae.update_layout(
+                                title="Prix avec anomalies détectées par l’autoencoder",
+                                margin=dict(l=10, r=10, t=40, b=10),
+                                height=320,
+                            )
+                            st.plotly_chart(fig_ae, use_container_width=True)
+
+            st.markdown("---")
+            st.markdown("### 🔥 Signal global de risque & heatmap d’anomalies")
+
+            # Fenêtre récente pour le scoring (max 90 points)
+            window = min(90, len(df))
+
+            # 1) Risque z-score (anomalies de rendements)
+            risk_z = float(_rolling_zscore_anomalies(df, window=20, z_thresh=2.0).tail(window).mean())
+
+            # 2) Risque Autoencoder (anomalies DL si activé)
+            risk_ae = float(ae_mask_full.tail(window).mean()) if "ae_mask_full" in locals() else 0.0
+
+            # 3) Risque régimes (KMeans) : proportion du régime le plus volatil
+            risk_reg = 0.0
+            if kmeans_labels is not None and "vol20" in df.columns:
+                try:
+                    reg_df = pd.DataFrame(
+                        {
+                            "vol20": df["vol20"].fillna(df["vol20"].median()),
+                            "regime": kmeans_labels,
+                        },
+                        index=df.index,
+                    )
+                    vol_by_reg = reg_df.groupby("regime")["vol20"].mean()
+                    high_reg = vol_by_reg.idxmax()
+                    high_mask = (reg_df["regime"] == high_reg)
+                    risk_reg = float(high_mask.tail(window).mean())
+                except Exception:
+                    risk_reg = 0.0
+
+            # Score composite simple (0–1)
+            score_raw = 0.4 * risk_z + 0.4 * risk_ae + 0.2 * risk_reg
+            score_pct = round(score_raw * 100, 1)
+
+            if score_raw < 0.15:
+                risk_label = "Faible"
+                risk_comment = "Marché globalement calme sur la fenêtre récente."
+                risk_icon = "🟢"
+                risk_sentence = "🟢 Marché calme"
+            elif score_raw < 0.35:
+                risk_label = "Modéré"
+                risk_comment = "Quelques signaux de tension ou de mouvements atypiques."
+                risk_icon = "🟡"
+                risk_sentence = "🟡 Prudence"
+            else:
+                risk_label = "Élevé"
+                risk_comment = "Multiples signaux d’anomalies / volatilité élevée."
+                risk_icon = "🔴"
+                risk_sentence = "🔴 Volatilité élevée"
+
+            c_r1, c_r2 = st.columns([1, 2])
+            with c_r1:
+                st.metric("Score de risque composite", f"{score_pct:.1f} / 100")
+                st.markdown(f"**Niveau : {risk_label}**")
+                st.markdown(f"{risk_icon} _{risk_sentence}_")
+            with c_r2:
+                st.write(
+                    f"- Contribution anomalies Z-score : ~{risk_z*100:.1f}%\n"
+                    f"- Contribution anomalies Autoencoder : ~{risk_ae*100:.1f}%\n"
+                    f"- Contribution régime le plus volatil : ~{risk_reg*100:.1f}%\n\n"
+                    f"_{risk_comment}_"
+                )
+
+            # Heatmap timeline des anomalies
+            try:
+                # Recalc z_mask pour alignement propre
+                z_mask_full = _rolling_zscore_anomalies(df, window=20, z_thresh=2.0)
+
+                heat_df = pd.DataFrame(
+                    {
+                        "time": df["time"],
+                        "Z-score": z_mask_full.astype(int),
+                        "Autoencoder": ae_mask_full.astype(int),
+                    },
+                    index=df.index,
+                )
+
+                z_matrix = np.vstack(
+                    [
+                        heat_df["Z-score"].values,
+                        heat_df["Autoencoder"].values,
+                    ]
+                )
+
+                fig_heat = go.Figure(
+                    data=go.Heatmap(
+                        z=z_matrix,
+                        x=heat_df["time"],
+                        y=["Z-score", "Autoencoder"],
+                        colorbar=dict(title="Anomalie"),
+                    )
+                )
+                fig_heat.update_layout(
+                    title="Timeline des anomalies (Z-score vs Autoencoder)",
+                    margin=dict(l=10, r=10, t=40, b=10),
+                    height=260,
+                )
+                st.plotly_chart(fig_heat, use_container_width=True)
+            except Exception:
+                st.info("Impossible d'afficher la heatmap d’anomalies (données insuffisantes ou incohérentes).")
+
+        except Exception as e:
+            st.error(f"Erreur dans la section Diagnostics Mini-ML : {e}")
+            st.exception(e)
+
+    # ===== TAB 4 : Backtest SMA =====
+    with tab_bt:
+        try:
+            st.markdown("### 📈 Backtest stratégie SMA (croisement)")
+            fast = st.slider("SMA courte", 5, 50, 20, 1)
+            slow = st.slider("SMA longue", 20, 200, 50, 5)
+            fee_bps = st.slider(
+                "Frais par trade (bps)",
+                0.0,
+                50.0,
+                5.0,
+                0.5,
+                help="1 bps = 0,01%.",
+            )
+            base = df.dropna(subset=["close"]).copy()
+            if len(base) < max(fast, slow) + 10:
+                st.info("Pas assez de données pour ce backtest.")
+            else:
+                bt = _backtest_sma(base, fast=fast, slow=slow, fee_bps=fee_bps)
+                stats_strat = _bt_stats(bt["ret"].fillna(0.0), interval)
+                stats_bh = _bt_stats(bt["bh_ret"].fillna(0.0), interval)
+
+                fig_eq = go.Figure()
+                fig_eq.add_trace(
+                    go.Scatter(
+                        x=base["time"].iloc[-len(stats_strat["equity"]):],
+                        y=stats_strat["equity"],
+                        name="Stratégie SMA",
+                    )
+                )
+                fig_eq.add_trace(
+                    go.Scatter(
+                        x=base["time"].iloc[-len(stats_bh["equity"]):],
+                        y=stats_bh["equity"],
+                        name="Buy & Hold",
+                    )
+                )
+                fig_eq.update_layout(
+                    margin=dict(l=10, r=10, t=30, b=10),
+                    height=320,
+                )
+                st.plotly_chart(fig_eq, use_container_width=True)
+
+                # KPIs en métriques pour SMA & Buy&Hold
+                c_bt1, c_bt2 = st.columns(2)
+
+                # -------- Stratégie SMA --------
+                with c_bt1:
+                    st.markdown("**Stratégie SMA**")
+
+                    cagr_s = stats_strat.get("CAGR", stats_strat.get("cagr", 0.0))
+                    vol_s = stats_strat.get("vol_annual", stats_strat.get("vol", 0.0))
+                    sharpe_s = stats_strat.get("sharpe", 0.0)
+                    maxdd_s = stats_strat.get("max_dd", stats_strat.get("maxdd", 0.0))
+
+                    m1, m2 = st.columns(2)
+                    with m1:
+                        st.metric("CAGR", f"{cagr_s*100:.2f}%")
+                        st.metric("Vol annualisée", f"{vol_s*100:.2f}%")
+                    with m2:
+                        st.metric("Sharpe", f"{sharpe_s:.2f}")
+                        st.metric("Max Drawdown", f"{maxdd_s*100:.2f}%")
+
+                # -------- Buy & Hold --------
+                with c_bt2:
+                    st.markdown("**Buy & Hold**")
+
+                    cagr_bh = stats_bh.get("CAGR", stats_bh.get("cagr", 0.0))
+                    vol_bh = stats_bh.get("vol_annual", stats_bh.get("vol", 0.0))
+                    sharpe_bh = stats_bh.get("sharpe", 0.0)
+                    maxdd_bh = stats_bh.get("max_dd", stats_bh.get("maxdd", 0.0))
+
+                    m3, m4 = st.columns(2)
+                    with m3:
+                        st.metric("CAGR", f"{cagr_bh*100:.2f}%")
+                        st.metric("Vol annualisée", f"{vol_bh*100:.2f}%")
+                    with m4:
+                        st.metric("Sharpe", f"{sharpe_bh:.2f}")
+                        st.metric("Max Drawdown", f"{maxdd_bh*100:.2f}%")
+
+                st.markdown("---")
+                st.markdown("### 🤖 Reinforcement Learning – Agent Q-learning sur SMA")
+
+                with st.expander("Entraîner un petit agent RL sur cette stratégie SMA"):
+                    ep = st.slider(
+                        "Nombre d’épisodes d’apprentissage",
+                        10,
+                        200,
+                        50,
+                        10,
+                        help="Chaque épisode parcourt l’historique et met à jour la Q-table.",
+                    )
+                    if st.button("Lancer l’entraînement RL sur SMA"):
+                        with st.spinner("Entraînement de l’agent Q-learning..."):
+                            rl_df = base.copy()
+                            rl_df["sma_fast"] = rl_df["close"].rolling(fast).mean()
+                            rl_df["sma_slow"] = rl_df["close"].rolling(slow).mean()
+                            rl_df["ret"] = rl_df["close"].pct_change().fillna(0.0)
+                            rl_df = rl_df.dropna(subset=["sma_fast", "sma_slow"])
+
+                            if len(rl_df) < 50:
+                                q_df = None
+                                pnl_hist = None
+                            else:
+                                q_table, pnl_hist = _train_q_learning_sma(rl_df, episodes=ep)
+                                q_df = pd.DataFrame(q_table).T
+
+                                # rename columns de façon robuste
+                                n_actions = q_df.shape[1]
+                                if n_actions == 3:
+                                    q_df.columns = ["short", "cash", "long"]
+                                else:
+                                    q_df.columns = [f"a{i}" for i in range(n_actions)]
+
+                                q_df.index = [str(s) for s in q_df.index]
+
+                        if q_df is None or pnl_hist is None:
+                            st.warning(
+                                "Impossible d’entraîner l’agent RL (données insuffisantes ou colonnes manquantes)."
+                            )
+                        else:
+                            st.markdown("**Q-table apprise (états vs actions)**")
+                            st.dataframe(q_df, use_container_width=True)
+
+                            pnl_series = pd.Series(pnl_hist, name="PnL épisode")
+                            st.markdown("**Évolution du PnL de l’agent au fil des épisodes**")
+                            st.line_chart(pnl_series)
+                            st.caption(
+                                "⚠️ Il s’agit d’un exemple pédagogique de RL tabulaire, "
+                                "sur un environnement très simplifié."
+                            )
+
+                st.markdown("---")
+                st.markdown("### 🤖 Deep Q-Learning (DQN) – Stratégie SMA améliorée")
+
+                if torch is None or nn is None or optim is None:
+                    st.info(
+                        "PyTorch n'est pas installé dans l'environnement → "
+                        "le DQN Deep Q-Learning est désactivé."
+                    )
+                else:
+                    n_ep_dqn = st.slider(
+                        "Nombre d'épisodes (DQN)",
+                        10,
+                        200,
+                        50,
+                        10,
+                        help="Plus d'épisodes = apprentissage plus long, mais potentiellement meilleur.",
+                    )
+                    run_dqn = st.button(
+                        "Lancer l'agent DQN (expérimental)",
+                        help="Entraîne un agent DQN sur les signaux SMA/RSI/volatilité.",
+                    )
+
+                    if run_dqn:
+                        with st.spinner("Entraînement du DQN en cours..."):
+                            needed_cols = ["close", "ret", "rsi14", "vol20"]
+                            missing = [c for c in needed_cols if c not in df.columns]
+                            if missing:
+                                st.warning(
+                                    "Colonnes manquantes pour le DQN : "
+                                    + ", ".join(missing)
+                                )
+                            else:
+                                # Construction du DataFrame pour l'env
+                                env_df = df.copy()
+                                env_df["sma_fast"] = env_df["close"].rolling(fast).mean()
+                                env_df["sma_slow"] = env_df["close"].rolling(slow).mean()
+                                env_df = env_df.dropna(
+                                    subset=["ret", "sma_fast", "sma_slow", "rsi14", "vol20"]
+                                )
+
+                                if len(env_df) < 150:
+                                    st.warning(
+                                        "Pas assez de données propres pour entraîner le DQN "
+                                        "(au moins ~150 points après filtrage)."
+                                    )
+                                else:
+                                    try:
+                                        env_rl = TradingEnvSMA(env_df, fee_bps=fee_bps)
+                                        q_net, ep_rewards = train_dqn(env_rl, episodes=n_ep_dqn)
+                                    except Exception as e:
+                                        st.error(f"Erreur pendant l'entraînement DQN : {e}")
+                                    else:
+                                        st.success("Entraînement DQN terminé.")
+
+                                        # Exemple de Q-values sur quelques états illustratifs
+                                        example_states = np.array(
+                                            [
+                                                [0, -1, 0, 0],   # cash, SMA- , neutre, vol faible
+                                                [0, 1, 0, 0],    # cash, SMA+ , neutre, vol faible
+                                                [1, 1, 1, 1],    # long, SMA+, RSI haut, vol haute
+                                                [-1, -1, -1, 1], # short, SMA-, RSI bas, vol haute
+                                            ],
+                                            dtype=np.float32,
+                                        )
+                                        with torch.no_grad():
+                                            qvals = q_net(
+                                                torch.tensor(example_states, dtype=torch.float32)
+                                            ).numpy()
+
+                                        q_df = pd.DataFrame(
+                                            qvals,
+                                            columns=["Q(short)", "Q(cash)", "Q(long)"],
+                                        )
+                                        q_df.insert(
+                                            0,
+                                            "État",
+                                            [
+                                                "(pos=0, sma=-1, rsi=0, vol=0)",
+                                                "(pos=0, sma=+1, rsi=0, vol=0)",
+                                                "(pos=+1, sma=+1, rsi=+1, vol=+1)",
+                                                "(pos=-1, sma=-1, rsi=-1, vol=+1)",
+                                            ],
+                                        )
+
+                                        st.markdown("**Exemples de Q-values apprises (états illustratifs)**")
+                                        st.dataframe(q_df, use_container_width=True)
+
+                                        if ep_rewards:
+                                            rewards_series = pd.Series(
+                                                ep_rewards, name="Reward cumulé par épisode"
+                                            )
+                                            st.markdown(
+                                                "**Récompense cumulée par épisode (proxy du PnL appris)**"
+                                            )
+                                            st.line_chart(rewards_series)
+                                            st.caption(
+                                                "Si la courbe tend à monter, l'agent apprend une politique "
+                                                "de plus en plus rentable sur cette fenêtre historique."
+                                            )
+
+        except Exception as e:
+            st.error(f"Erreur dans la section backtest : {e}")
+            st.exception(e)
+
+    # ===== TAB 5 : Données brutes & glossaire =====
+    with tab_data:
+        st.markdown("### 📄 Données brutes")
+
+        cols_show = [
+            "time",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "sma20",
+            "sma50",
+            "ema20",
+            "rsi14",
+            "macd",
+            "macd_signal",
+            "vol20",
+        ]
         cols_show = [c for c in cols_show if c in df.columns]
         st.dataframe(df[cols_show].tail(15), use_container_width=True)
 
-    # ---- Glossaire
-    _glossary_ui()
+        st.markdown("---")
+        _glossary_ui()

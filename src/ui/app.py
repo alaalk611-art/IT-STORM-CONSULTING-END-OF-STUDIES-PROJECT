@@ -4,7 +4,13 @@ from __future__ import annotations
 from src.chatbot import ask_rag, get_chain_cached
 from pathlib import Path  # si pas déjà importé
 from src.ui.i18n import set_lang_from_query, get_lang, t
-set_lang_from_query()       # lit ?lang=fr et initialise st.session_state["lang"]
+import streamlit as st
+
+# ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
+if "lang_initialized" not in st.session_state:
+    set_lang_from_query()          # lit ?lang=fr et initialise st.session_state["lang"]
+    st.session_state["lang_initialized"] = True
+    # lit ?lang=fr et initialise st.session_state["lang"]
 from src.ui.components import floating_chatbot
 import streamlit as st
 from streamlit_javascript import st_javascript
@@ -136,7 +142,7 @@ def t(key: str) -> str:
 
 from src.rag.chain import build_rag_chain
 from src.ui.tabs import generate_docs_rag  # <— ce fichier
-from src.ui.tabs import rag_en_tab  # <— nouveau fichier
+
 
 # Optionnel : valeurs par défaut si .env non chargé
 os.environ.setdefault("LLM_MODEL", "google/flan-t5-base")
