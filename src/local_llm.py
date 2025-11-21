@@ -65,11 +65,28 @@ def _rouge_prf(reference_text: str, summarized_text: str, n: int = 1) -> dict:
     return {"P": precision, "R": recall, "F1": f1}
 
 def _keyword_overlap(reference_text: str, summarized_text: str, k: int = 20) -> float:
+    """
+    Recouvrement des mots-clés entre source et résumé.
+    k devient dynamique :
+      - texte court   -> peu de mots-clés (8 max)
+      - texte moyen   -> ~15
+      - texte long    -> k (20 par défaut)
+    """
     ref_tokens = [t for t in _tok(reference_text) if len(t) > 2]
     sum_unique = set([t for t in _tok(summarized_text) if len(t) > 2])
+
     if not ref_tokens or not sum_unique:
         return 0.0
-    top_terms = [w for w, _ in Counter(ref_tokens).most_common(k)]
+
+    n = len(ref_tokens)
+    if n <= 80:
+        k_eff = min(8, n)
+    elif n <= 200:
+        k_eff = min(15, n)
+    else:
+        k_eff = min(k, n)
+
+    top_terms = [w for w, _ in Counter(ref_tokens).most_common(k_eff)]
     hits = sum(1 for w in top_terms if w in sum_unique)
     return hits / max(1, len(top_terms))
 
@@ -108,40 +125,168 @@ def _unsupported_sentences(reference_text: str, summarized_text: str, thr: float
             out.append(sent.strip())
     return out
 
-def summary_quality_report(source_text: str, summary_text: str) -> dict:
+def _complete_sentence_ratio(summary: str) -> float:
+    """
+    Mesure simple: ratio de phrases qui se terminent par un signe de ponctuation
+    fort (.?!…).
+    Plus c'est proche de 1, plus le texte ressemble à des phrases complètes.
+    """
+    text = (summary or "").strip()
+    if not text:
+        return 0.0
+
+    parts = re.split(r"(?<=[\.\!\?…])\s+|\n+", text)
+    parts = [p.strip() for p in parts if p.strip()]
+    if not parts:
+        return 0.0
+
+    good = 0
+    for p in parts:
+        if re.search(r"[\.!\?…]$", p):
+            good += 1
+    return good / len(parts)
+
+# =========================
+# 🔥 Réparation générale des phrases coupées
+# =========================
+
+def _clean_cut_sentences(text: str) -> str:
+    """
+    Supprime proprement les phrases tronquées sans jamais inventer de mots.
+    Stratégie:
+      - découpe en phrases
+      - enlève celles qui ressemblent à une fin coupée (mot final très court,
+        peu de mots, caractère final bizarre, etc.)
+      - reconstruit un texte fluide.
+    """
+    if not text:
+        return ""
+
+    # Découpage en phrases (approx)
+    sentences = re.split(r"(?<=[\.!\?…])\s+|\n+", text)
+    clean: List[str] = []
+
+    for s in sentences:
+        s_strip = s.strip()
+        if not s_strip:
+            continue
+
+        words = s_strip.split()
+        if not words:
+            continue
+
+        last_word = words[-1].rstrip(".!?…")
+
+        # Phrase très courte + mot final très court → probable coupure
+        if len(words) < 4 and len(last_word) <= 3:
+            continue
+
+        # Mot final avec caractères bizarres → probable tronqué
+        if not re.match(r"^[\w\-À-ÿ]+$", last_word):
+            continue
+
+        clean.append(s_strip)
+
+    return " ".join(clean).strip()
+
+def summary_quality_report(source_text: str, summary: str) -> dict:
     """Toujours sûr: jamais d'exception qui fait planter l'UI."""
     try:
         source_token_count  = len(_tok(source_text))
-        summary_token_count = len(_tok(summary_text))
+        summary_token_count = len(_tok(summary))
         compression = (1 - (summary_token_count / max(1, source_token_count))) if source_token_count else 0.0
 
-        rouge1 = _rouge_prf(source_text, summary_text, n=1)
-        rouge2 = _rouge_prf(source_text, summary_text, n=2)
-        cosine = _cosine_sim(source_text, summary_text)
-        kw_ol  = _keyword_overlap(source_text, summary_text, k=20)
-        unsup  = _unsupported_sentences(source_text, summary_text, thr=0.15)
+        rouge1 = _rouge_prf(source_text, summary, n=1)
+        rouge2 = _rouge_prf(source_text, summary, n=2)
+        cosine = _cosine_sim(source_text, summary)
+        kw_ol  = _keyword_overlap(source_text, summary, k=20)
+        unsup  = _unsupported_sentences(source_text, summary, thr=0.15)
+        complete_ratio = _complete_sentence_ratio(summary)
 
         return {
-            "tokens_source":  source_token_count,
-            "tokens_summary": summary_token_count,
-            "compression":    compression,
-            "cosine":         cosine,
-            "rouge1_f1":      rouge1["F1"],
-            "rouge2_f1":      rouge2["F1"],
-            "keyword_overlap": kw_ol,
-            "unsupported":     unsup,
+            "tokens_source":    source_token_count,
+            "tokens_summary":   summary_token_count,
+            "compression":      compression,
+            "cosine":           cosine,
+            "rouge1_f1":        rouge1["F1"],
+            "rouge2_f1":        rouge2["F1"],
+            "keyword_overlap":  kw_ol,
+            "unsupported":      unsup,
+            "complete_ratio":   complete_ratio,
         }
     except Exception:
         return {
-            "tokens_source":  0,
-            "tokens_summary": 0,
-            "compression":    0.0,
-            "cosine":         0.0,
-            "rouge1_f1":      0.0,
-            "rouge2_f1":      0.0,
-            "keyword_overlap": 0.0,
-            "unsupported":     [],
+            "tokens_source":    0,
+            "tokens_summary":   0,
+            "compression":      0.0,
+            "cosine":           0.0,
+            "rouge1_f1":        0.0,
+            "rouge2_f1":        0.0,
+            "keyword_overlap":  0.0,
+            "unsupported":      [],
+            "complete_ratio":   0.0,
         }
+
+def _score_from_quality_report(rep: dict) -> float:
+    """
+    Score global dans [0,1] basé sur:
+    - similarité (cosine)
+    - ROUGE-1 / ROUGE-2
+    - recouvrement de mots-clés
+    - compression raisonnable (cible dynamique selon la taille de la source)
+    - ratio de phrases complètes
+    """
+    try:
+        cos   = float(rep.get("cosine", 0.0))
+        r1    = float(rep.get("rouge1_f1", 0.0))
+        r2    = float(rep.get("rouge2_f1", 0.0))
+        kw    = float(rep.get("keyword_overlap", 0.0))
+        comp  = float(rep.get("compression", 0.0))
+        comp_sent = float(rep.get("complete_ratio", 0.0))
+        Ls    = float(rep.get("tokens_source", 0) or 0.0)
+    except Exception:
+        return 0.0
+
+    # --- Compression : cible dynamique ---
+    # Textes courts  -> peu de compression
+    # Textes moyens  -> ~0.65
+    # Gros PDF / narratif -> compression élevée (~0.75–0.8) acceptée
+    if comp <= -0.05:
+        comp_score = 0.0
+    else:
+        if Ls > 2500:
+            target = 0.78
+        elif Ls > 1000:
+            target = 0.68
+        else:
+            target = 0.55
+        dev = abs(comp - target) / max(target, 1e-6)
+        dev = min(dev, 1.0)
+        comp_score = 1.0 - dev
+
+    # --- Pondérations (somme = 1.0) ---
+    # On augmente légèrement l’impact de cosine + keywords
+    w_cos   = 0.34
+    w_r1    = 0.22
+    w_r2    = 0.16
+    w_kw    = 0.14
+    w_comp  = 0.08
+    w_sent  = 0.06
+
+    raw = (
+        w_cos  * cos +
+        w_r1   * r1  +
+        w_r2   * r2  +
+        w_kw   * kw  +
+        w_comp * comp_score +
+        w_sent * comp_sent
+    )
+
+    if raw < 0.0:
+        raw = 0.0
+    if raw > 1.0:
+        raw = 1.0
+    return raw
 
 # =========================
 # Lecture fichiers
@@ -333,6 +478,38 @@ def _smooth_punctuation(s: str) -> str:
     s = re.sub(r'([a-zA-Z0-9])\n([A-Z])', r'\1. \2', s)
     s = re.sub(r'\s{2,}', ' ', s)
     return s.strip()
+def _repair_truncated_sentences(text: str) -> str:
+    """
+    Répare les fins de résumé manifestement coupées :
+      - retire la toute dernière phrase si elle est très courte (<= 3 mots)
+        ou se termine par un mot de liaison ("et", "ou", "mais", "car", "donc").
+    Cela améliore le ratio de phrases complètes sans inventer de contenu.
+    """
+    txt = (text or "").strip()
+    if not txt:
+        return txt
+
+    sentences = re.split(r"(?<=[\.!\?…])\s+|\n+", txt)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    if not sentences:
+        return txt
+
+    last = sentences[-1]
+    last_low = last.lower()
+    last_words = last_low.split()
+
+    liaison = {"et", "ou", "mais", "car", "donc", "or"}
+    drop_last = False
+
+    if len(last_words) <= 3:
+        drop_last = True
+    elif last_words[-1] in liaison:
+        drop_last = True
+
+    if drop_last and len(sentences) >= 2:
+        sentences = sentences[:-1]
+
+    return " ".join(sentences).strip()
 
 # =========================
 # Prompts jury (A = phrase+puces, B = puces-only)
@@ -469,6 +646,82 @@ def _looks_unknown(s: str) -> bool:
     return bool(re.search(r"\b(je ne sais pas|i don'?t know|unknown|no context)\b", (s or "").lower()))
 
 # =========================
+# Nettoyage post-LLM
+# =========================
+
+def _clean_llm_summary(raw: str) -> str:
+    """
+    Nettoyage léger:
+    - supprime les intros du style "Voici un résumé..."
+    - supprime les entêtes "Résumé:" / "Summary:"
+    - supprime la dernière puce manifestement coupée
+    - ajoute un point final aux lignes non vides sans ponctuation forte
+    - supprime une éventuelle dernière phrase très courte et vide de sens
+    """
+    txt = (raw or "").strip()
+    if not txt:
+        return txt
+
+    # 1) Enlever les intros typiques de LLM
+    intro_patterns = [
+        r"^voici un résumé[^:\n]*:\s*",
+        r"^voici le résumé[^:\n]*:\s*",
+        r"^résumé\s*:\s*",
+        r"^summary\s*:\s*",
+    ]
+    for pat in intro_patterns:
+        txt = re.sub(pat, "", txt, flags=re.I)
+
+    # 2) Travail ligne par ligne (pour les puces)
+    lines = [l.rstrip() for l in txt.splitlines()]
+    cleaned_lines = []
+    bullet_prefixes = ("- ", "* ", "• ")
+
+    for l in lines:
+        ll = l.strip()
+        if not ll:
+            cleaned_lines.append(l)
+            continue
+        cleaned_lines.append(l)
+
+    # 3) Supprimer une dernière puce manifestement coupée
+    if cleaned_lines:
+        last = cleaned_lines[-1].strip()
+        low = last.lower()
+        if last.startswith(bullet_prefixes):
+            last_words = low.split()
+            if len(last_words) <= 4 or low.endswith((" et", " et les", " pour", " avec")):
+                cleaned_lines = cleaned_lines[:-1]
+
+    # 4) Ajouter un point aux lignes non vides sans ponctuation forte
+    final_lines = []
+    for l in cleaned_lines:
+        s = l.rstrip()
+        if not s:
+            final_lines.append(s)
+            continue
+        if not re.search(r"[\.!\?…]$", s):
+            s += "."
+        final_lines.append(s)
+
+    txt = "\n".join(final_lines).strip()
+
+    # 5) Post-filtre: enlever une dernière phrase très courte et vide de sens
+    sentences = re.split(r"(?<=[\.!\?…])\s+", txt)
+    if sentences:
+        last = sentences[-1].strip()
+        low = last.lower()
+        last_words = low.split()
+
+        if len(last_words) <= 4 and (
+            "propose également" in low
+            or low in {"it storm.", "it storm propose.", "it storm propose également."}
+        ):
+            txt = " ".join(sentences[:-1]).strip()
+
+    return txt
+
+# =========================
 # Résumé (texte brut) – mode classique
 # =========================
 
@@ -595,8 +848,14 @@ def _summarize_text_three_cli(text: str, models: List[str], timeout: float = 60.
     """
     Utilisé uniquement par la CLI avec --three :
     - Appelle directement Ollama, sans RAG, une fois par modèle.
-    - Toujours renvoyer un résumé non vide (fallback extractif).
+    - Toujours renvoyer un résumé non vide (fallback extractif en dernier recours).
     - Ajoute des logs lisibles pour suivre la génération (CPU lent).
+    - Optimisations pour éviter les timeouts sur CPU + 7B:
+        * Timeout LLM minimum 180s
+        * Contexte tronqué à 2500 caractères
+        * max_tokens dynamique selon la taille du texte
+        * num_ctx = 1536
+        * temperature = 0.0 + seed pour plus de déterminisme
     """
     import time
 
@@ -622,8 +881,30 @@ def _summarize_text_three_cli(text: str, models: List[str], timeout: float = 60.
             out.append(c)
         return out
 
-    max_chars = 6000
-    snippet = text if len(text) <= max_chars else text[:max_chars] + "\n[Texte tronqué pour le résumé]"
+    llm_timeout = max(float(timeout), 180.0)
+
+    # --- Paramètres dynamiques selon la taille du texte ---
+    text_len = len(text)
+
+    if text_len <= 1500:
+        max_chars = min(text_len, 1500)
+        max_tokens = 150
+    elif text_len <= 6000:
+        max_chars = min(text_len, 4000)
+        max_tokens = 220
+    else:
+        max_chars = min(text_len, 6500)
+        max_tokens = 260
+
+    # Contexte LLM (num_ctx) approximatif en fonction du snippet
+    approx_ctx = int(max_chars / 3)  # 3–4 chars ≈ 1 token
+    approx_ctx = max(1536, min(3072, approx_ctx))
+
+    snippet = text if text_len <= max_chars else text[:max_chars] + "\n[Texte tronqué pour le résumé]"
+
+    # 🔥 max_tokens dynamique selon la taille du snippet
+    dynamic_max_tokens = int(len(snippet) / 22)  # ~4.5 chars/token
+    dynamic_max_tokens = max(220, min(dynamic_max_tokens, 450))
 
     prompt_tpl = (
         "Résume le texte ci-dessous en français, avec un ton naturel et humain, sans rien inventer.\n"
@@ -651,13 +932,21 @@ def _summarize_text_three_cli(text: str, models: List[str], timeout: float = 60.
             ans = generate_ollama(
                 mdl,
                 prompt_tpl,
-                temperature=0.1,
-                max_tokens=220,
+                temperature=0.0,
+                max_tokens=max_tokens,
                 stream=True,
-                timeout=float(timeout),
-                options={"num_ctx": 2048, "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.05},
+                timeout=llm_timeout,
+                options={
+                    "num_ctx": 1536,
+                    "top_k": 40,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.05,
+                    "seed": 1,
+                },
             )
             ans = (ans or "").strip()
+            ans = _clean_llm_summary(ans)
+            ans = _clean_cut_sentences(ans)  # 🔥 réparation générale des phrases coupées
             dt = time.time() - t0
             print(f"✅ {label} terminé en ~{dt:.1f}s", flush=True)
         except Exception as e:
@@ -665,7 +954,6 @@ def _summarize_text_three_cli(text: str, models: List[str], timeout: float = 60.
             print(f"⚠️ {label} a échoué après ~{dt:.1f}s : {e}", flush=True)
             ans = ""
 
-        # Fallback si la réponse est vide ou erreur
         if not ans:
             fb = _fallback_extractive_forced(text)
             rep = summary_quality_report(text, fb["answer"])
@@ -673,20 +961,17 @@ def _summarize_text_three_cli(text: str, models: List[str], timeout: float = 60.
             fb["report"] = rep
             fb["flags"] = ["llm_error_or_empty"]
             fb["time"] = dt
+
+            s = _score_from_quality_report(rep)
+            fb["score"] = s
+            fb["confidence"] = s
+            fb["grounding"] = rep.get("cosine", 0.0)
+            fb["coverage"] = rep.get("keyword_overlap", 0.0)
             summaries.append(fb)
             continue
 
         rep = summary_quality_report(text, ans)
-        try:
-            s = (
-                0.4 * float(rep.get("cosine", 0.0))
-                + 0.3 * float(rep.get("rouge1_f1", 0.0))
-                + 0.2 * float(rep.get("rouge2_f1", 0.0))
-                + 0.1 * float(rep.get("keyword_overlap", 0.0))
-            )
-        except Exception:
-            s = 0.0
-        s = max(0.0, min(1.0, s))
+        s = _score_from_quality_report(rep)
 
         summaries.append(
             {
@@ -739,14 +1024,13 @@ if __name__ == "__main__":
     p.add_argument(
         "--three",
         action="store_true",
-        help="Génère 3 résumés (1 par modèle) en appelant directement Ollama (plus rapide, sans RAG).",
+        help="Génère 3 résumés (1 par modèle) en appelant directement Ollama (sans RAG).",
     )
 
     args = p.parse_args()
     models = [m.strip() for m in (args.models or "").split(",") if m.strip()]
 
     if args.three:
-        # Mode spécial: texte brut + 3 modèles Ollama
         if args.file:
             if not os.path.exists(args.file):
                 print(f"[rag_sum] Fichier introuvable: {args.file}", file=sys.stderr)
@@ -766,7 +1050,12 @@ if __name__ == "__main__":
 
         print("=== MODÈLES (effectifs):", ", ".join([s.get("model", "?") for s in summaries]))
 
-        best = max(summaries, key=lambda x: x.get("score", 0.0)) if summaries else None
+        llm_candidates = [s for s in summaries if not str(s.get("model", "")).endswith("(fallback)")]
+        if llm_candidates:
+            best = max(llm_candidates, key=lambda x: x.get("score", 0.0))
+        else:
+            best = max(summaries, key=lambda x: x.get("score", 0.0)) if summaries else None
+
         if best:
             print("\n=== MEILLEUR RÉSUMÉ (score global) ===")
             print(f"Modèle: {best.get('model','?')}")
@@ -784,12 +1073,12 @@ if __name__ == "__main__":
             print(f"ROUGE-1 F1:   {rep.get('rouge1_f1',0.0):.2f}")
             print(f"ROUGE-2 F1:   {rep.get('rouge2_f1',0.0):.2f}")
             print(f"Keywords %:   {rep.get('keyword_overlap',0.0)*100:.0f}%")
+            print(f"Phrases OK %: {rep.get('complete_ratio',0.0)*100:.0f}%")
             print("Résumé:")
             print(s.get("answer", ""))
 
         sys.exit(0)
 
-    # Mode historique (un seul résumé “best”) : on réutilise summarize_file / summarize_text
     if args.file:
         if not os.path.exists(args.file):
             print(f"[rag_sum] Fichier introuvable: {args.file}", file=sys.stderr)
@@ -815,8 +1104,9 @@ if __name__ == "__main__":
     rep = res.get("report", {})
     if rep:
         print("\n=== QUALITÉ ===")
-        print(f"Compression:  {rep.get('compression', 0.0):.2f}")
-        print(f"Cosine:       {rep.get('cosine', 0.0):.2f}")
-        print(f"ROUGE-1 F1:   {rep.get('rouge1_f1', 0.0):.2f}")
-        print(f"ROUGE-2 F1:   {rep.get('rouge2_f1', 0.0):.2f}")
-        print(f"Keywords %:   {rep.get('keyword_overlap', 0.0)*100:.0f}%")
+        print(f"Compression:  {rep.get("compression", 0.0):.2f}")
+        print(f"Cosine:       {rep.get("cosine", 0.0):.2f}")
+        print(f"ROUGE-1 F1:   {rep.get("rouge1_f1", 0.0):.2f}")
+        print(f"ROUGE-2 F1:   {rep.get("rouge2_f1", 0.0):.2f}")
+        print(f"Keywords %:   {rep.get("keyword_overlap", 0.0)*100:.0f}%")
+        print(f"Phrases OK %: {rep.get("complete_ratio", 0.0)*100:.0f}%")

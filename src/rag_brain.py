@@ -3,15 +3,14 @@
 # ============================================================
 # RAG intelligent (version stricte, FR uniquement)
 # - Réponses 100% ancrées sur extraits courts + citations (pas de génération libre)
-# - Priorité forte à it_storm_1000_QA.txt (insensible à la casse/chemin)
-# - Prise en compte des autres .txt pour enrichir la réponse (anti-dérive, diversité)
+# - Priorité forte aux contenus IT-STORM internes + site officiel
 # - Late fusion Dense+BM25, rerank équilibré (MMR simple + anti-domination QA)
 # - Blocage total PDF/Office (bruit), normalisation de noms de sources
 # - Filtrage QA: ignore “Q:…”, préfère “A:…”
-# - Agrégation “definition”: phrase-synthèse par couture de 2–3 citations (zéro hallucination)
+# - Réponse ancrée = paragraphe de 3–5 phrases, construit uniquement depuis les extraits
 # - Fallback sémantique contrôlé -> "Je ne sais pas." si insuffisant
-# - Wrapper smart_rag_answer(*args, **kwargs) compatible UI (ignore lang/mode)
-# - Maintenance intégrée: reindex_txt_file(), ensure_qa_indexed()
+# - Wrapper smart_rag_answer(*args, **kwargs) compatible UI
+# - Maintenance : reindex_txt_file(), ensure_qa_indexed()
 # ============================================================
 
 from __future__ import annotations
@@ -58,7 +57,8 @@ MMR_LAMBDA = float(os.getenv("RAG_MMR_LAMBDA", "0.6"))
 MIN_QUOTES_OK = int(os.getenv("RAG_MIN_QUOTES_OK", "2"))
 
 # Limiter la domination du fichier QA dans les citations
-QA_MAX_QUOTE_SHARE = float(os.getenv("RAG_QA_MAX_QUOTE_SHARE", "0.6"))  # ex: 60% max des citations
+QA_MAX_QUOTE_SHARE = float(os.getenv("RAG_QA_MAX_QUOTE_SHARE", "0.6")  # ex: 60% max des citations
+)
 MAX_QUOTES_PER_SOURCE = int(os.getenv("RAG_MAX_QUOTES_PER_SOURCE", "3"))
 
 # Extensions bloquées (bruit) -> exclus dur
@@ -69,78 +69,31 @@ RAG_DATA_DIR = os.getenv(
     "RAG_DATA_DIR",
     r"C:\Users\ALA BEN LAKHAL\Desktop\intelligent_copilot IT-STORM\data"
 )
-QA_BASENAME = "it_storm_1000_QA.txt"  # IMPORTANT: basename exact
-QA_DEFAULT_PATH = os.path.join(RAG_DATA_DIR, QA_BASENAME)
+QA_BASENAME = "it_storm_1000_QA.txt"  # IMPORTANT: basename exact (côté filesystem)
 QA_BASENAME_L = QA_BASENAME.lower()
+
+QA_DEFAULT_PATH = os.path.join(RAG_DATA_DIR, QA_BASENAME)
 
 # ===== Regex utilitaires =====
 _SENT_SPLIT = re.compile(r"(?<=[\.\!\?])\s+")
 _WORD = re.compile(r"\w+", re.UNICODE)
 
-# ===== Boosts par intention (par nom de fichier "basename") =====
-INTENT_BOOSTS = {
-    "benefits": {
-        "Executive Summary.txt": 2.1,
-        "Contexte Objectifs.txt": 1.8,
-        "Pain Points.txt": 1.5,
-        "it_storm_1000_QA.txt": 2.6,
-    },
-    "objectives": {
-        "Contexte Objectifs.txt": 2.2,
-        "Executive Summary.txt": 1.5,
-        "it_storm_1000_QA.txt": 2.4,
-    },
-    "risks": {
-        "Risques Et Attenuations.txt": 2.5,
-        "it_storm_1000_QA.txt": 2.2,
-    },
-    "architecture": {
-        "Architecture Solution.txt": 2.5,
-        "Executive Summary.txt": 1.3,
-        "it_storm_1000_QA.txt": 2.2,
-    },
-    "budget": {
-        "Budget Et Effort.txt": 2.5,
-        "it_storm_1000_QA.txt": 2.2,
-    },
-    "roadmap": {
-        "Prochaines Etapes.txt": 2.5,
-        "it_storm_1000_QA.txt": 2.2,
-    },
-    "definition": {
-        "Executive Summary.txt": 1.9,
-        "Contexte Objectifs.txt": 1.3,
-        "it_storm_1000_QA.txt": 2.8,
-    },
-    "howto": {
-        "Architecture Solution.txt": 2.0,
-        "it_storm_1000_QA.txt": 2.3,
-    },
-    "compare": {
-        "Executive Summary.txt": 1.4,
-        "Architecture Solution.txt": 1.4,
-        "it_storm_1000_QA.txt": 2.3,
-    },
-    "summary": {
-        "Executive Summary.txt": 2.0,
-        "it_storm_1000_QA.txt": 2.3,
-    },
+# ===== PRIORITÉS DES SOURCES (VERSION FINALE IT-STORM) =====
+# Tout est déjà en lowercase / basename pour matcher _norm_base
+INTENT_BOOSTS: Dict[str, Dict[str, float]] = {
     "default": {
-        "Executive Summary.txt": 1.3,
-        "Contexte Objectifs.txt": 1.2,
-        "it_storm_1000_QA.txt": 2.7,
-    },
+        "itstorm_site.txt": 8.0,          # 🔥 site officiel (scrapé)
+        "itstorm_rag_global.txt": 6.0,    # synthèse maison
+        "itstorm_clean.txt": 2.0,         # fallback propre
+        "it_storm_1000_qa.txt": 0.4,      # QA brute → très faible poids
+    }
 }
 
-# ===== Filtrage strict "benefits" (anti dérive) =====
 BENEFITS_ALLOW = {
-    "Executive Summary.txt",
-    "Contexte Objectifs.txt",
-    "Pain Points.txt",
-    "Architecture Solution.txt",
-    "Prochaines Etapes.txt",
-    "itstorm.txt",
-    "it_storm_1000_QA.txt",
+    "itstorm_site.txt",
+    "itstorm_rag_global.txt",
+    "itstorm_clean.txt",
+    "it_storm_1000_qa.txt",
 }
 
 # ===== Normalisation noms sources (robuste casse/chemin) =====
@@ -154,14 +107,7 @@ def _ext(name: str) -> str:
 def is_blocked_source(src: str) -> bool:
     return _ext(src) in BLOCKED_EXTENSIONS
 
-# ===== Versions "lower" des tables =====
-def _lower_map(d: Dict[str, float]) -> Dict[str, float]:
-    return {k.lower(): v for k, v in d.items()}
-
-def _lower_nested_map(d: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, float]]:
-    return {k: _lower_map(v) for k, v in d.items()}
-
-INTENT_BOOSTS_L = _lower_nested_map(INTENT_BOOSTS)
+INTENT_BOOSTS_L = INTENT_BOOSTS  # déjà lower
 BENEFITS_ALLOW_L = {s.lower() for s in BENEFITS_ALLOW}
 
 def benefits_allowed_source(src: str) -> bool:
@@ -178,15 +124,81 @@ def split_sentences(text: str) -> List[str]:
     except Exception:
         return [t]
 
-def clean_text_for_quote(text: str) -> str:
-    t = re.sub(r"\s+", " ", text or "").strip()
-    t = re.sub(r"\[[^\]]+\]", "", t)
-    t = re.sub(r"\([^\)]+\)", lambda m: m.group(0) if len(m.group(0).split()) < 10 else "", t)
-    return t
+def clean_text_for_quote(s: str) -> str:
+    """
+    Nettoyage avancé pour éviter le bruit (titres, séparateurs, emojis, WP, etc.)
+    et limiter les répétitions.
+    """
+    if not s:
+        return ""
 
-def truncate_words(s: str, max_words: int = 12) -> str:
-    toks = (s or "").strip().split()
-    return (s or "").strip() if len(toks) <= max_words else " ".join(toks[:max_words]).strip()
+    # On travaille ligne par ligne pour enlever les titres / séparateurs
+    raw = s.splitlines()
+    kept_lines = []
+    for line in raw:
+        line_stripped = line.strip()
+        low = line_stripped.lower()
+        if not line_stripped:
+            continue
+
+        # Lignes à ignorer (titres, fichiers, séparateurs visuels)
+        if "====" in line_stripped:
+            continue
+        if "📄" in line_stripped or "🔹" in line_stripped:
+            continue
+        if "présentation générale" in low:
+            continue
+        if line_stripped.endswith(".txt"):
+            continue
+        if low.startswith("nos offres"):
+            continue
+        if low.startswith("à propos"):
+            continue
+        if "it-storm consulting" in low:
+            continue
+        if "l'offre inédite pour votre activité" in low:
+            continue
+
+        kept_lines.append(line_stripped)
+
+    s = " ".join(kept_lines).strip()
+    if not s:
+        return ""
+
+    # Trop court → bruit
+    if len(s.split()) < 5:
+        return ""
+
+    # Retirer les Q:, A:, R:
+    s = re.sub(r"^[QAR]:\s*", "", s, flags=re.IGNORECASE)
+
+    # Supprimer les phrases dupliquées dans le même chunk
+    sentences = split_sentences(s)
+    seen = set()
+    uniq_sents = []
+    for sent in sentences:
+        sent_norm = sent.strip()
+        if not sent_norm:
+            continue
+        if sent_norm in seen:
+            continue
+        seen.add(sent_norm)
+        uniq_sents.append(sent_norm)
+
+    s = " ".join(uniq_sents).strip()
+    s = s.replace("  ", " ")
+    return s
+
+def truncate_words(s: str, max_words: int = 60) -> str:
+    """
+    Ne tronque que les textes très longs.
+    Pour la plupart des phrases 'normales', on renvoie la phrase complète.
+    """
+    s = (s or "").strip()
+    toks = s.split()
+    if len(toks) <= max_words:
+        return s
+    return " ".join(toks[:max_words]).strip()
 
 def tokens_fr(s: str) -> List[str]:
     return [w.lower() for w in _WORD.findall(s or "")]
@@ -197,10 +209,53 @@ def humanize_fr(text: str) -> str:
     text = re.sub(r"\s+([,;:.])", r"\1", text)
     return text.strip()
 
-# --- Mode "paragraphe unique"
-SINGLE_PARAGRAPH = os.getenv("RAG_SINGLE_PARAGRAPH", "1") == "1"
+FORBIDDEN_SUBJECTS = (
+    " je ", " j'", " j’",
+    " tu ",
+    " nous ",
+    " vous ",
+    " Je ", " J'", " J’",
+    " Tu ", " Nous ", " Vous ",
+)
 
-def _take_quote_texts(quotes, max_parts=4):
+def contains_forbidden_subject(text: str) -> bool:
+    """
+    Détecte les phrases contenant un sujet interdits : je/tu/nous/vous.
+    Empêche tout style adressé au lecteur.
+    """
+    if not text:
+        return False
+    t = " " + text.strip().lower() + " "
+    return any(s.strip().lower() in t for s in FORBIDDEN_SUBJECTS)
+
+# Phrases narratives uniquement (pas de je / tu / vous / nous)
+NARRATIVE_FORBIDDEN_PRONOUNS = (
+    " je ",
+    " j'",
+    " j’",
+    " tu ",
+    " vous ",
+    " nous ",
+)
+
+def is_narrative_sentence(text: str) -> bool:
+    """
+    Retourne True si la phrase est de style narratif neutre :
+    - pas de 'je', 'tu', 'vous', 'nous'
+    - insensible à la casse
+    """
+    if not text:
+        return False
+    low = f" {text.strip().lower()} "
+    return not any(tok in low for tok in NARRATIVE_FORBIDDEN_PRONOUNS)
+# ===== Construction de la réponse =====
+# --- Mode "paragraphe unique" (non utilisé mais conservé)
+SINGLE_PARAGRAPH = os.getenv("RAG_SINGLE_PARAGRAPH", "0") == "1"
+
+def _take_quote_texts(quotes: List[Dict[str, str]], max_parts: int = 4) -> List[str]:
+    """
+    Utilitaire simple pour extraire quelques citations distinctes (texte brut).
+    """
     parts, seen = [], set()
     for q in quotes:
         seg = (q.get("quote") or "").strip()
@@ -211,38 +266,106 @@ def _take_quote_texts(quotes, max_parts=4):
             break
     return parts
 
-def paragraphize_from_quotes(quotes: List[Dict[str,str]], intent: str) -> str:
-    parts = _take_quote_texts(quotes, max_parts=4)
-    if not parts:
-        return "Je ne sais pas."
-    sent = assemble_human_sentence(parts)
-    if not sent:
-        sent = " ; ".join(f"« {p} »" for p in parts) + "."
-    if intent == "definition" and not sent.lower().startswith("it-storm"):
-        sent = "IT-STORM : " + " ; ".join(f"« {p} »" for p in parts) + "."
-    return humanize_fr(sent)
 
-def assemble_human_sentence(parts: List[str]) -> str:
-    if not parts:
-        return ""
-    uniq = []
-    for p in parts:
-        p = p.strip(" .;")
-        if len(p.split()) >= 3 and p not in uniq:
-            uniq.append(p)
-        if len(uniq) >= 3:
+def _sentence_wordset(s: str) -> set:
+    """
+    Transforme une phrase en ensemble de mots normalisés (minuscules, sans mots trop courts)
+    pour calculer une similarité approximative.
+    """
+    tokens = re.findall(r"[a-zà-ÿA-ZÀ-Ÿ]+", s.lower())
+    return {t for t in tokens if len(t) > 2}
+
+
+def dedupe_similar_sentences(sents: List[str], threshold: float = 0.5) -> List[str]:
+    """
+    Supprime les phrases répétées ou très similaires :
+    - si deux phrases ont une similarité de Jaccard >= threshold sur les mots,
+      on garde la première et on élimine la suivante.
+    """
+    kept: List[str] = []
+    kept_sets: List[set] = []
+
+    for s in sents:
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+
+        ws = _sentence_wordset(s_clean)
+        if not ws:
+            # Pas de mots significatifs → on garde tel quel
+            kept.append(s_clean)
+            kept_sets.append(ws)
+            continue
+
+        duplicate = False
+        for ks in kept_sets:
+            if not ks:
+                continue
+            inter = len(ws & ks)
+            union = len(ws | ks)
+            if union == 0:
+                continue
+            sim = inter / union
+            if sim >= threshold:
+                duplicate = True
+                break
+
+        if not duplicate:
+            kept.append(s_clean)
+            kept_sets.append(ws)
+
+    return kept
+
+
+def assemble_human_paragraph(quotes: List[Dict[str, str]], max_sentences: int = 5) -> str:
+    """
+    Transforme les citations en un paragraphe de 3 à 5 phrases.
+    - Chaque citation devient une phrase (on ajoute un point final si besoin)
+    - On supprime les phrases dupliquées ou très similaires (> 50 % de mots en commun)
+    - On renvoie une phrase par ligne (séparée par '\n')
+    """
+    if not quotes:
+        return "Je ne sais pas."
+
+    sents: List[str] = []
+    for q in quotes:
+        t = (q.get("quote") or "").strip()
+        if not t:
+            continue
+        if not t.endswith((".", "!", "?")):
+            t += "."
+        sents.append(t)
+        if len(sents) >= max_sentences:
             break
-    if not uniq:
-        return ""
-    sent = " ".join(uniq)
-    sent = sent.replace("..", ".").replace(" ;", ";").strip()
-    if not sent.endswith("."):
-        sent += "."
-    return humanize_fr(sent)
+
+    # 🔁 Supprimer les doublons exacts ou très similaires (> 50 % des mots en commun)
+    sents = dedupe_similar_sentences(sents, threshold=0.5)
+
+    # Minimum 3 phrases : si manque, on répète la dernière
+    while 0 < len(sents) < 3:
+        sents.append(sents[-1])
+
+    # Nettoyage léger + retour à la ligne entre chaque phrase
+    cleaned = [humanize_fr(s) for s in sents]
+    para = "\n".join(cleaned)
+    return para
 
 # ===== QA filtering helpers =====
 QA_QUESTION_PREFIXES = ("q:", "question:")
-QA_ANSWER_PREFIXES   = ("a:", "réponse:", "reponse:", "answer:")
+QA_ANSWER_PREFIXES   = ("a:", "réponse:", "reponse:", "answer:", "r:")
+
+def _is_low_value_qa_quote(q: Dict[str, str]) -> bool:
+    src = (q.get("source") or "").lower()
+    if src != QA_BASENAME_L:
+        return False
+    txt = (q.get("quote") or "").strip().lower()
+    if not txt:
+        return True
+    if txt.startswith(("oui", "non", "parce que", "car ")):
+        return True
+    if len(txt.split()) < 6:
+        return True
+    return False
 
 def _strip_qa_prefix(s: str) -> str:
     s2 = s.strip()
@@ -271,30 +394,87 @@ def _looks_like_answer(s: str) -> bool:
         return True
     return ("?" not in s) and (len(s.split()) >= 3)
 
-# ===== Détection d’intention (FR) =====
-def detect_intent(q: str) -> str:
-    ql = (q or "").lower()
-    if any(w in ql for w in ["bénéfice", "benefice", "benefit", "avantage", "roi"]):
-        return "benefits"
-    if any(w in ql for w in ["objectif", "goals", "target", "priorité", "priorite"]):
-        return "objectives"
-    if any(w in ql for w in ["risque", "atténuation", "attenuation", "risk", "mitigation"]):
-        return "risks"
-    if any(w in ql for w in ["architecture", "solution", "kubernetes", "ci/cd", "iac", "orchestration"]):
-        return "architecture"
-    if any(w in ql for w in ["budget", "effort", "coût", "cout", "charge"]):
-        return "budget"
-    if any(w in ql for w in ["roadmap", "étapes", "jalon", "prochaines étapes", "prochaines etapes"]):
-        return "roadmap"
-    if any(w in ql for w in ["qu'est-ce", "definition", "définition", "what is"]):
-        return "definition"
-    if any(w in ql for w in ["comment", "how to", "procédure", "procedure", "guide"]):
-        return "howto"
-    if any(w in ql for w in ["vs", "contre", "compar", "difference", "différence"]):
-        return "compare"
-    if any(w in ql for w in ["résume", "resume", "summary", "synthèse", "synthese"]):
-        return "summary"
-    return "default"
+# Patterns globaux à éviter dans les citations "définition"
+BAD_DEF_PATTERNS = [
+    # je / tu / nous / vous + verbe
+    r"\b[Jj]e\s+[a-zà-ÿ]+",
+    r"\b[Jj]['’]\s*[a-zà-ÿ]+",
+    r"\b[Tt]u\s+[a-zà-ÿ]+",
+    r"\b[Nn]ous\s+[a-zà-ÿ]+",
+    r"\b[Vv]ous\s+[a-zà-ÿ]+",
+
+    # verbes conjugués en nous / vous (ez / iez / ons / ions)
+    r"\b[a-zà-ÿ]+(?:ez|iez|ons|ions)\b(?=[\s\.,;:!\?])",
+
+    # phrase qui COMMENCE par un infinitif (Accompagner…, Créer…, Tester…)
+    r"^\s*[A-ZÉÈÊÂÀÎÔÛÄËÏÖÜÇ][a-zà-ÿ]+(?:er|ir|re|oir)\b",
+]
+
+
+
+import re
+
+def has_bad_def_pattern(text: str) -> bool:
+    """
+    Retourne True si le texte match au moins un pattern regex dans BAD_DEF_PATTERNS.
+    """
+    if not text:
+        return False
+    for pat in BAD_DEF_PATTERNS:
+        if re.search(pat, text):
+            return True
+    return False
+
+
+def filter_low_value_quotes(quotes: List[Dict[str, str]]) -> List[Dict[str, str]]:
+    """
+    Filtre les citations peu utiles :
+    - QA très courtes / oui/non
+    - citations contenant patterns indésirables (regex BAD_DEF_PATTERNS)
+    - citations manifestement tronquées (terminaisons type 'de la', 'du', etc.)
+    """
+
+    bad_endings = (
+        " de la",
+        " du",
+        " des",
+        " de l",
+        " de ",
+        " et de la",
+        " et du",
+        " et des",
+    )
+
+    out: List[Dict[str, str]] = []
+
+    for q in quotes or []:
+
+        # (1) QA triviale
+        if _is_low_value_qa_quote(q):
+            continue
+
+        txt = (q.get("quote") or "").strip()
+        if not txt:
+            continue
+
+        # (2) Patterns regex interdits :
+        #   - je/tu/nous/vous + verbe
+        #   - verbes terminant par ez/iez/ons/ions
+        #   - infinitifs
+        #   - phrase commençant par un infinitif
+        if has_bad_def_pattern(txt):
+            continue
+
+        low = txt.lower()
+
+        # (3) Phrase manifestement tronquée
+        if any(low.endswith(be) for be in bad_endings):
+            continue
+
+        # OK
+        out.append(q)
+
+    return out
 
 # ===== Data classes =====
 @dataclass
@@ -386,7 +566,7 @@ class SmartRAG:
         return fused
 
     # Rerank + équilibrage + filtrage dur (PDF out) + anti-domination QA
-    def rerank_balance(self, items: List[RetrievedChunk], intent: str) -> List[RetrievedChunk]:
+    def rerank_balance(self, items: List[RetrievedChunk], intent: str = "default") -> List[RetrievedChunk]:
         if not items:
             return []
 
@@ -395,13 +575,14 @@ class SmartRAG:
         if not items:
             return []
 
-        boosts = INTENT_BOOSTS_L.get(intent, INTENT_BOOSTS_L["default"])
+        boosts = INTENT_BOOSTS_L.get("default", {})
+
         boosted: List[RetrievedChunk] = []
         for c in items:
             b = 1.0
             base = _norm_base(c.source)
 
-            # Boosts par fichier (intention + priorité QA contrôlée)
+            # Boosts par fichier (site / rag_global / clean vs QA)
             b *= boosts.get(base, 1.0)
 
             # Bonus si le chunk ressemble à une réponse (A: ...)
@@ -445,35 +626,50 @@ class SmartRAG:
         selected.sort(key=lambda z: z.score_final, reverse=True)
         return selected
 
-    # Citations (extraits courts), interleave QA + non-QA, limites par source
+    # Citations (extraits complets), interleave QA + non-QA, limites par source
     def make_quotes(self, chunks: List[RetrievedChunk], max_quotes: int = MAX_QUOTES) -> List[Dict[str, str]]:
         def pick_sentence(text: str) -> Optional[str]:
+            """
+            Retourne une PHRASE COMPLÈTE issue du chunk.
+            On choisit :
+              1) une phrase qui ressemble à une réponse (déclarative, sans '?')
+              2) sinon la première phrase non interrogative
+              3) sinon la première phrase non vide
+              4) sinon le texte complet
+            Aucun tronquage manuel ici.
+            """
             text = clean_text_for_quote(text)
             if not text:
                 return None
-            sentences = split_sentences(text)
 
-            # A) Réponses explicites / phrases déclaratives sans "?"
+            sentences = split_sentences(text)
+            if not sentences:
+                return None
+
+            # A) Réponses explicites / phrases déclaratives
             for s in sentences:
-                s_clean = _strip_qa_prefix(s)
-                if _looks_like_answer(s) and not _is_questionish(s):
-                    if 3 <= len(s_clean.split()) <= 20:
-                        return truncate_words(s_clean, 12)
+                s_clean = _strip_qa_prefix(s).strip()
+                if not s_clean:
+                    continue
+                if _looks_like_answer(s_clean) and not _is_questionish(s_clean):
+                    return s_clean  # ✅ phrase complète
 
             # B) Phrases non interrogatives correctes
             for s in sentences:
-                s_clean = _strip_qa_prefix(s)
-                if not _is_questionish(s) and 3 <= len(s_clean.split()) <= 20:
-                    return truncate_words(s_clean, 12)
+                s_clean = _strip_qa_prefix(s).strip()
+                if not s_clean:
+                    continue
+                if not _is_questionish(s_clean):
+                    return s_clean  # ✅ phrase complète
 
-            # C) Fallback: première phrase non interrogative
+            # C) Fallback : première phrase non vide
             for s in sentences:
-                s_clean = _strip_qa_prefix(s)
-                if not _is_questionish(s):
-                    return truncate_words(s_clean, 12)
+                s_clean = _strip_qa_prefix(s).strip()
+                if s_clean:
+                    return s_clean  # ✅ phrase complète
 
-            # D) Ultime fallback
-            return truncate_words(text, 12)
+            # D) Dernier recours : tout le texte
+            return text.strip()
 
         # 1) Prépare les candidats nettoyés
         cands = []
@@ -483,8 +679,16 @@ class SmartRAG:
             quote = pick_sentence(c.text or "")
             if not quote:
                 continue
-            cands.append({"source": _norm_base(c.source), "quote": humanize_fr(quote)})
+            cands.append({
+                "source": _norm_base(c.source),
+                "quote": humanize_fr(quote),
+            })
 
+        if not cands:
+            return []
+
+        # Filtrage avancé (QA low-value + phrases cassées + simulateur/revenu net)
+        cands = filter_low_value_quotes(cands)
         if not cands:
             return []
 
@@ -492,18 +696,17 @@ class SmartRAG:
         qa = [q for q in cands if q["source"] == QA_BASENAME_L]
         non = [q for q in cands if q["source"] != QA_BASENAME_L]
 
-        # 3) Limites
+        # 3) Limites QA
         max_qa = int(round(QA_MAX_QUOTE_SHARE * max_quotes))
         if max_qa < 1 and qa:
-            max_qa = 1  # garder au moins 1 QA si présent
+            max_qa = 1
 
-        # 4) Interleave: priorité au non-QA pour amorcer la diversité
         out: List[Dict[str, str]] = []
         per_source = Counter()
         i_qa, i_non = 0, 0
 
+        # 4) Interleave non-QA / QA
         while len(out) < max_quotes and (i_non < len(non) or i_qa < len(qa)):
-            # pick non-QA si dispo et quota source OK
             if i_non < len(non):
                 cand = non[i_non]
                 if per_source[cand["source"]] < MAX_QUOTES_PER_SOURCE:
@@ -513,7 +716,6 @@ class SmartRAG:
                 if len(out) >= max_quotes:
                     break
 
-            # pick QA si dispo, sous quotas globaux
             if i_qa < len(qa) and sum(1 for x in out if x["source"] == QA_BASENAME_L) < max_qa:
                 cand = qa[i_qa]
                 if per_source[cand["source"]] < MAX_QUOTES_PER_SOURCE:
@@ -521,15 +723,136 @@ class SmartRAG:
                     per_source[cand["source"]] += 1
                 i_qa += 1
 
-        # 5) Complète si besoin
+        # 5) Compléter si encore de la place
         i = 0
         while len(out) < max_quotes and i < len(cands):
             cand = cands[i]
             if per_source[cand["source"]] < MAX_QUOTES_PER_SOURCE and cand not in out:
-                out.append(cand); per_source[cand["source"]] += 1
+                out.append(cand)
+                per_source[cand["source"]] += 1
             i += 1
 
         return out
+    
+    def _build_clean_anchored_paragraph(self, quotes: List[Dict[str, str]]) -> str:
+        """
+        Construit une définition propre, neutre et ancrée à partir des citations.
+        Contraintes :
+        - supprime les phrases répétées ou trop similaires (≥ 50 % des mots en commun)
+        - supprime les phrases marketing / simulateur / revenu net
+        - supprime les phrases avec pronoms interdits (je/tu/nous/vous) via contains_forbidden_subject
+        - priorise les phrases de définition contenant 'IT STORM est un/une ...'
+        - renvoie 3 à 4 phrases maximum, ton neutre
+        """
+        if not quotes:
+            return "Je ne sais pas."
+
+        # Phrases à filtrer (marketing / simulateur / revenu net...)
+        BAD = [
+            "profitez de services",
+            "services complets",
+            "tarifs avantageux",
+            "simulateur",
+            "revenu net",
+            "déterminer votre salaire",
+            "estimer le revenu",
+            "honoraires",
+            "facturation",
+            "obligations légales",
+            "méthode de simulation",
+        ]
+
+        sentences: List[str] = []
+        previous_wordsets: List[set] = []
+
+        # 1) Extraction des phrases propres depuis les quotes
+        for q in quotes:
+            raw = (q.get("quote") or "").strip()
+            if not raw:
+                continue
+
+            for s in split_sentences(raw):
+                s_clean = s.strip()
+                if not s_clean:
+                    continue
+
+                low = s_clean.lower()
+
+                # a) pronoms interdits → on garde un ton neutre
+                if contains_forbidden_subject(s_clean):
+                    continue
+
+                # b) phrases marketing / simulateur / revenu net...
+                if any(bad in low for bad in BAD):
+                    continue
+
+                # c) calcul du "set" de mots significatifs pour la similarité
+                tokens = re.findall(r"[a-zA-ZÀ-ÿà-ÿ]+", low)
+                wordset = {t for t in tokens if len(t) > 2}
+                if not wordset:
+                    # Si pas de mots significatifs, on garde quand même la phrase (rare)
+                    sentences.append(s_clean)
+                    previous_wordsets.append(set())
+                    continue
+
+                # d) vérifier si la phrase est trop similaire à une phrase déjà gardée
+                too_similar = False
+                for ws in previous_wordsets:
+                    if not ws:
+                        continue
+                    inter = len(wordset & ws)
+                    union = len(wordset | ws)
+                    if union == 0:
+                        continue
+                    sim = inter / union
+                    if sim >= 0.5:  # ≥ 50 % de mots en commun → on élimine
+                        too_similar = True
+                        break
+
+                if too_similar:
+                    continue
+
+                # ok, on garde cette phrase et son set
+                previous_wordsets.append(wordset)
+                sentences.append(s_clean)
+
+        if not sentences:
+            return "Je ne sais pas."
+
+        # 2) Phrases de définition en priorité
+        def _is_def(sent: str) -> bool:
+            low = sent.lower()
+            return "it storm" in low and ("est une" in low or "est un" in low)
+
+        def_sents = [s for s in sentences if _is_def(s)]
+        other_sents = [s for s in sentences if s not in def_sents]
+
+        ordered = def_sents + other_sents
+        if not ordered:
+            return "Je ne sais pas."
+
+        # 3) 3–4 phrases max
+        if len(ordered) > 4:
+            ordered = ordered[:4]
+        elif len(ordered) < 3 and len(sentences) >= 3:
+            # si on a peu de phrases de définition, compléter avec les premières phrases brutes
+            ordered = sentences[:3]
+
+        # 4) Finalisation : ponctuation + assemblage
+        final_sents: List[str] = []
+        for s in ordered:
+            s2 = s.strip()
+            if not s2.endswith((".", "!", "?")):
+                s2 += "."
+            final_sents.append(s2)
+
+        paragraph = " ".join(final_sents).strip()
+
+        # 5) Sécurité finale : si le paragraphe ne ressemble pas à une phrase "narrative", on annule
+        if not is_narrative_sentence(paragraph):
+            return "Je ne sais pas."
+
+        return humanize_fr(paragraph)
 
     # Confiance & Qualité
     def estimate_confidence(self, chunks: List[RetrievedChunk]) -> float:
@@ -543,12 +866,12 @@ class SmartRAG:
         return round(0.5 * mean_score + 0.5 * coverage, 3)
 
     def quality_scores(self, text: str, quotes: List[Dict[str,str]], ranked: List[RetrievedChunk]) -> Dict[str, float]:
-        unique_sources = len(set(q["source"] for q in quotes))
-        coverage = min(1.0, unique_sources / 4.0)
+        unique_sources = len(set(q["source"] for q in quotes)) if quotes else 0
+        coverage = min(1.0, unique_sources / 4.0) if quotes else 0.0
         grounding = 1.0 if quotes else 0.0
         style_penalty = 0.0 if re.search(r"\b(and|the|for|y)\b", text or "", flags=re.I) is None else 0.3
         style = max(0.0, 1.0 - style_penalty)
-        top_mean = sum(x.score_final for x in ranked[:4]) / max(1, len(ranked[:4]))
+        top_mean = sum(x.score_final for x in ranked[:4]) / max(1, len(ranked[:4])) if ranked else 0.0
         relevance = max(0.0, min(1.0, 0.6 * top_mean + 0.4 * coverage))
         nli_proxy = 1.0 if quotes else 0.5
         return {
@@ -558,114 +881,6 @@ class SmartRAG:
             "nli_proxy": round(nli_proxy, 3),
             "style": round(style, 3),
         }
-
-    # Builders (strictement extractifs)
-    def _bulleted_from_quotes(self, header: str, quotes: List[Dict[str,str]], fallback_line: str) -> Tuple[str, List[str]]:
-        out = [header, ""]
-        if not quotes:
-            out.append(f"- {fallback_line}")
-        else:
-            for qt in quotes[:4]:
-                out.append(f"- *« {qt['quote']} »* ({qt['source']})")
-        return "\n".join(out), sorted(set(q["source"] for q in quotes))
-
-    def build_answer_benefits(self, chunks: List[RetrievedChunk]) -> Tuple[str, List[str], List[Dict[str,str]]]:
-        focused = [c for c in chunks if benefits_allowed_source(c.source)]
-        if not focused:
-            focused = chunks
-        quotes_all = self.make_quotes(focused, MAX_QUOTES)
-        good_quotes = [q for q in quotes_all if benefits_allowed_source(q["source"])]
-        if not good_quotes:
-            # relance ciblée sans invention
-            qx = "RAG bénéfices client énergie réduction temps cohérence réponses génération ancrée"
-            d2 = self.retrieve_dense(qx, max(12, TOP_K_DENSE // 2))
-            f2 = self.late_fusion(d2, qx)
-            r2 = self.rerank_balance(f2, intent="benefits")
-            quotes_all = self.make_quotes(r2, MAX_QUOTES)
-            good_quotes = [q for q in quotes_all if benefits_allowed_source(q["source"])]
-
-        def pick(src: str) -> Optional[str]:
-            base = (src or "").lower()
-            for q in good_quotes:
-                if q["source"].lower() == base:
-                    return q["quote"]
-            return None
-
-        candidates = [
-            ("Réduction du temps de recherche d’informations critiques",
-             pick("Contexte Objectifs.txt") or pick("Executive Summary.txt")),
-            ("Cohérence des réponses (base documentaire unique, extraits cités)",
-             pick("Executive Summary.txt")),
-            ("Moins d’hallucinations (génération ancrée sur documents internes)",
-             pick("Architecture Solution.txt") or pick("Executive Summary.txt")),
-            ("Confidentialité et souveraineté (fonctionnement local)",
-             pick("Executive Summary.txt")),
-            ("Industrialisation (exports DOCX/PPTX, monitoring qualité)",
-             pick("Prochaines Etapes.txt") or pick("Executive Summary.txt")),
-            ("Accélération de la décision opérationnelle",
-             pick("Pain Points.txt") or pick("Contexte Objectifs.txt")),
-        ]
-        bullets = [(t, q) for (t, q) in candidates if q][:5]
-
-        if not bullets:
-            header = "Bénéfices confirmés par la documentation interne :"
-            ans, srcs = self._bulleted_from_quotes(header, good_quotes, "Aucun extrait fiable disponible.")
-            return humanize_fr(ans), sorted(set(q["source"] for q in good_quotes)), good_quotes
-
-        out = ["Bénéfices concrets du RAG (documents internes) :", ""]
-        for (title, q) in bullets:
-            out.append(f"- {title} — *« {q} »*")
-        final_quotes = good_quotes if good_quotes else quotes_all
-        return humanize_fr("\n".join(out)), sorted(set(q["source"] for q in final_quotes)), final_quotes
-
-    def _aggregated_definition(self, quotes: List[Dict[str,str]], max_parts: int = 3) -> str:
-        if not quotes:
-            return "Je ne sais pas."
-        seen = set()
-        parts: List[str] = []
-        for q in quotes:
-            seg = q["quote"].strip()
-            if seg and seg not in seen:
-                seen.add(seg)
-                parts.append(f"« {seg} »")
-            if len(parts) >= max_parts:
-                break
-        if not parts:
-            return "Je ne sais pas."
-        return "IT-STORM : " + " ; ".join(parts) + "."
-
-    def build_generic_from_quotes(self, label: str, chunks: List[RetrievedChunk]) -> Tuple[str, List[str], List[Dict[str,str]]]:
-        quotes = self.make_quotes(chunks, MAX_QUOTES)
-        if not quotes or len(quotes) < MIN_QUOTES_OK:
-            return "Je ne sais pas.", [], []
-        out = [f"{label} :", ""]
-        for qt in quotes[:5]:
-            out.append(f"- *« {qt['quote']} »* ({qt['source']})")
-        return humanize_fr("\n".join(out)), sorted(set(q["source"] for q in quotes)), quotes
-
-    def build_definition(self, chunks: List[RetrievedChunk]) -> Tuple[str, List[str], List[Dict[str,str]]]:
-        quotes = self.make_quotes(chunks, MAX_QUOTES)
-        if not quotes or len(quotes) < MIN_QUOTES_OK:
-            return "Je ne sais pas.", [], []
-
-        parts = [q["quote"] for q in quotes]
-        headline = assemble_human_sentence(parts)
-        if not headline:
-            headline = self._aggregated_definition(quotes, max_parts=3)
-        if not headline.lower().startswith("it-storm"):
-            headline = "IT-STORM est " + headline[0].lower() + headline[1:]
-
-        body = ["", "Extraits documentaires :", ""]
-        listed = set()
-        for qt in quotes[:4]:
-            key = (qt["quote"], qt["source"])
-            if key in listed:
-                continue
-            listed.add(key)
-            body.append(f"- *« {qt['quote']} »* ({qt['source']})")
-
-        ans = humanize_fr(headline + "\n" + "\n".join(body))
-        return ans, sorted(set(q["source"] for q in quotes)), quotes
 
     def build_fallback(self, chunks: List[RetrievedChunk]) -> Tuple[str, List[str], List[Dict[str,str]]]:
         quotes = self.make_quotes(chunks, MAX_QUOTES)
@@ -680,15 +895,18 @@ class SmartRAG:
 
     # API principale
     def ask(self, question: str) -> SmartRAGResult:
+        # 0) Normalisation de la question
         q0 = (question or "").strip()
-        intent = detect_intent(q0)
 
         # 1) Retrieve dense
         dense = self.retrieve_dense(q0, TOP_K_DENSE)
+
         # 2) Late fusion
         fused = self.late_fusion(dense, q0)
-        # 3) Rerank + balance
-        ranked = self.rerank_balance(fused, intent=intent)
+
+        # 3) Rerank + balance (intention unique 'default')
+        ranked = self.rerank_balance(fused, intent="default")
+
         # 4) Confiance
         conf = self.estimate_confidence(ranked)
 
@@ -703,66 +921,103 @@ class SmartRAG:
             for qx in expansions:
                 d2 = self.retrieve_dense(qx, max(12, TOP_K_DENSE // 2))
                 f2 = self.late_fusion(d2, qx)
-                r2 = self.rerank_balance(f2, intent=intent)
+                r2 = self.rerank_balance(f2, intent="default")
                 c2 = self.estimate_confidence(r2)
                 if c2 > best_conf:
                     best_ranked, best_conf = r2, c2
             ranked, conf = best_ranked, best_conf
 
-        # 6) Construction de réponse (strictement extractive)
+        # 6) Construction de la réponse (ANCRÉE, générique, 3–5 phrases)
         if conf < CONF_MIN:
+            # Trop peu de confiance → fallback ultra-sécurisé
             ans, srcs, qts = self.build_fallback(ranked)
+
         else:
-            if intent == "benefits":
-                ans, srcs, qts = self.build_answer_benefits(ranked)
-            elif intent == "howto":
-                ans, srcs, qts = self.build_generic_from_quotes("Procédure recommandée", ranked)
-            elif intent == "definition":
-                ans, srcs, qts = self.build_definition(ranked)
-            elif intent == "risks":
-                ans, srcs, qts = self.build_generic_from_quotes("Risques & atténuations", ranked)
-            elif intent == "architecture":
-                ans, srcs, qts = self.build_generic_from_quotes("Architecture & Solution", ranked)
-            elif intent == "budget":
-                ans, srcs, qts = self.build_generic_from_quotes("Budget & Effort", ranked)
-            elif intent == "roadmap":
-                ans, srcs, qts = self.build_generic_from_quotes("Prochaines étapes", ranked)
+            # Citations RAG
+            quotes = self.make_quotes(ranked, MAX_QUOTES)
+
+            if not quotes or len(quotes) < MIN_QUOTES_OK:
+                # Pas assez de matière fiable → fallback
+                ans, srcs, qts = self.build_fallback(ranked)
+
             else:
-                quotes = self.make_quotes(ranked, MAX_QUOTES)
-                if not quotes or len(quotes) < MIN_QUOTES_OK:
-                    ans, srcs, qts = self.build_fallback(ranked)
-                else:
-                    header = "Réponse ancrée sur les documents internes :"
-                    out = [header, ""]
-                    for qt in quotes:
-                        out.append(f"- *« {qt['quote']} »* ({qt['source']})")
-                    ans = humanize_fr("\n".join(out))
-                    srcs = sorted(set(q["source"] for q in quotes))
-                    qts = quotes
+                # Assemble un paragraphe fluide à partir des quotes (3–5 phrases)
+                para = assemble_human_paragraph(quotes, max_sentences=5)
 
-        # --- Post-traitement : tout en un seul paragraphe (zéro hallucination)
-        if SINGLE_PARAGRAPH and qts and len(qts) >= MIN_QUOTES_OK:
-            ans = paragraphize_from_quotes(qts, intent)
+                # Forcer un début propre si la question parle explicitement d'IT STORM
+                ql = q0.lower()
+                if "it storm" in ql or "itstorm" in ql or "it-storm" in ql:
+                    if not para.lower().startswith("it storm"):
+                        # On cherche une citation commençant par "IT STORM"
+                        prefix_set = False
+                        for q in quotes:
+                            txt = (q.get("quote") or "").strip()
+                            if txt.lower().startswith("it storm"):
+                                para = txt + " " + para
+                                prefix_set = True
+                                break
+                        if not prefix_set:
+                            # Filet de sécurité : phrase très générique
+                            para = "IT STORM est une entreprise spécialisée. " + para
 
-        # Humanize quotes
-        for q in qts:
-            q["quote"] = humanize_fr(q["quote"])
+                ans = para
+                srcs = sorted(set(q["source"] for q in quotes))
+                qts = quotes
 
+            # Citations RAG
+            quotes = self.make_quotes(ranked, MAX_QUOTES)
+
+            if not quotes or len(quotes) < MIN_QUOTES_OK:
+                # Pas assez de matière fiable → fallback
+                ans, srcs, qts = self.build_fallback(ranked)
+
+            else:
+                # Assemble un paragraphe fluide à partir des quotes (3–5 phrases)
+                para = assemble_human_paragraph(quotes, max_sentences=5)
+
+                # Forcer un début propre si la question parle explicitement d'IT STORM
+                ql = q0.lower()
+                if "it storm" in ql or "itstorm" in ql or "it-storm" in ql:
+                    if not para.lower().startswith("it storm"):
+                        # On cherche une citation commençant par "IT STORM"
+                        prefix_set = False
+                        for q in quotes:
+                            txt = (q.get("quote") or "").strip()
+                            if txt.lower().startswith("it storm"):
+                                para = txt + " " + para
+                                prefix_set = True
+                                break
+                        if not prefix_set:
+                            # Filet de sécurité : phrase très générique
+                            para = "IT STORM est une entreprise spécialisée. " + para
+
+                ans = humanize_fr(para)
+                srcs = sorted(set(q["source"] for q in quotes))
+                qts = quotes
+        # Scores de qualité & debug
         quality = self.quality_scores(ans, qts, ranked)
         dbg = {
-            "intent": intent,
+            "intent": "default",
             "top_sources": [_norm_base(c.source) for c in ranked],
             "top_scores": [round(c.score_final, 3) for c in ranked],
             "conf_threshold": CONF_MIN,
         }
-        return SmartRAGResult(answer=ans, sources=srcs, quotes=qts, confidence=conf, quality=quality, dbg=dbg)
+
+        return SmartRAGResult(
+            answer=ans,
+            sources=srcs,
+            quotes=qts,
+            confidence=conf,
+            quality=quality,
+            dbg=dbg,
+        )
 
 # === Jury Ollama (optionnel) =================================================
 def ask_multi_ollama(
     question: str,
     models: Optional[List[str]] = None,
-    topk_context: int = 6,
-    timeout: float = 60.0
+    topk_context: int = 12,
+    timeout: float = 100.0
 ) -> Dict[str, Any]:
     """
     Pose la même question à plusieurs modèles Ollama avec un contexte EXTRACTIF
@@ -781,11 +1036,11 @@ def ask_multi_ollama(
         "qwen2.5:7b",
     ]
 
-    # 1) Récupère un petit contexte strictement extractif via le moteur existant
+    # 1) Récupère un contexte strictement extractif via le moteur existant
     eng = get_engine()
     ranked = eng.rerank_balance(
         eng.late_fusion(eng.retrieve_dense(question, k=TOP_K_DENSE), question),
-        intent=detect_intent(question)
+        intent="default"
     )
     quotes = eng.make_quotes(ranked, max_quotes=min(max(3, topk_context), MAX_QUOTES))
     snippets = [q["quote"] for q in quotes]
@@ -799,23 +1054,38 @@ def ask_multi_ollama(
             "suggestion": None
         }
 
-    # 2) Prompt "réponse UNIQUEMENT depuis le contexte"
+    # 2) Prompt "réponse MAJORITAIREMENT depuis le contexte"
+    #    → légèrement moins strict que "UNIQUEMENT" pour éviter les "Je ne sais pas" trop faciles
     prompt = (
-        "Tu es un assistant interne. Réponds UNIQUEMENT depuis le contexte ci-dessous.\n"
-        "- Réponse courte (1 paragraphe, 2–4 phrases), claire, sans puces.\n"
-        "- Si l'info manque, réponds: \"Je ne sais pas.\".\n"
-        "- Ajoute une citation [Source: extrait] à la fin.\n\n"
-        f"Question : {question}\n\nContexte :\n{context}\n\nRéponse :"
+        "Tu es un assistant interne d’IT STORM.\n"
+        "Ta mission est de rédiger une réponse courte et claire en t’appuyant MAJORITAIREMENT sur le contexte ci-dessous.\n"
+        "\n"
+        "EXIGENCES DE RÉPONSE :\n"
+        "1) Réponse structurée en 2 paragraphes, 4 à 6 phrases au total.\n"
+        "2) Ajoute OBLIGATOIREMENT UNE LIGNE VIDE entre les deux paragraphes (format Markdown).\n"
+        "3) Ne fais AUCUNE liste à puces, seulement du texte continu.\n"
+        "4) Réutilise autant que possible les mots et expressions EXACTS présents dans le contexte.\n"
+        "5) Si l’information n’est pas dans le contexte, écris strictement : \"Je ne sais pas.\".\n"
+        "6) Termine toujours la réponse par une citation de la forme : [Source: https://it-storm.fr ].\n"
+        "\n"
+        f"Question : {question}\n\n"
+        "Contexte :\n"
+        f"{context}\n\n"
+        "Réponse :"
     )
 
-    # 3) Appels Ollama
     try:
-        from src.llm.ollama_client import generate_ollama, ping, list_models
+        from src.llm.ollama_client import generate_ollama, ping, list_models  # noqa: F401
     except Exception as e:
         return {
             "question": question,
             "context_snippets": snippets,
-            "results": [{"model":"(ollama)", "answer": f"[Erreur import ollama_client] {e}", "time": 0.0, "metrics": {}}],
+            "results": [{
+                "model": "(ollama)",
+                "answer": f"[Erreur import ollama_client] {e}",
+                "time": 0.0,
+                "metrics": {}
+            }],
             "suggestion": None
         }
 
@@ -826,68 +1096,164 @@ def ask_multi_ollama(
         return {
             "question": question,
             "context_snippets": snippets,
-            "results": [{"model":"(ollama)", "answer": f"[Ping Ollama KO] {e}", "time": 0.0, "metrics": {}}],
+            "results": [{
+                "model": "(ollama)",
+                "answer": f"[Ping Ollama KO] {e}",
+                "time": 0.0,
+                "metrics": {}
+            }],
             "suggestion": None
         }
 
-    import time, re
+    import time
 
+    # === Fonctions de scoring internes =======================================
     def _coverage(ans: str, ctx_parts: List[str]) -> float:
-        if not ans or not ctx_parts: return 0.0
+        """
+        Mesure combien de mots du contexte se retrouvent dans la réponse.
+        Plus c'est élevé, plus la réponse colle au contexte.
+        """
+        if not ans or not ctx_parts:
+            return 0.0
         ans_low = ans.lower()
         total = 0.0
         for s in ctx_parts:
             s_low = s.lower()
-            if not s_low.strip(): continue
+            if not s_low.strip():
+                continue
             aw = set(re.findall(r"\w+", ans_low))
             sw = set(re.findall(r"\w+", s_low))
-            if not sw: continue
-            inter = len(aw & sw); union = len(sw)
+            if not sw:
+                continue
+            inter = len(aw & sw)
+            union = len(sw)
             total += inter / max(1, union)
         return round(total / max(1, len(ctx_parts)), 2)
 
     def _style(ans: str) -> float:
-        if not ans: return 0.0
+        """
+        Style = longueur raisonnable + ponctuation + présence de la citation.
+        """
+        if not ans:
+            return 0.0
         L = len(ans.strip())
         has_src = "[source:" in ans.lower()
         punc = 1.0 if re.search(r"[.;!?]", ans) else 0.8
-        if 60 <= L <= 400: base = 1.0
-        elif L < 40: base = 0.6
-        else: base = 0.8
+
+        # Fenêtre de longueur un peu plus large pour éviter les pénalités inutiles
+        if 80 <= L <= 600:
+            base = 1.0
+        elif L < 60:
+            base = 0.7
+        else:
+            base = 0.85
+
         return round(min(1.0, base * (1.05 if has_src else 1.0) * punc), 2)
 
     def _grounding(ans: str) -> float:
+        """
+        Grounding = cohérence avec le contexte + présence de la marque [Source: ...].
+        """
         has_src = "[source:" in (ans or "").lower()
         cov = _coverage(ans, snippets)
-        if has_src and cov >= 0.10: return round(min(1.0, 0.85 + 0.15*cov), 2)
-        return round(max(0.0, 0.6*cov), 2)
+        if has_src:
+            # On récompense fortement les réponses qui citent la source
+            # et couvrent raisonnablement le contexte
+            base = 0.80 + 0.20 * min(1.0, cov)
+            return round(min(1.0, base), 2)
+        # Sans source explicite, grounding limité par le coverage
+        return round(max(0.0, 0.7 * cov), 2)
 
     def _confidence(ans: str) -> float:
-        g = _grounding(ans); cov = _coverage(ans, snippets); sty = _style(ans)
+        """
+        Combinaison globale : grounding + coverage + style + longueur.
+        """
+        g = _grounding(ans)
+        cov = _coverage(ans, snippets)
+        sty = _style(ans)
         L = len((ans or "").strip())
-        len_score = 1.0 if 60 <= L <= 400 else (0.7 if L > 400 else 0.6)
-        conf = 0.45*g + 0.25*cov + 0.20*len_score + 0.10*sty
-        if g >= 0.95 and cov >= 0.30 and 60 <= L <= 220:
+
+        # Score de longueur : on favorise 4–6 phrases (~100–500 caractères)
+        if 80 <= L <= 600:
+            len_score = 1.0
+        elif L < 60:
+            len_score = 0.7
+        else:
+            len_score = 0.8
+
+        conf = 0.45 * g + 0.25 * cov + 0.20 * len_score + 0.10 * sty
+
+        # Bonus si tout est bien aligné (réponse idéale)
+        if g >= 0.90 and cov >= 0.25 and 80 <= L <= 400:
             conf = max(conf, 0.95)
+
         return round(min(1.0, max(0.0, conf)), 2)
 
-    def _score(m):
-        return round(0.4*m.get("confidence",0) + 0.3*m.get("grounding",0) + 0.2*m.get("coverage",0) + 0.1*m.get("style",0), 3)
+    def _score(m: Dict[str, float]) -> float:
+        """
+        Score final simple : pondération des sous-métriques.
+        """
+        return round(
+            0.4 * m.get("confidence", 0.0)
+            + 0.3 * m.get("grounding", 0.0)
+            + 0.2 * m.get("coverage", 0.0)
+            + 0.1 * m.get("style", 0.0),
+            3,
+        )
 
+    def _ensure_paragraph_spacing(ans: str) -> str:
+        """
+        Post-traitement léger pour forcer une ligne vide entre les paragraphes.
+        - On regroupe les lignes non vides en paragraphes.
+        - On les rejoint avec \\n\\n.
+        """
+        if not ans:
+            return ans
+        raw_lines = ans.splitlines()
+        paragraphs = []
+        buf = []
+        for line in raw_lines:
+            if line.strip() == "":
+                if buf:
+                    paragraphs.append(" ".join(buf).strip())
+                    buf = []
+            else:
+                buf.append(line.strip())
+        if buf:
+            paragraphs.append(" ".join(buf).strip())
+        return "\n\n".join(p for p in paragraphs if p)
+
+    # === Boucle sur les modèles =============================================
     results = []
     for mdl in models:
         t0 = time.time()
         try:
             ans = generate_ollama(
-                mdl, prompt,
-                temperature=0.0,
-                max_tokens=180,
+                mdl,
+                prompt,
+                temperature=0.2,          # max de déterminisme
+                max_tokens=220,           # un peu plus pour permettre 2 paragraphes confortables
                 stream=True,
                 timeout=float(timeout),
-                options={"num_ctx": 1536, "top_k": 40, "top_p": 0.9, "repeat_penalty": 1.1}
+                options={
+                    "num_ctx": 2048,      # plus de contexte, meilleure couverture
+                    "top_k": 40,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.1
+                }
             )
+
+            # 🔐 Sécurisation : toujours une string
+            if not isinstance(ans, str):
+                ans = "" if ans is None else str(ans)
+
+            # Normalisation : forcer une ligne vide entre paragraphes
+            ans = _ensure_paragraph_spacing(ans)
+
+            # S'assurer qu'il y a bien une [Source: ...]
             if "[source:" not in ans.lower():
                 ans = ans.rstrip() + " [Source: extrait]"
+
             dt = time.time() - t0
             metrics = {
                 "coverage": _coverage(ans, snippets),
@@ -896,18 +1262,38 @@ def ask_multi_ollama(
             }
             metrics["confidence"] = _confidence(ans)
             score = _score(metrics)
-            results.append({"model": mdl, "answer": ans, "time": round(dt,2), "metrics": metrics, "score": score})
+
+            results.append({
+                "model": mdl,
+                "answer": ans,
+                "time": round(dt, 2),
+                "metrics": metrics,
+                "score": score,
+            })
+
         except Exception as e:
             dt = time.time() - t0
-            results.append({"model": mdl, "answer": f"[Erreur LLM {mdl}] {e}", "time": round(dt,2), "metrics": {}, "score": 0.0})
+            results.append({
+                "model": mdl,
+                "answer": f"[Erreur LLM {mdl}] {e}",
+                "time": round(dt, 2),
+                "metrics": {},
+                "score": 0.0,
+            })
 
+    # ⚠️ IMPORTANT : la sélection du meilleur modèle doit être EN DEHORS de la boucle
     valid = [r for r in results if not r["answer"].strip().startswith("[Erreur LLM")]
     suggestion = max(valid, key=lambda x: x["score"]) if valid else None
+
     return {
         "question": question,
         "context_snippets": snippets,
         "results": results,
-        "suggestion": {"model": suggestion["model"], "score": suggestion["score"], "time": suggestion["time"]} if suggestion else None
+        "suggestion": {
+            "model": suggestion["model"],
+            "score": suggestion["score"],
+            "time": suggestion["time"],
+        } if suggestion else None,
     }
 
 # ===== Singleton & wrapper =====

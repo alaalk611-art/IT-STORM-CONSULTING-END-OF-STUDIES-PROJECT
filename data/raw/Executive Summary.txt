@@ -1,9 +1,0 @@
-IT STORM propose une solution d'assistant intelligent pour les équipes internes des grands groupes, combinant RAG (Retrieval-Augmented Generation) et LLM local. Le projet vise à valoriser les documents internes pour accélérer la prise de décision.
-
-En 2024, une première phase pilote a permis de valider la faisabilité de la chaîne RAG, en s'appuyant sur ChromaDB et un modèle local Flan-T5. Les cas d'usage couvraient les FAQ internes, la documentation technique, et les supports projet.
-
-Le client a exprimé des attentes fortes en termes de confidentialité, de personnalisation du ton et de contrôle sur les sources. 
-
-La valeur apportée réside dans la capacité à structurer et restituer rapidement l'information critique, sans dépendance externe ni hallucinations.
-
-Livrables clés attendus : base indexée interne, prototype de chatbot, dashboard de monitoring.

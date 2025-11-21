@@ -15,7 +15,7 @@ import time
 import math
 from collections import Counter
 from typing import List, Dict, Any, Optional, Tuple
-
+from docx import Document
 import streamlit as st
 import pandas as pd
 
@@ -154,6 +154,184 @@ def _legend_metrics() -> None:
 # ============================================================
 # Slider Top-K dans la sidebar (avec helper “?”)
 # ============================================================
+def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
+    """
+    Crée un fichier DOCX IT-STORM avec :
+      - Page de garde (cover page) : logo + titre + sous-titre
+      - Deuxième page : résumé détaillé avec header/footer corporate
+    """
+    from docx import Document
+    from docx.shared import Pt, Inches, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.enum.section import WD_SECTION_START
+
+    # ==============================
+    # DOCUMENT & COULEURS
+    # ==============================
+    doc = Document()
+
+    BLUE = RGBColor(37, 99, 235)
+    DARK = RGBColor(55, 65, 81)
+    LIGHT = RGBColor(107, 114, 128)
+    BORDER = RGBColor(209, 213, 219)
+
+    # Style global
+    style_normal = doc.styles["Normal"]
+    style_normal.font.name = "Calibri"
+    style_normal.font.size = Pt(11)
+
+    # ==============================
+    # SECTION 1 : COVER PAGE
+    # ==============================
+    cover_section = doc.sections[0]
+    cover_section.top_margin = Inches(1.5)
+    cover_section.bottom_margin = Inches(1.0)
+    cover_section.left_margin = Inches(1.2)
+    cover_section.right_margin = Inches(1.2)
+
+    # Logo centré
+    p_logo = doc.add_paragraph()
+    p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    run_logo = p_logo.add_run()
+    try:
+        # Adapte ce chemin à ton projet
+        run_logo.add_picture("assets/itstorm_logo.png", width=Inches(1.5))
+    except Exception:
+        pass
+
+    # Espace après logo
+    doc.add_paragraph("")
+
+    # Titre principal
+    p_title = doc.add_paragraph()
+    p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_title = p_title.add_run(title or "Résumé de document")
+    r_title.bold = True
+    r_title.font.size = Pt(28)
+    r_title.font.color.rgb = BLUE
+
+    # Sous-titre (intro)
+    if intro:
+        p_intro = doc.add_paragraph()
+        p_intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_intro = p_intro.add_run(intro.strip())
+        r_intro.font.size = Pt(12)
+        r_intro.font.color.rgb = DARK
+        r_intro.italic = True
+
+    # Ligne bleue décorative
+    doc.add_paragraph("")
+    p_line = doc.add_paragraph()
+    p_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_line = p_line.add_run("────────────────────────────────────────────")
+    r_line.font.color.rgb = BLUE
+
+    # Baseline IT-STORM en bas de la cover
+    doc.add_paragraph("")
+    p_sub = doc.add_paragraph()
+    p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_sub = p_sub.add_run("IT-STORM · Intelligent Consulting Copilot")
+    r_sub.font.size = Pt(11)
+    r_sub.font.color.rgb = LIGHT
+
+    # Petite marge verticale
+    doc.add_paragraph("")
+
+    # Page suivante (section 2)
+    main_section = doc.add_section(WD_SECTION_START.NEW_PAGE)
+    main_section.top_margin = Inches(0.8)
+    main_section.bottom_margin = Inches(0.8)
+    main_section.left_margin = Inches(0.9)
+    main_section.right_margin = Inches(0.9)
+
+    # ==============================
+    # SECTION 2 : HEADER & FOOTER
+    # ==============================
+    header = main_section.header
+    if header.paragraphs:
+        h = header.paragraphs[0]
+        for run in h.runs:
+            run.text = ""
+    else:
+        h = header.add_paragraph()
+
+    h.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    h_run_logo = h.add_run()
+    try:
+        h_run_logo.add_picture("assets/itstorm_logo.png", width=Inches(0.9))
+    except Exception:
+        pass
+
+    h.add_run("  ")
+    h_title = h.add_run("IT-STORM")
+    h_title.bold = True
+    h_title.font.size = Pt(12)
+    h_title.font.color.rgb = BLUE
+
+    h_sub = h.add_run("  ·  Intelligent Consulting Copilot")
+    h_sub.font.size = Pt(9)
+    h_sub.font.color.rgb = DARK
+
+    # Footer
+    footer = main_section.footer
+    if footer.paragraphs:
+        f = footer.paragraphs[0]
+        for run in f.runs:
+            run.text = ""
+    else:
+        f = footer.add_paragraph()
+
+    f.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    rf = f.add_run("IT-STORM · Intelligent Consulting Copilot · Document de résumé généré automatiquement.")
+    rf.italic = True
+    rf.font.size = Pt(8)
+    rf.font.color.rgb = LIGHT
+
+    # ==============================
+    # SECTION 2 : CONTENU "RÉSUMÉ DÉTAILLÉ"
+    # (tout ce qui suit est automatiquement dans la nouvelle section)
+    # ==============================
+
+    # Petite ligne bleu clair en haut de la page 2
+    p_top_line = doc.add_paragraph()
+    r_top = p_top_line.add_run("────────────────────────────────────────────")
+    r_top.font.color.rgb = BORDER
+
+    doc.add_paragraph("")
+
+    # Titre de section
+    p_sec_title = doc.add_paragraph()
+    p_sec_title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    r_sec_title = p_sec_title.add_run("Résumé détaillé")
+    r_sec_title.bold = True
+    r_sec_title.font.size = Pt(14)
+    r_sec_title.font.color.rgb = BLUE
+
+    # Ligne fine grise
+    p_sec_line = doc.add_paragraph()
+    r_sec_line = p_sec_line.add_run("────────────────────────────")
+    r_sec_line.font.color.rgb = BORDER
+
+    doc.add_paragraph("")
+
+    # Corps du résumé : un paragraphe par bloc
+    for block in (body or "").split("\n\n"):
+        block = block.strip()
+        if not block:
+            continue
+        p = doc.add_paragraph(block)
+        p.style = doc.styles["Normal"]
+        p_format = p.paragraph_format
+        p_format.space_after = Pt(8)
+        p_format.line_spacing = 1.35
+
+    # ==============================
+    # EXPORT
+    # ==============================
+    buf = io.BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
 
 def _sidebar_topk_slider(default:int=6) -> int:
     lang = st.session_state.get("lang", "en")
@@ -339,118 +517,272 @@ def _summary_quality_report(source_text: str, summary_text: str) -> dict:
     }
 
 # ============================================================
-# Cohérence de paragraphe (général + gabarit analytique)
+# Cohérence de paragraphe (GÉNÉRIQUE, GLOBAL)
 # ============================================================
 
 def _cohere_paragraph(raw: str) -> str:
+    """
+    Nettoyage GÉNÉRIQUE du résumé, sans ajouter de contenu nouveau :
+    - enlève les puces / tirets
+    - remet les phrases à la ligne en un seul paragraphe
+    - capitalise la première lettre
+    - ajoute un point final si nécessaire
+
+    Aucun mot ni domaine n'est injecté (fonction 100 % globale).
+    """
     if not raw:
         return ""
-    lines = []
+
+    lines: List[str] = []
     for ln in raw.splitlines():
         ln = ln.strip(" •-*—\t")
         if ln:
-            while ln.endswith(("..", "…")):
-                ln = ln[:-1]
             lines.append(ln.strip())
+
     if not lines:
         return raw.strip()
 
-    intro = ""
-    body = lines
-    if len(lines[0].split()) <= 10 and not lines[0].endswith("."):
-        intro = lines[0].rstrip(".")
-        body = lines[1:] if len(lines) > 1 else []
-
-    joiners = ["Dans la finance", "Dans le commerce", "Dans l’industrie", "Par ailleurs", "En pratique", "Enfin"]
-
-    sentences = []
-    for idx, s in enumerate(body):
+    sentences: List[str] = []
+    for s in lines:
+        s = s.strip()
         if not s:
             continue
-        s_clean = s[0].upper() + s[1:]
-        if s_clean[-1] not in ".!?":
-            s_clean += "."
-        if idx > 0 and len(s_clean) < 140:
-            prefix = joiners[min(idx - 1, len(joiners) - 1)]
-            if not s_clean.lower().startswith(prefix.lower()):
-                s_clean = f"{prefix} : {s_clean}"
-        sentences.append(s_clean)
+        if s[0].isalpha():
+            s = s[0].upper() + s[1:]
+        if s[-1] not in ".!?…":
+            s += "."
+        sentences.append(s)
 
-    if intro:
-        head = intro
-        if not head.endswith("."):
-            head += "."
-        paragraph = head + " " + " ".join(sentences)
-    else:
-        paragraph = " ".join(sentences)
+    paragraph = " ".join(sentences)
     return " ".join(paragraph.split())
 
-def _has_any(text: str, keywords: list[str]) -> bool:
-    t = text.lower()
-    return any(k.lower() in t for k in keywords)
-
-def _sentencize(s: str) -> str:
-    s = s.strip()
-    if not s:
-        return s
-    if s[-1] not in ".!?":
-        s += "."
-    return s
-
-def _cohere_paragraph_templated(raw: str) -> str:
-    if not raw or len(raw.strip()) < 8:
-        return raw
-    import re as _re
-    text = _re.sub(r"[•\-\u2022]\s*", "", raw)
-    text = _re.sub(r"\s+", " ", text).strip()
-
-    K = {
-        "intro_ai": ["intelligence artificielle", "ia", "ai"],
-        "finance": ["finance", "financier", "banque", "fraude", "risque", "risk"],
-        "commerce": ["commerce", "retail", "magasin", "stocks", "recommandation", "panier"],
-        "industrie": ["industrie", "manufacturi", "maintenance", "production", "prédictive"],
-        "defis": ["défi", "challenge", "coût", "compétence", "gouvernance", "éthique", "rgpd", "données", "protection"],
-        "gouvernance": ["transparence", "confiance", "responsable", "gouvernance", "stratégie", "cadre", "policy"],
-    }
-    has = {k: _has_any(text, v) for k, v in K.items()}
-
-    baseline = _cohere_paragraph(text)
-
-    parts = []
-    if has["intro_ai"] or (has["finance"] or has["commerce"] or has["industrie"]):
-        parts.append("L’intelligence artificielle transforme les entreprises")
-    else:
-        return baseline
-
-    sector_clauses = []
-    if has["finance"]:
-        sector_clauses.append("détection de fraude et meilleure gestion des risques dans la finance")
-    if has["commerce"]:
-        sector_clauses.append("recommandations produits et optimisation des stocks dans le commerce")
-    if has["industrie"]:
-        sector_clauses.append("maintenance prédictive et gains de production dans l’industrie")
-
-    if sector_clauses:
-        parts[-1] += " : " + ", ".join(sector_clauses)
-    parts[-1] = _sentencize(parts[-1])
-
-    if has["defis"]:
-        parts.append(_sentencize("Son adoption pose toutefois des défis (compétences, coûts, éthique et protection des données)"))
-
-    if has["gouvernance"] or has["defis"]:
-        parts.append(_sentencize("Les organisations doivent donc déployer des stratégies responsables pour instaurer transparence et confiance"))
-
-    parts.append(_sentencize("L’avenir dépendra de leur capacité à conjuguer innovation et gouvernance"))
-
-    paragraph = " ".join(parts)
-    if len(paragraph.split()) < 20:
-        return baseline
-    return paragraph
-
 def _apply_coherence(summary_text: str, use_template: bool) -> str:
+    """
+    - Si use_template = False → on retourne le texte brut du modèle (juste strip).
+    - Si use_template = True  → on applique _cohere_paragraph (global, neutre).
+    """
+    summary_text = (summary_text or "").strip()
     if not summary_text:
         return ""
-    return _cohere_paragraph_templated(summary_text) if use_template else _cohere_paragraph(summary_text)
+    if not use_template:
+        return summary_text
+    return _cohere_paragraph(summary_text)
+
+# ============================================================
+# Fusion LLM des résumés (Ultimate Version)
+# ============================================================
+
+def _build_ultimate_summary(
+    source_text: str,
+    candidates: List[Dict[str, Any]],
+    use_template: bool,
+    fusion_model: str = "qwen2.5:7b",
+    timeout: float = 240.0,
+) -> str:
+    """
+    Construit une *version ultime* en fusionnant les meilleurs résumés de modèles.
+
+    Logique PRO :
+      - On envoie au LLM :
+          * un extrait (snippet) du texte source
+          * tous les résumés candidats (triés par score)
+      - On demande un résumé unique, plus riche que chaque résumé isolé,
+        en intégrant les informations importantes propres à chaque modèle,
+        sans rien inventer.
+
+      - Si l'appel LLM échoue OU si le résultat est quasi identique
+        au meilleur résumé, on applique un fallback déterministe :
+          * base = meilleur résumé
+          * + phrases supplémentaires uniques (non présentes dans la base)
+            prélevées dans les autres résumés.
+
+    Aucun contenu extérieur n’est injecté : on ne fait que réordonner /
+    combiner des phrases déjà présentes dans les résumés.
+    """
+
+    # --------- Helpers internes : split / fusion déterministe ---------
+    def _split_sentences(txt: str) -> List[str]:
+        txt = (txt or "").strip()
+        if not txt:
+            return []
+        # split grossier en phrases
+        parts = re.split(r"(?<=[\.!\?…])\s+", txt)
+        out = []
+        for s in parts:
+            s = s.strip()
+            if not s:
+                continue
+            out.append(s)
+        return out
+
+    def _simple_deterministic_fusion(cands: List[Dict[str, Any]], max_chars: int = 2200) -> str:
+        """
+        Fusion "safe" sans LLM :
+          - on prend le meilleur résumé comme base
+          - on ajoute des phrases uniques venant des autres résumés
+          - aucun mot inventé (tout vient des candidats)
+        """
+        if not cands:
+            return ""
+
+        # Meilleur candidat par score
+        best_loc = max(cands, key=lambda x: x.get("score", 0.0))
+        base = (best_loc.get("answer", "") or "").strip()
+        if not base:
+            return ""
+
+        base_sents = _split_sentences(base)
+        merged_sents: List[str] = list(base_sents)
+        merged_text = " ".join(merged_sents)
+
+        # On parcourt les autres résumés, du meilleur au moins bon
+        for c in sorted(cands, key=lambda x: x.get("score", 0.0), reverse=True):
+            if c is best_loc:
+                continue
+            ans = (c.get("answer", "") or "").strip()
+            if not ans:
+                continue
+            for s in _split_sentences(ans):
+                s_clean = s.strip()
+                # on ignore les phrases trop courtes ou déjà présentes
+                if len(s_clean) < 40:
+                    continue
+                if s_clean in merged_text:
+                    continue
+                merged_sents.append(s_clean)
+                merged_text = " ".join(merged_sents)
+                if len(merged_text) >= max_chars:
+                    break
+            if len(merged_text) >= max_chars:
+                break
+
+        return merged_text.strip()
+
+    # --------- Normalisation candidats ---------
+    source_text = (source_text or "").strip()
+    candidates = [c for c in (candidates or []) if (c.get("answer") or "").strip()]
+
+    if not candidates:
+        return ""
+
+    # Si un seul résumé → rien à fusionner
+    if len(candidates) == 1:
+        raw = (candidates[0].get("answer", "") or "").strip()
+        return _apply_coherence(raw, use_template)
+
+    # --------- Snippet du texte source (générique) ----------
+    if source_text:
+        n = len(source_text)
+        if n <= 8000:
+            limit = 8000
+        elif n <= 20000:
+            limit = 12000
+        else:
+            limit = 18000
+
+        snippet = source_text[:limit]
+        if len(source_text) > limit:
+            snippet += "\n[Texte source tronqué pour la fusion]"
+    else:
+        snippet = ""
+
+    # --------- Bloc des résumés candidats ----------
+    # Triés par score pour mettre les meilleurs en premier
+    bullets: List[str] = []
+    for idx, c in enumerate(sorted(candidates, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
+        model_name = c.get("model", "—")
+        ans = (c.get("answer", "") or "").strip()
+        if not ans:
+            continue
+        bullets.append(f"### Résumé {idx} ({model_name})\n{ans}")
+
+    if not bullets:
+        # Fallback brutal : meilleur résumé
+        best_loc = max(candidates, key=lambda x: x.get("score", 0.0))
+        raw = (best_loc.get("answer", "") or "").strip()
+        return _apply_coherence(raw, use_template)
+
+    bullets_text = "\n\n".join(bullets)
+
+    # --------- Essai 1 : fusion via LLM (Ollama) ----------
+    fused_raw = ""
+    try:
+        try:
+            from src.llm.ollama_client import generate_ollama
+        except Exception:
+            generate_ollama = None
+
+        if generate_ollama is not None:
+            prompt = (
+                "On te donne plusieurs résumés d'un même document, rédigés par des modèles différents.\n"
+                "Ton rôle est de produire un *résumé ultime* en français, fidèle et plus riche que chaque résumé pris isolément.\n\n"
+                "Règles à respecter strictement :\n"
+                "1) Utilise uniquement les informations présentes dans le texte source et les résumés fournis.\n"
+                "   - N'invente aucun fait, chiffre ou concept.\n"
+                "2) Intègre les points importants propres à chaque résumé, même s'ils ne sont présents que dans un seul.\n"
+                "3) Évite les répétitions : fusionne les idées proches en une formulation claire.\n"
+                "4) Style : texte continu, fluide, professionnel, sans listes à puces.\n"
+                "5) Structure : 2 à 3 paragraphes maximum.\n"
+                "6) Longueur : légèrement plus longue et plus complète que chaque résumé isolé, mais reste concise.\n"
+                "7) Ne mentionne jamais les noms des modèles (Mistral, Llama, Qwen, etc.).\n\n"
+                "EXTRAIT DU TEXTE SOURCE (éventuellement tronqué) :\n"
+                "------------------------------\n"
+                f"{snippet}\n"
+                "------------------------------\n\n"
+                "RÉSUMÉS CANDIDATS :\n"
+                f"{bullets_text}\n\n"
+                "Maintenant, écris un *résumé ultime* unique et cohérent en français,\n"
+                "en respectant strictement les règles ci-dessus.\n"
+                "RÉSUMÉ ULTIME :"
+            )
+
+            fused_raw = generate_ollama(
+                fusion_model,
+                prompt,
+                temperature=0.15,
+                max_tokens=750,
+                stream=True,
+                timeout=timeout,
+                options={
+                    "num_ctx": 3072,
+                    "top_k": 40,
+                    "top_p": 0.9,
+                    "repeat_penalty": 1.05,
+                    "seed": 1,
+                },
+            )
+            fused_raw = (fused_raw or "").strip()
+    except Exception:
+        fused_raw = ""
+
+    # --------- Fallback : si LLM KO ou résultat trop proche du best ---------
+    best_loc = max(candidates, key=lambda x: x.get("score", 0.0))
+    best_text = (best_loc.get("answer", "") or "").strip()
+
+    use_fallback = False
+    if not fused_raw:
+        use_fallback = True
+    else:
+        # Très simple heuristique de similarité : égalité exacte
+        # ou différence de longueur minime + inclusion
+        bt = best_text.replace("\n", " ").strip()
+        fr = fused_raw.replace("\n", " ").strip()
+        if bt == fr:
+            use_fallback = True
+        else:
+            len_bt = len(bt)
+            len_fr = len(fr)
+            if abs(len_bt - len_fr) < 40 and (bt in fr or fr in bt):
+                use_fallback = True
+
+    if use_fallback:
+        merged = _simple_deterministic_fusion(candidates, max_chars=2200)
+        merged = merged or best_text
+        return _apply_coherence(merged, use_template)
+
+    # --------- Chemin normal : résultat LLM + post-traitement cohérence ---------
+    fused = _apply_coherence(fused_raw, use_template)
+    return fused if fused else best_text
 
 # ============================================================
 # UI (modèles cliquables) + Podium/Course + Tableaux
@@ -481,7 +813,6 @@ def _pick_models() -> List[str]:
 
     st.markdown('<div class="model-grid">', unsafe_allow_html=True)
 
-    # NOTE : ce JS dépend de streamlitApi (optionnel); si non dispo, au pire on garde la sélection initiale.
     for i, m in enumerate(defaults):
         meta = _MODEL_META.get(m, {"emoji": "🤖", "color": "#334155"})
         active = m in selected
@@ -748,6 +1079,10 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
 
 def render():
     st.header("🧠 Generate Docs (RAG zéro-hallucination)")
+
+    # Récupérer l'état du dernier résumé (si déjà généré)
+    sum_state = st.session_state.get("sum_state")
+
     mode = st.radio(
         "Mode",
         ["Répondre à une question", "Résumer un document (PDF/TXT)"],
@@ -771,16 +1106,17 @@ def render():
                 do_cmp = st.form_submit_button("Comparer (jury)")
             do_sum = False
             up = None
-            # ce toggle ne sert que pour la partie résumé
+            # ce toggle ne concerne que la partie résumé
             st.session_state.setdefault("sum_use_template", True)
+
         else:
-            # Choix du type de reformulation pour le résumé
+            # Mode Résumé
             st.session_state.setdefault("sum_use_template", True)
             st.toggle(
-                "🧩 Reformuler avec gabarit analytique (entreprise)",
+                "🧩 Reformuler avec gabarit analytique (global)",
                 value=st.session_state["sum_use_template"],
                 key="sum_use_template",
-                help="Transforme le résumé en un paragraphe fluide (sans inventer), dans un style plus analytique.",
+                help="Transforme le résumé en un paragraphe fluide (sans inventer), dans un style plus lisible.",
             )
             up = st.file_uploader(
                 "Importer un document (.pdf ou .txt)", type=["pdf", "txt"]
@@ -795,6 +1131,7 @@ def render():
     if mode == "Répondre à une question":
         if not (do_gen or do_cmp):
             st.stop()
+
         if not q or not q.strip():
             st.error("Merci de saisir une question.")
             st.stop()
@@ -809,14 +1146,14 @@ def render():
             for m in models:
                 with st.spinner(f"{m} génère une réponse..."):
                     r = _ask_one_model(q, model=m, topk_context=topk_context, timeout=60.0)
-                st.markdown(_decorate_model_label(r.get("model","—")), unsafe_allow_html=True)
+                st.markdown(_decorate_model_label(r.get("model", "—")), unsafe_allow_html=True)
                 st.write(r.get("answer", ""))
                 collected.append(r)
 
             if collected:
                 best = sorted(collected, key=_score_from_result, reverse=True)[0]
                 st.subheader("✅ Réponse finale conseillée")
-                st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
+                st.markdown(_decorate_model_label(best.get("model", "—"), rank=1), unsafe_allow_html=True)
                 st.write(best.get("answer", ""))
 
         results: List[Dict[str, Any]] = []
@@ -828,9 +1165,9 @@ def render():
             for r in results:
                 met = r.get("metrics") or {}
                 r["confidence"] = _safe_num(met.get("confidence", r.get("score", 0.0)))
-                r["grounding"]  = _safe_num(met.get("grounding", 0.0))
-                r["coverage"]   = _safe_num(met.get("coverage", 0.0))
-                r["style"]      = _safe_num(met.get("style", 0.0))
+                r["grounding"] = _safe_num(met.get("grounding", 0.0))
+                r["coverage"] = _safe_num(met.get("coverage", 0.0))
+                r["style"] = _safe_num(met.get("style", 0.0))
 
         final_list = results or collected
         if final_list:
@@ -843,66 +1180,119 @@ def render():
     # =======================
     # Branche RÉSUMÉ (PDF/TXT) – ALIGNÉE AVEC CLI --three
     # =======================
-    if not do_sum:
-        st.stop()
-
+    # Deux cas :
+    #  1) do_sum = True → on calcule un NOUVEAU résumé, on met à jour sum_state
+    #  2) do_sum = False mais sum_state existe → on réaffiche le dernier résumé (pour les downloads)
+    #  3) ni l’un ni l’autre → on attend que l’utilisateur clique sur "Résumer"
     if _summarize_text_three_cli is None or read_any_text is None:
         st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
         st.stop()
 
-    if up is None:
-        st.error("Importe un fichier .pdf ou .txt à résumer.")
-        st.stop()
-
-    file_bytes = up.read()
-    filename = up.name or "document"
-    text, ext = read_any_text(file_bytes, filename)
-
-    if not text or not text.strip():
-        st.error(f"Impossible de lire le contenu de « {filename} ».")
-        st.stop()
-
-    st.info(f"Longueur texte : {len(text)} caractères")
-
-    # on utilise exactement la même logique que la CLI: _summarize_text_three_cli
-    models_for_sum = models or ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
-
-    with st.spinner("⏳ Génération des résumés (mode three-direct, 1 par modèle)…"):
-        summaries = _summarize_text_three_cli(text, models=models_for_sum, timeout=200.0) or []
-
-    if not summaries:
-        st.error("Aucun résumé n'a été produit (summaries vide).")
-        st.stop()
-
-    # sélection du meilleur résumé (comme la CLI)
-    best = max(summaries, key=lambda x: x.get("score", 0.0))
-    best_report = best.get("report", {}) or {}
     use_template = bool(st.session_state.get("sum_use_template", True))
 
-    raw_best_text = best.get("answer", "") or ""
-    best_paragraph = _apply_coherence(raw_best_text.strip(), use_template)
+    if do_sum:
+        # ----- Nouveau calcul de résumé -----
+        if up is None:
+            st.error("Importe un fichier .pdf ou .txt à résumer.")
+            st.stop()
 
+        file_bytes = up.read()
+        filename = up.name or "document"
+        text, ext = read_any_text(file_bytes, filename)
+
+        if not text or not text.strip():
+            st.error(f"Impossible de lire le contenu de « {filename} ».")
+            st.stop()
+
+        text_len = len(text or "")
+        st.info(f"Longueur texte : {text_len} caractères")
+
+        models_for_sum = models or ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
+
+        with st.spinner("⏳ Génération des résumés (mode three-direct, 1 par modèle)…"):
+            summaries = _summarize_text_three_cli(text, models=models_for_sum, timeout=200.0) or []
+
+        if not summaries:
+            st.error("Aucun résumé n'a été produit (summaries vide).")
+            st.stop()
+
+        # Meilleur résumé interne rag_sum
+        best = max(summaries, key=lambda x: x.get("score", 0.0))
+        best_report = best.get("report", {}) or {}
+        raw_best_text = best.get("answer", "") or ""
+        best_paragraph = _apply_coherence(raw_best_text.strip(), use_template)
+        best_export_text = best_paragraph if best_paragraph else raw_best_text.strip()
+        best_model_name = best.get("model", "—")
+
+        # Ultimate Version (fusion multi-modèles)
+        try:
+            ultimate_text = _build_ultimate_summary(
+                source_text=text,
+                candidates=summaries,
+                use_template=use_template,
+            )
+        except Exception as e:
+            st.warning(
+                f"Fusion ultime impossible, utilisation de la meilleure version uniquement. Détail : {e}"
+            )
+            ultimate_text = best_export_text
+
+        # Stocker tout dans la session pour les reruns (download, etc.)
+        st.session_state["sum_state"] = {
+            "filename": filename,
+            "ext": ext,
+            "text_len": text_len,
+            "best_model_name": best_model_name,
+            "best_export_text": best_export_text,
+            "best_report": best_report,
+            "use_template": use_template,
+            "summaries": summaries,
+            "ultimate_text": ultimate_text,
+        }
+        sum_state = st.session_state["sum_state"]
+
+    else:
+        # Aucun nouveau "Résumer" cliqué : on réutilise ce qui est déjà en mémoire
+        if not sum_state:
+            st.info("Importe un document puis clique sur « Résumer » pour générer un résumé.")
+            st.stop()
+
+    # À partir d'ici, on travaille UNIQUEMENT avec sum_state (nouveau ou ancien)
+    filename = sum_state.get("filename", "document")
+    ext = sum_state.get("ext", "")
+    text_len = sum_state.get("text_len")
+    best_model_name = sum_state.get("best_model_name", "—")
+    best_export_text = sum_state.get("best_export_text", "")
+    best_report = sum_state.get("best_report", {}) or {}
+    use_template = bool(sum_state.get("use_template", True))
+    summaries = sum_state.get("summaries", []) or []
+    ultimate_text = sum_state.get("ultimate_text", best_export_text)
+
+    if text_len:
+        st.info(f"Longueur texte : {text_len} caractères")
+
+    # ----- Affichage Best Version -----
     st.subheader("📝 Résumé — meilleure proposition")
     st.caption(f"Mode utilisé : **three-direct** · Source : {filename} ({ext})")
-    st.markdown(_decorate_model_label(best.get("model","—"), rank=1), unsafe_allow_html=True)
-    st.write(best_paragraph if best_paragraph else raw_best_text)
+    st.markdown(_decorate_model_label(best_model_name, rank=1), unsafe_allow_html=True)
+    st.write(best_export_text)
 
-    # métriques de qualité (issues de rag_sum.report)
+    # ----- Métriques de qualité -----
     rep = best_report
     if rep:
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            st.metric("Compression", f"{rep.get('compression',0.0)*100:.0f}%")
+            st.metric("Compression", f"{rep.get('compression', 0.0) * 100:.0f}%")
         with c2:
-            st.metric("Similarité (cosine)", f"{rep.get('cosine',0.0):.2f}")
+            st.metric("Similarité (cosine)", f"{rep.get('cosine', 0.0):.2f}")
         with c3:
-            st.metric("ROUGE-1 F1", f"{rep.get('rouge1_f1',0.0):.2f}")
+            st.metric("ROUGE-1 F1", f"{rep.get('rouge1_f1', 0.0):.2f}")
         with c4:
-            st.metric("Mots-clés couverts", f"{rep.get('keyword_overlap',0.0)*100:.0f}%")
+            st.metric("Mots-clés couverts", f"{rep.get('keyword_overlap', 0.0) * 100:.0f}%")
 
         with st.expander("🔎 Détails & vérifications"):
-            st.write(f"- ROUGE-2 F1 : **{rep.get('rouge2_f1',0.0):.2f}**")
-            st.write(f"- Phrases complètes : **{rep.get('complete_ratio',0.0)*100:.0f}%**")
+            st.write(f"- ROUGE-2 F1 : **{rep.get('rouge2_f1', 0.0):.2f}**")
+            st.write(f"- Phrases complètes : **{rep.get('complete_ratio', 0.0) * 100:.0f}%**")
             if rep.get("unsupported"):
                 st.warning("⚠️ Phrases possiblement non ancrées :")
                 for s_ in rep["unsupported"]:
@@ -910,20 +1300,75 @@ def render():
             else:
                 st.success("Aucune phrase douteuse détectée par l’heuristique.")
 
-    # Podium + course + tableau comparatif (avec les scores de rag_sum)
-    _render_podium(summaries)
-    _render_race(summaries)
-    _table_results(summaries, title="📊 Comparatif des modèles (three-direct)")
+    # Podium + course + tableau comparatif
+    if summaries:
+        _render_podium(summaries)
+        _render_race(summaries)
+        _table_results(summaries, title="📊 Comparatif des modèles (three-direct)")
 
-    # Tous les résumés par modèle (après gabarit éventuel)
-    st.subheader("📑 Résumés par modèle")
-    for i, r in enumerate(sorted(summaries, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
-        score = r.get("score", 0.0)
-        label = f"{i}. {_label(r.get('model','—'))} ({score:.3f})"
-        with st.expander(label, expanded=(i == 1)):
-            txt = r.get("answer") or ""
-            para = _apply_coherence(txt.strip(), use_template)
-            st.write(para if para else txt)
+    # 🔀 Comparaison visuelle Best vs Ultimate
+    st.subheader("🔀 Comparaison Best vs Ultimate")
+    col_bv, col_uv = st.columns(2)
+    with col_bv:
+        st.markdown("**Best Version (meilleur modèle)**")
+        st.write(best_export_text)
+    with col_uv:
+        if ultimate_text:
+            st.markdown("**Ultimate Version (fusion multi-modèles)**")
+            st.write(ultimate_text)
+        else:
+            st.info("Ultimate Version non disponible, utilisation de la meilleure version uniquement.")
+
+    # =====================================================
+    # Export DOCX : Best Version & Ultimate Version
+    # =====================================================
+    col_best, col_ultimate = st.columns(2)
+    with col_best:
+        if best_export_text:
+            buf_best = _make_docx_from_summary(
+                title="Résumé - Best Version",
+                intro=f"Document : {filename} · Modèle sélectionné : {best_model_name}",
+                body=best_export_text,
+            )
+            st.download_button(
+                "📄 Exporter — Best Version",
+                data=buf_best,
+                file_name="resume_best_version.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+    with col_ultimate:
+        if ultimate_text:
+            buf_ult = _make_docx_from_summary(
+                title="Résumé - Ultimate Version",
+                intro=(
+                    f"Document : {filename} · Version fusionnée à partir des meilleurs résumés "
+                    f"(mistral / llama / qwen, etc.)."
+                ),
+                body=ultimate_text,
+            )
+            st.download_button(
+                "✨ Exporter — Ultimate Version",
+                data=buf_ult,
+                file_name="resume_ultimate_version.docx",
+                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+
+    # Tous les résumés par modèle
+    if summaries:
+        st.subheader("📑 Résumés par modèle")
+        for i, r in enumerate(sorted(summaries, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
+            score = r.get("score", 0.0)
+            label = f"{i}. {_label(r.get('model','—'))} ({score:.3f})"
+            with st.expander(label, expanded=(i == 1)):
+                txt = r.get("answer") or ""
+                para = _apply_coherence(txt.strip(), use_template)
+                st.write(para if para else txt)
+
+    st.markdown("---")
+    if st.button("🔄 Réinitialiser le résumé"):
+        st.session_state["sum_state"] = None
+        st.rerun()
 
 # Compat app.py
 def render_generate_docs_tab():
