@@ -5,6 +5,7 @@ from src.chatbot import ask_rag, get_chain_cached
 from pathlib import Path  # si pas déjà importé
 from src.ui.i18n import set_lang_from_query, get_lang, t
 import streamlit as st
+from src.ui.sections import  auth
 
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
 if "lang_initialized" not in st.session_state:
@@ -41,6 +42,7 @@ LANG = {
         "sidebar_diag": "Diagnostics",
         "sidebar_llm_backend": "LLM backend: **Local Hugging Face** ✅",
         "sidebar_theme_note": "Auto theme · v2.2 (Local-only, CPU-safe)",
+        "auth.render_auth_sidebar": "Authentification",
 
         "kpi_indexed_docs": "Indexed Docs",
         "kpi_chunks_file": "Chunks File",
@@ -1253,14 +1255,23 @@ tab_chat, tab_upload, tab_generate, tab_market = st.tabs(
     ["💬 Knowledge Chat", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"]
 )
 render_chatbot()
-# ---- TAB 1: CHAT ----
+
+
+# ---- TAB 1: CHAT (protégé par 2FA) ----
 with tab_chat:
+    # Si l'utilisateur N'EST PAS authentifié, on montre seulement le login
+    if not auth.render_auth_gate():
+        st.stop()  # On ne montre pas le contenu du chat
+
+    # À partir d'ici, utilisateur authentifié
     st.markdown("### " + t("chat_title"))
 
     # Conserver top_k côté session pour l’endpoint /chat (optionnel)
     st.session_state["top_k_from_ui"] = top_k
 
-    q = st.text_input(t("chat_input"), key="q_chat_input")
+    # 🔑 clé unique pour éviter StreamlitDuplicateElementKey
+    q = st.text_input(t("chat_input"), key="main_chat_input")
+
     c1, c2 = st.columns([1, 1])
     do_search = c1.button(t("chat_button"), use_container_width=True, key="btn_chat_search")
     clear_box = c2.button(t("chat_clear"), use_container_width=True, key="btn_chat_clear")
@@ -1273,47 +1284,26 @@ with tab_chat:
         query = q[:2000] if len(q) > 2000 else q
         if len(q) > 2000:
             st.info(t("chat_question_too_long"))
-        with st.spinner(t("chat_spinner")):
+        with st.spinner("⏳"):
             try:
                 result = ask_rag(
                     question=query,
                     k=top_k,
-                    get_sources_fn=_get_source_names_for_query
+                    get_sources_fn=_get_source_names_for_query,
                 )
                 st.session_state["last_chat_result"] = {"q": query, **result}
             except Exception as e:
-                st.error(f"{t('chat_error_prefix')} {e}")
+                st.error(f"Erreur RAG : {e}")
 
     # Affichage du dernier résultat
     last = st.session_state.get("last_chat_result")
     if last:
-        st.markdown("#### " + t("chat_question_h"))
-        st.write(last["q"])
-
-        st.markdown("#### " + t("chat_answer_h"))
-        st.write(last["answer"])
+        st.markdown("#### " + t("chat_answer"))
+        st.write(last.get("answer", ""))
 
         if last.get("sources"):
-            st.markdown("#### " + t("chat_sources_h"))
+            st.markdown("#### " + t("chat_sources"))
             st.markdown(", ".join(f"`{s}`" for s in last["sources"]))
-
-        # Suggestions si "Je ne sais pas"
-        if last.get("suggestions"):
-            st.info(t("chat_suggestions_info"))
-            sug_choice = st.radio(
-                t("chat_suggestions_label"),
-                last["suggestions"],
-                key="q_suggestion_radio"
-            )
-            if st.button(t("chat_suggestions_btn"), key="btn_chat_suggest"):
-                with st.spinner(t("chat_spinner")):
-                    new_res = ask_rag(
-                        question=sug_choice,
-                        k=top_k,
-                        get_sources_fn=_get_source_names_for_query
-                    )
-                    st.session_state["last_chat_result"] = {"q": sug_choice, **new_res}
-                    st.rerun()
 
 # ---- TAB 2: UPLOAD & INDEX ----
 with tab_upload:
