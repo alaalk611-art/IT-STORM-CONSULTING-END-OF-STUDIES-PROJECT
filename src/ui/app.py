@@ -1252,7 +1252,7 @@ with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "
 # TABS
 # --------------------------------------------------------------------------------------
 tab_chat, tab_upload, tab_generate, tab_market = st.tabs(
-    ["💬 Knowledge Chat", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"]
+    ["💬Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"]
 )
 render_chatbot()
 

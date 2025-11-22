@@ -77,9 +77,8 @@ _LANG_AUTH = {
         "auth_captcha_error": "Invalid captcha. Please try again.",
         "auth_totp_info": "Open Google Authenticator and enter the 6-digit code for this account.",
         "auth_totp_enabled": "Time-based authentication (Google Authenticator) is enabled for this account.",
-        "auth_totp_scan": "Scan this QR code with Google Authenticator (or similar) if not already enrolled:",
-        "auth_totp_uri": "Or add this key manually in your TOTP app:",
-        "auth_qr_error_lib": "QR code generation is not available. Please install 'qrcode' and 'pillow' in the current virtualenv.",
+        "auth_totp_scan": "Scan this QR code with Google Authenticator to verify your identity:",
+        "auth_qr_error_lib": "QR code generation is not available. Please install 'qrcode' and 'pillow'.",
         "auth_qr_error_generic": "QR rendering error:",
     },
     "fr": {
@@ -109,13 +108,11 @@ _LANG_AUTH = {
         "auth_captcha_error": "Captcha incorrect. Merci de réessayer.",
         "auth_totp_info": "Ouvrez Google Authenticator et saisissez le code à 6 chiffres pour ce compte.",
         "auth_totp_enabled": "L’authentification par code temporel (Google Authenticator) est activée pour ce compte.",
-        "auth_totp_scan": "Scannez ce QR code avec Google Authenticator (ou équivalent) si vous n’êtes pas encore inscrit :",
-        "auth_totp_uri": "Ou ajoutez cette clé manuellement dans votre application TOTP :",
-        "auth_qr_error_lib": "La génération de QR Code n’est pas disponible. Installez 'qrcode' et 'pillow' dans le virtualenv courant.",
+        "auth_totp_scan": "Scannez ce QR code avec Google Authenticator pour vérifier votre identité :",
+        "auth_qr_error_lib": "La génération de QR Code n’est pas disponible. Installez 'qrcode' et 'pillow'.",
         "auth_qr_error_generic": "Erreur lors de l’affichage du QR Code :",
     },
 }
-
 
 def _t_auth(key: str) -> str:
     """Mini i18n locale: se base sur st.session_state['lang'] si présent."""
@@ -253,8 +250,6 @@ def _render_totp_qr_forced() -> None:
 
     if pyotp is None or qrcode is None:
         st.error(_t_auth("auth_qr_error_lib"))
-        st.markdown(_t_auth("auth_totp_uri"))
-        st.code(secret, language="text")
         return
 
     # URI TOTP
@@ -263,8 +258,6 @@ def _render_totp_qr_forced() -> None:
         uri = totp.provisioning_uri(name=account, issuer_name=issuer)
     except Exception as e:
         st.warning(f"{_t_auth('auth_qr_error_generic')} {e}")
-        st.markdown(_t_auth("auth_totp_uri"))
-        st.code(secret, language="text")
         return
 
     # Génération du QR + affichage
@@ -275,13 +268,16 @@ def _render_totp_qr_forced() -> None:
         qr_img.save(buf, format="PNG")
         buf.seek(0)
         img_bytes = buf.getvalue()
-        st.image(img_bytes, caption=f"{issuer} · {account}", width=250)
+        # Centrage du QR code
+        col_left, col_center, col_right = st.columns([1, 2, 1])
+        with col_center:
+            st.image(img_bytes, caption=f"{issuer} · {account}", width=250)
     except Exception as e:
         st.warning(f"{_t_auth('auth_qr_error_generic')} {e}")
 
-    st.markdown(_t_auth("auth_totp_uri"))
-    st.code(secret, language="text")
-
+# Ancien affichage du secret → supprimé
+# st.markdown(_t_auth("auth_totp_uri"))
+# st.code(secret, language="text")
 
 def _check_totp_code(otp: str) -> bool:
     """Vérifie le code TOTP (Google Authenticator)."""
