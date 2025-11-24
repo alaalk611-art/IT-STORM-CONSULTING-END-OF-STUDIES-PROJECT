@@ -83,3 +83,6 @@ PyPDF2>=3.0
 # --- ML ---
 scikit-learn>=1.5
 
+faster-whisper
+gTTS
+audio-recorder-streamlit

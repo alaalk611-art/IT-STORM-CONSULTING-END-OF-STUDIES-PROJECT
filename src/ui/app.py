@@ -6,7 +6,7 @@ from pathlib import Path  # si pas déjà importé
 from src.ui.i18n import set_lang_from_query, get_lang, t
 import streamlit as st
 from src.ui.sections import  auth
-
+from src.ui.sections import speech_chat
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
 if "lang_initialized" not in st.session_state:
     set_lang_from_query()          # lit ?lang=fr et initialise st.session_state["lang"]
@@ -1251,10 +1251,12 @@ with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "
 # --------------------------------------------------------------------------------------
 # TABS
 # --------------------------------------------------------------------------------------
-tab_chat, tab_upload, tab_generate, tab_market = st.tabs(
-    ["💬Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"]
+tab_chat, tab_upload, tab_generate, tab_market, tab_voice = st.tabs(
+    ["💬 Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch", "🎤 Voice Copilot"]
 )
+
 render_chatbot()
+
 
 
 # ---- TAB 1: CHAT (protégé par 2FA) ----
@@ -1354,6 +1356,9 @@ with tab_generate:
 # ---- TAB 4: MARKET WATCH ----
 with tab_market:
     market.render()
+# ---- TAB 5: VOICE COPILOT ----
+with tab_voice:
+    speech_chat.render()
     
 # --------------------------------------------------------------------------------------
 # END OF FILE

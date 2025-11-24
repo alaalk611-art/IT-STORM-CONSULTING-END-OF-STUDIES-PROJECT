@@ -13,7 +13,7 @@ from fastapi import APIRouter
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-
+from src.api import speech_stt, speech_tts
 # ============================================================
 # Configuration : chemin du fichier de suggestions
 # ============================================================
@@ -64,6 +64,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Routes Speech-to-Text et Text-to-Speech
+app.include_router(speech_stt.router, prefix="/stt", tags=["speech-stt"])
+app.include_router(speech_tts.router, prefix="/tts", tags=["speech-tts"])
 
 # ============================================================
 # Modèles Pydantic
