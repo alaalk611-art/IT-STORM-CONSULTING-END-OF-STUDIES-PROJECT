@@ -25,3 +25,4 @@ if __name__ == "__main__":
         print("Usage: python clean_mp3_tags.py <chemin_du_fichier_mp3>")
     else:
         clean_tags(sys.argv[1])
+        ####

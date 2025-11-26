@@ -83,6 +83,9 @@ PyPDF2>=3.0
 # --- ML ---
 scikit-learn>=1.5
 
-faster-whisper
-gTTS
-audio-recorder-streamlit
+faster-whisper==0.10.0
+pydub==0.25.1
+gTTS==2.5.1
+ffmpeg-python==0.2.0
+ffmpeg>=4.4
+audio-recorder-streamlit==0.0.8

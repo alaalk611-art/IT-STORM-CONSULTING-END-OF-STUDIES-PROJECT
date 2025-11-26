@@ -1,13 +1,180 @@
-# app.py — StormCopilot (IT-STORM) — Local HF only (UPDATED)
 from __future__ import annotations
+# app.py — StormCopilot (IT-STORM) — Local HF only (UPDATED)
+# === Chatbot (mutualisé) ===
+from src.chatbot import ask_rag, get_chain_cached
+from pathlib import Path  # si pas déjà importé
+from src.ui.i18n import set_lang_from_query, get_lang, t
+import streamlit as st
+from src.ui.sections import  auth
+from src.ui.sections import speech_chat
+# ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
+if "lang_initialized" not in st.session_state:
+    set_lang_from_query()          # lit ?lang=fr et initialise st.session_state["lang"]
+    st.session_state["lang_initialized"] = True
+    # lit ?lang=fr et initialise st.session_state["lang"]
+from src.ui.components import floating_chatbot
+import streamlit as st
+from streamlit_javascript import st_javascript
+from src.ui.components.floating_chatbot import render_chatbot
+from src.ui.tabs import generate_docs_rag 
+from src.utils.doc_tools import make_docx, make_ppt, summarize_text
+from src.ui.sections import market
 
-import base64
-import io
-import os
-import sys
-import time
+# === UI principale ===
+import os, io, base64, time, sys
+from src.ui.tabs import generate_docs_rag
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Tuple, Optional
+import io
+from datetime import datetime
+from typing import List, Dict
+import os
+import streamlit as st
+
+# ===================== I18N (EN/FR) =====================
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "en"
+
+LANG = {
+    "en": {
+        "sidebar_settings": "Settings",
+        "sidebar_dark_mode": "Dark mode",
+        "sidebar_diag": "Diagnostics",
+        "sidebar_llm_backend": "LLM backend: **Local Hugging Face** ✅",
+        "sidebar_theme_note": "Auto theme · v2.2 (Local-only, CPU-safe)",
+        "auth.render_auth_sidebar": "Authentification",
+
+        "kpi_indexed_docs": "Indexed Docs",
+        "kpi_chunks_file": "Chunks File",
+        "kpi_vector_db": "Vector DB",
+        "kpi_output_folder": "Output Folder",
+
+        "tab_chat": "💬 Knowledge Chat",
+        "tab_upload": "📂 Upload & Index",
+        "tab_generate": "📝 Generate Docs",
+        "tab_market": "🌍 Market Watch",
+        "tab_qa": "🔎 English QA (RAG EN)",
+
+        "chat_title": "Knowledge Q&A (RAG with LangChain + Local HF)",
+        "chat_input": "Ask a question about your indexed documents",
+        "chat_button": "🔎 Retrieve & Answer",
+        "chat_clear": "🧹 Clear",   # ✅ ajouté ici
+        "chat_answer": "Answer",
+        "chat_sources": "Sources (raw chunks)",
+        "chat_question_too_long": "Your question is very long — I truncated it to 2000 characters for stability.",
+        "chat_tip_rebuild": "Tip: if you switched embedding model, rebuild your index first.",
+
+        "upload_title": "Upload documents & (re)build index",
+        "upload_uploader": "Upload PDF/DOCX/TXT",
+        "upload_save": "⬆️ Save uploads",
+        "upload_saved": "Saved {n} file(s) to `data/raw/`.",
+        "upload_extract": "⚙️ Extract & Chunk",
+        "upload_extracted": "Created {n} chunks → {outp}",
+        "upload_rebuild": "🧠 Rebuild Vector Index",
+        "upload_rebuilt": "Indexed {n} chunks into ChromaDB.",
+        "upload_preview": "Preview extracted chunks",
+
+        "theme_env": "Env: Local",
+        "brand_market_api": "Market API: ",
+        "brand_llm": "LLM (Local HF): ",
+        "brand_up": "✅ Up",
+        "brand_down": "❌ Down",
+        "brand_ready": "✅ Ready",
+        "brand_not_ready": "⚠️ Not ready",
+
+        "lang_picker": "Language",
+        "lang_en": "English",
+        "lang_fr": "Français",
+    },
+    "fr": {
+        "sidebar_settings": "Paramètres",
+        "sidebar_dark_mode": "Mode sombre",
+        "sidebar_diag": "Diagnostics",
+        "sidebar_llm_backend": "Moteur LLM : **Hugging Face local** ✅",
+        "sidebar_theme_note": "Thème auto · v2.2 (Local uniquement, CPU-safe)",
+
+        "kpi_indexed_docs": "Documents indexés",
+        "kpi_chunks_file": "Fichier de segments",
+        "kpi_vector_db": "Base vectorielle",
+        "kpi_output_folder": "Dossier d’export",
+
+        "tab_chat": "💬 Chat Connaissance",
+        "tab_upload": "📂 Import & Index",
+        "tab_generate": "📝 Générer des documents",
+        "tab_market": "🌍 Marchés",
+        "tab_qa": "🔎 QA anglais (RAG EN)",
+
+        "chat_title": "Q&R Connaissance (RAG avec LangChain + HF local)",
+        "chat_input": "Pose une question sur tes documents indexés",
+        "chat_button": "🔎 Récupérer & Répondre",
+        "chat_clear": "🧹 Effacer",   # ✅ ajouté ici
+        "chat_answer": "Réponse",
+        "chat_sources": "Sources (extraits bruts)",
+        "chat_question_too_long": "Ta question est très longue — je l’ai tronquée à 2000 caractères pour la stabilité.",
+        "chat_tip_rebuild": "Astuce : si tu as changé de modèle d’embedding, reconstruis l’index avant.",
+
+        "upload_title": "Importer des documents & (re)construire l’index",
+        "upload_uploader": "Importer PDF/DOCX/TXT",
+        "upload_save": "⬆️ Enregistrer les fichiers",
+        "upload_saved": "✅ {n} fichier(s) enregistré(s) dans `data/raw/`.",
+        "upload_extract": "⚙️ Extraire & Segmenter",
+        "upload_extracted": "Créé {n} segments → {outp}",
+        "upload_rebuild": "🧠 Reconstruire l’index vectoriel",
+        "upload_rebuilt": "Indexé {n} segments dans ChromaDB.",
+        "upload_preview": "Aperçu des segments extraits",
+
+        "theme_env": "Env : Local",
+        "brand_market_api": "API Marché : ",
+        "brand_llm": "LLM (HF local) : ",
+        "brand_up": "✅ OK",
+        "brand_down": "❌ Hors ligne",
+        "brand_ready": "✅ Prêt",
+        "brand_not_ready": "⚠️ Non prêt",
+
+        "lang_picker": "Langue",
+        "lang_en": "Anglais",
+        "lang_fr": "Français",
+    },
+}
+
+def t(key: str) -> str:
+    lang = st.session_state.get("lang", "en")
+    return LANG.get(lang, LANG["en"]).get(key, key)
+# ============================================================
+
+from src.rag.chain import build_rag_chain
+from src.ui.tabs import generate_docs_rag  # <— ce fichier
+
+
+# Optionnel : valeurs par défaut si .env non chargé
+os.environ.setdefault("LLM_MODEL", "google/flan-t5-base")
+os.environ.setdefault("LLM_DEVICE", "-1")
+os.environ.setdefault("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+os.environ.setdefault("RAG_TOPK", "4")
+os.environ.setdefault("RAG_MAX_CONTEXT_CHARS", "1300")
+def _get_source_names_for_query(query: str, k: int = 4) -> List[str]:
+    try:
+        rows = retrieve(query, k=k, similarity_threshold=0.0)  # (doc, src, dist)
+        names = []
+        for _doc, src, _dist in rows:
+            try:
+                names.append(Path(src).name)
+            except Exception:
+                names.append(str(src))
+        # unique en conservant l'ordre
+        seen = set()
+        uniq = []
+        for n in names:
+            if n not in seen:
+                seen.add(n)
+                uniq.append(n)
+        return uniq
+    except Exception:
+        return []
+
+@st.cache_resource(show_spinner=False)
+def load_chain():
+    return build_rag_chain()
 
 # =============== Anti-crash: limiter threads & parallelism ===============
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
@@ -18,19 +185,21 @@ os.environ.setdefault("NUMEXPR_MAX_THREADS", "1")
 # --- Import path (project root) ---
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-import pandas as pd
-import plotly.graph_objects as go
-import requests
 # --- Std / 3rd-party ---
 import streamlit as st
+import pandas as pd
+import requests
+import plotly.graph_objects as go
 from dotenv import load_dotenv
-from langchain_core.runnables import RunnablePassthrough
-from langchain_community.embeddings import SentenceTransformerEmbeddings
+API_BASE = os.getenv("MARKET_API_BASE_URL", "http://127.0.0.1:8001")
+TIMEOUT = float(os.getenv("FINANCE_TIMEOUT", "10"))
 # --- LangChain / RAG ---
 from langchain_community.llms import HuggingFacePipeline
 from langchain_community.vectorstores import Chroma as LCChroma
-from langchain_core.output_parsers import StrOutputParser
+from langchain_community.embeddings import SentenceTransformerEmbeddings
 from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
 
 # --- PyTorch (set threads early) ---
 try:
@@ -40,13 +209,9 @@ except Exception:
     pass
 
 # --- Transformers (local LLM + summarizer) ---
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from transformers import pipeline as hf_pipeline
-
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline as hf_pipeline
 try:
-    from transformers import AutoModelForSeq2SeqLM as _AM
-    from transformers import AutoTokenizer as _AT
-    from transformers import pipeline
+    from transformers import pipeline, AutoTokenizer as _AT, AutoModelForSeq2SeqLM as _AM
     HF_AVAILABLE = True
 except Exception:
     HF_AVAILABLE = False
@@ -54,10 +219,11 @@ except Exception:
 # --- Chroma / Embeddings ---
 import chromadb
 from chromadb.config import Settings
-from docx import Document
+from sentence_transformers import SentenceTransformer
+
 # --- Office formats ---
 from pptx import Presentation
-from sentence_transformers import SentenceTransformer
+from docx import Document
 
 # --- Paths / constants ---
 ROOT = Path(__file__).resolve().parents[2]
@@ -82,6 +248,294 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# ============================================================
+# UI Layout optimization — centrer et réduire marges
+# ============================================================
+st.markdown("""
+<style>
+/* Supprime les marges bleues et recentre tout le contenu principal */
+header[data-testid="stHeader"] {
+    height: 0 !important;
+    visibility: hidden !important;
+}
+
+/* APRÈS — flux normal, rien ne “mange” le haut de page */
+.block-container {
+    /* revenir au flux normal */
+    display: block;
+    min-height: initial;
+    padding-top: 2rem !important;   /* petite marge en haut */
+    padding-bottom: 1.5rem !important;
+    margin: 0 auto !important;
+}
+
+section.main {
+    display: block;
+}
+
+/* si tu veux cacher l’header, compense son retrait par un padding-top global */
+header[data-testid="stHeader"] {
+    height: 0 !important;
+    visibility: hidden !important;
+}
+.stAppViewContainer .main .block-container {
+    padding-top: 3.5rem !important; /* compense l’header caché */
+}
+
+
+/* Supprime les marges / espaces inutiles en haut et bas */
+.stAppViewContainer, .main {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Cache les diviseurs, si visibles */
+hr, [role="separator"] {
+    display: none !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# src/api/main.py
+import os
+from typing import List, Any, Dict
+
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from dotenv import load_dotenv
+
+# === Tes imports existants (marchés) ==========================
+from src.api.models import Quote, OHLCV, SearchResult
+from src.api.providers.yahoo import YahooProvider
+from src.api.utils import is_euronext_open, paris_now
+# ===============================================================
+
+load_dotenv()
+
+app = FastAPI(
+    title="IT-Storm API",
+    version="1.1.0",
+    description="Market API + Chat bubble endpoint (RAG) pour it-storm.fr",
+)
+
+# --- CORS ---
+def _parse_origins(env_val: str) -> List[str]:
+    if not env_val:
+        return []
+    return [o.strip() for o in env_val.split(",") if o.strip()]
+
+# Par défaut on autorise it-storm.fr + localhost dev ; surcharge possible par CORS_ORIGINS
+_default_origins = [
+    "https://it-storm.fr",
+    "https://www.it-storm.fr",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+allow_origins = _parse_origins(os.getenv("CORS_ORIGINS")) or _default_origins
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Static: servir la bulle (embed.js) ---
+# Dossier vu dans ton arbo : client_chatbot/public/embed.js
+STATIC_CLIENT_DIR = os.path.join(os.getcwd(), "client_chatbot", "public")
+if os.path.isdir(STATIC_CLIENT_DIR):
+    app.mount("/client-chat", StaticFiles(directory=STATIC_CLIENT_DIR), name="client-chat")
+else:
+    # On ne crashe pas l'appli si le dossier n'existe pas ; simple warning en logs
+    print(f"[WARN] Static dir not found for chat bubble: {STATIC_CLIENT_DIR}")
+
+# =======================
+#  ROUTES MARCHÉ (existantes)
+# =======================
+PROVIDER = YahooProvider()
+
+@app.get("/v1/health")
+async def health():
+    return {"status": "ok", "time": paris_now().isoformat()}
+
+@app.get("/v1/marketstatus")
+async def market_status():
+    return {"market": "Euronext Paris", "is_open": is_euronext_open(), "time": paris_now().isoformat()}
+
+@app.get("/v1/search", response_model=List[SearchResult])
+async def search(q: str = Query(..., min_length=1)):
+    return await PROVIDER.search(q)
+
+@app.get("/v1/quote/{symbol}", response_model=Quote)
+async def get_quote(symbol: str):
+    try:
+        return await PROVIDER.quote(symbol)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/v1/ohlcv/{symbol}", response_model=OHLCV)
+async def get_ohlcv(symbol: str, interval: str = "1m", range: str = "1d"):
+    try:
+        return await PROVIDER.ohlcv(symbol, interval=interval, range_=range)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# =======================
+#  CHAT / RAG (nouveaux)
+# =======================
+
+# Chargement paresseux de la chaîne QA (même logique que tools/qa_cli)
+_QA_CHAIN: Any = None
+_QA_LOADED: bool = False
+
+def _try_build_chain() -> Any:
+    """
+    Essaie plusieurs méthodes classiques pour récupérer la même chaîne
+    utilisée par `tools/qa_cli.py`.
+    Adapte si besoin selon tes vrais noms de fonctions.
+    """
+    # 1) src.rag.chain: get_chain / build_chain
+    try:
+        from src.rag.chain import get_chain  # type: ignore
+        return get_chain()
+    except Exception:
+        pass
+    try:
+        from src.rag.chain import build_chain  # type: ignore
+        return build_chain()
+    except Exception:
+        pass
+
+    # 2) src.rag (ex: get_chain au niveau du package)
+    try:
+        from src import rag  # type: ignore
+        if hasattr(rag, "get_chain"):
+            return rag.get_chain()
+        if hasattr(rag, "build_chain"):
+            return rag.build_chain()
+    except Exception:
+        pass
+
+    # 3) tools.qa_cli: chaîne exposée ?
+    try:
+        # Si ton qa_cli expose une fonction utilitaire (à adapter si tu en as une)
+        from tools.qa_cli import get_chain as cli_get_chain  # type: ignore
+        return cli_get_chain()
+    except Exception:
+        pass
+
+    # 4) Rien trouvé
+    raise RuntimeError(
+        "Impossible de charger la chaîne QA. "
+        "Expose une fonction `get_chain()` ou `build_chain()` dans `src.rag.chain` "
+        "ou adapte `_try_build_chain()` à ton projet."
+    )
+
+def _ensure_chain() -> Any:
+    global _QA_CHAIN, _QA_LOADED
+    if _QA_LOADED and _QA_CHAIN is not None:
+        return _QA_CHAIN
+    _QA_CHAIN = _try_build_chain()
+    _QA_LOADED = True
+    return _QA_CHAIN
+
+def _invoke_chain(chain: Any, query: str) -> str:
+    """
+    Normalise l'appel pour différents types de chaînes (LCEL LangChain, fonctions, etc.).
+    """
+    # Cas LangChain LCEL: chain.invoke({"query": ...})
+    try:
+        out = chain.invoke({"query": query})
+        if isinstance(out, dict):
+            # Champs possibles: 'result', 'answer', 'output_text', etc.
+            for k in ("result", "answer", "output_text", "text", "content"):
+                if k in out and out[k]:
+                    return str(out[k])
+            # Sinon, tout le dict
+            return str(out)
+        return str(out)
+    except Exception:
+        pass
+
+    # Cas fonction simple: chain(query)
+    try:
+        return str(chain(query))
+    except Exception:
+        pass
+
+    # Cas méthode .run
+    try:
+        return str(chain.run(query))
+    except Exception:
+        pass
+
+    # Dernier recours
+    return "Je n’ai pas pu générer de réponse (chaîne non compatible)."
+
+@app.post("/chat")
+async def chat(req: Request):
+    """
+    Endpoint utilisé par la bulle JS (embed.js) ou tout frontend.
+    Reçoit { "message": "..." } et renvoie { "answer", "sources", "suggestions" }.
+    """
+    try:
+        payload: Dict[str, Any] = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Payload JSON invalide")
+
+    q = str(payload.get("message") or "").strip()
+    if not q:
+        raise HTTPException(status_code=422, detail="Champ 'message' requis")
+
+    try:
+        # k = top_k UI si dispo, sinon défaut 4
+        k = 4
+        try:
+            # si un slider Streamlit a posé top_k dans session_state (facultatif)
+            k = int(st.session_state.get("top_k_from_ui", 4))
+        except Exception:
+            pass
+
+        result = ask_rag(
+            question=q,
+            k=k,
+            get_sources_fn=_get_source_names_for_query
+        )
+        return JSONResponse(result)
+    except Exception as e:
+        return JSONResponse(
+            {"answer": f"[Erreur backend] {e}", "sources": [], "suggestions": []},
+            status_code=500
+        )
+
+# Petite page de test locale (facultatif)
+@app.get("/")
+async def home():
+    return HTMLResponse("""
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <title>IT-Storm — Test bulle</title>
+  </head>
+  <body>
+    <h1>Test bulle IT-Storm</h1>
+    <p>Si la bulle apparaît en bas à droite, clique et pose une question.</p>
+
+    <script defer
+      src="/client-chat/embed.js"
+      data-api="/chat"
+      data-brand="#2563eb"
+      data-title="IT-Storm Chatbot"></script>
+  </body>
+</html>
+""" )
 
 # --------------------------------------------------------------------------------------
 # THEME & BRANDING
@@ -383,47 +837,163 @@ def save_uploaded_files(files):
         saved.append(str(target))
     return saved
 
-def extract_and_chunk(in_dir=DATA_RAW, out_path=DATA_PROCESSED / "chunks.jsonl", chunk_size=900, overlap=150):
+def extract_and_chunk(
+    in_dir=DATA_RAW,
+    out_path=DATA_PROCESSED / "chunks.jsonl",
+    chunk_size=900,
+    overlap=150,
+):
+    """
+    Extrait le texte de plusieurs formats (PDF, DOCX, TXT/MD, PPTX, CSV, XLS/XLSX, HTML/HTM, JSON),
+    le découpe en segments, puis écrit un JSONL pour l’indexation RAG.
+    Retourne (nb_chunks, out_path, stats_dict).
+    """
     import json
+    from pathlib import Path
 
-    import docx2txt
-    from pypdf import PdfReader
-    def extract_pdf(p):
-      try:
-        reader = PdfReader(p)
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-      except Exception:
-        return ""
-    def extract_docx(p):
-      try:
-        return docx2txt.process(p)
-      except Exception:
-        return ""
+    # ---- Helpers par type ----
+    def extract_pdf(p: Path) -> str:
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(p)
+            return "\n".join((page.extract_text() or "") for page in reader.pages)
+        except Exception:
+            return ""
+
+    def extract_docx(p: Path) -> str:
+        try:
+            import docx2txt
+            return docx2txt.process(p)
+        except Exception:
+            return ""
+
+    def extract_txt_like(p: Path) -> str:
+        try:
+            return p.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return ""
+
+    def extract_pptx(p: Path) -> str:
+        try:
+            from pptx import Presentation
+            prs = Presentation(p)
+            parts = []
+            for slide in prs.slides:
+                for sh in slide.shapes:
+                    if hasattr(sh, "text") and sh.text:
+                        parts.append(sh.text)
+            return "\n".join(parts)
+        except Exception:
+            return ""
+
+    def extract_csv(p: Path) -> str:
+        try:
+            import pandas as pd
+            df = pd.read_csv(p)
+            return df.to_string(index=False)
+        except Exception:
+            return ""
+
+    def extract_xlsx(p: Path) -> str:
+        try:
+            import pandas as pd
+            xls = pd.ExcelFile(p)
+            parts = []
+            for sheet in xls.sheet_names:
+                df = xls.parse(sheet)
+                parts.append(f"# Sheet: {sheet}\n{df.to_string(index=False)}")
+            return "\n\n".join(parts)
+        except Exception:
+            return ""
+
+    def extract_html(p: Path) -> str:
+        try:
+            from bs4 import BeautifulSoup
+            html = p.read_text(encoding="utf-8", errors="ignore")
+            return BeautifulSoup(html, "html.parser").get_text(separator="\n")
+        except Exception:
+            # Fallback minimal au cas où
+            import re
+            html = p.read_text(encoding="utf-8", errors="ignore")
+            text = re.sub(r"<(script|style)[^>]*>.*?</\\1>", "", html, flags=re.S|re.I)
+            text = re.sub(r"<[^>]+>", " ", text)
+            return re.sub(r"\s+", " ", text).strip()
+
+    def extract_json(p: Path) -> str:
+        try:
+            raw = json.loads(p.read_text(encoding="utf-8", errors="ignore"))
+        except Exception:
+            return ""
+        parts = []
+        def walk(x):
+            if isinstance(x, dict):
+                for k, v in x.items():
+                    parts.append(str(k))
+                    walk(v)
+            elif isinstance(x, list):
+                for it in x:
+                    walk(it)
+            else:
+                s = str(x)
+                if s and s != "None":
+                    parts.append(s)
+        walk(raw)
+        return "\n".join(parts)
+
+    # ---- Boucle fichiers ----
     recs = []
+    stats = {"seen": 0, "processed": 0, "ignored": 0, "by_ext": {}}
     for p in Path(in_dir).glob("*"):
-        text = ""
-        if p.suffix.lower() == ".pdf":
-            text = extract_pdf(p)
-        elif p.suffix.lower() == ".docx":
-            text = extract_docx(p)
-        elif p.suffix.lower() in {".txt", ".md"}:
-            try:
-                text = p.read_text(encoding="utf-8", errors="ignore")
-            except Exception:
-                text = ""
-        if not text:
+        if not p.is_file():
             continue
+        stats["seen"] += 1
+        ext = p.suffix.lower()
+        stats["by_ext"].setdefault(ext, 0)
+
+        text = ""
+        if ext == ".pdf":
+            text = extract_pdf(p)
+        elif ext == ".docx":
+            text = extract_docx(p)
+        elif ext in {".txt", ".md"}:
+            text = extract_txt_like(p)
+        elif ext == ".pptx":
+            text = extract_pptx(p)
+        elif ext == ".csv":
+            text = extract_csv(p)
+        elif ext in {".xlsx", ".xls"}:
+            text = extract_xlsx(p)
+        elif ext in {".html", ".htm"}:
+            text = extract_html(p)
+        elif ext == ".json":
+            text = extract_json(p)
+        else:
+            stats["ignored"] += 1
+            continue
+
+        if not text:
+            stats["ignored"] += 1
+            continue
+
+        # Chunking
         words = text.split()
+        step = max(1, (chunk_size - overlap))
         i = 0
         while i < len(words):
-            chunk_words = words[i:i+chunk_size]
+            chunk_words = words[i : i + chunk_size]
             recs.append({"source": str(p), "text": " ".join(chunk_words)})
-            i += max(1, (chunk_size - overlap))
+            i += step
+
+        stats["processed"] += 1
+        stats["by_ext"][ext] += 1
+
+    # Écriture JSONL
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         for r in recs:
-            f.write(__import__("json").dumps(r, ensure_ascii=False) + "\n")
-    return len(recs), out_path
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+
+    return len(recs), out_path, stats
 
 def rebuild_index(in_path=DATA_PROCESSED / "chunks.jsonl"):
     client, _ = get_db()
@@ -506,24 +1076,165 @@ def make_docx(title="Executive Summary", paragraphs=None) -> bytes:
     return bio.read()
 
 # --------------------------------------------------------------------------------------
-# SIDEBAR — THEME TOGGLE (Dark / Light)
+# SIDEBAR — DRAPEAUX CLIQUABLES (FR / EN) + THEME + effet visuel
 # --------------------------------------------------------------------------------------
-st.sidebar.header("Settings")
-dark_mode = st.sidebar.toggle("Dark mode", value=True, help="Basculer clair/sombre")
+import base64
+from pathlib import Path
+import streamlit as st
+
+
+# Chemins vers les drapeaux
+flag_en_path = Path("src/ui/assets/flag_en.png")
+flag_fr_path = Path("src/ui/assets/flag_fr.png")
+
+def _b64(p: Path) -> str:
+    """Encode une image en base64 pour affichage HTML"""
+    with open(p, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+# Langue (session_state ou URL ?lang=fr)
+url_lang = st.query_params.get("lang")
+if "lang" not in st.session_state:
+    st.session_state["lang"] = url_lang if url_lang in {"en", "fr"} else "en"
+else:
+    if url_lang in {"en", "fr"} and url_lang != st.session_state["lang"]:
+        st.session_state["lang"] = url_lang
+
+def _set_lang(lang: str):
+    st.session_state["lang"] = lang
+    st.query_params["lang"] = lang
+    st.toast("Français activé 🇫🇷" if lang == "fr" else "English enabled 🇬🇧")
+
+# --------------------------------------------------------------------------------------
+# CSS pour les drapeaux + effet clic
+# --------------------------------------------------------------------------------------
+st.sidebar.markdown("""
+<style>
+.lang-flags {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    margin-bottom:10px;
+}
+.lang-flag img {
+    height:36px;
+    border-radius:8px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);
+    border:2px solid transparent;
+    transition:transform 0.2s, border-color 0.2s;
+    cursor:pointer;
+}
+.lang-flag.active img {
+    border-color:#4f46e5;
+}
+.lang-flag img:hover {
+    transform:scale(1.07);
+}
+/* Effet visuel temporaire au clic */
+.lang-flag img:active {
+    border-color:#2563eb !important;
+    box-shadow:0 0 8px rgba(37,99,235,0.6);
+    transform:scale(0.97);
+}
+</style>
+""", unsafe_allow_html=True)
+
+# --------------------------------------------------------------------------------------
+# HTML cliquable (même fenêtre)
+# --------------------------------------------------------------------------------------
+lang = st.session_state["lang"]
+html_flags = f"""
+<div class="lang-flags">
+  <a class="lang-flag {'active' if lang=='en' else ''}" href="?lang=en" target="_self" title="English">
+    <img src="data:image/png;base64,{_b64(flag_en_path)}" />
+  </a>
+  <a class="lang-flag {'active' if lang=='fr' else ''}" href="?lang=fr" target="_self" title="Français">
+    <img src="data:image/png;base64,{_b64(flag_fr_path)}" />
+  </a>
+</div>
+"""
+st.sidebar.markdown("### 🌐 Language / Langue")
+st.sidebar.markdown(html_flags, unsafe_allow_html=True)
+
+# --------------------------------------------------------------------------------------
+# MODE SOMBRE / CLAIR
+# --------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------
+# MODE SOMBRE / CLAIR — unique key to avoid StreamlitDuplicateElementKey
+# --------------------------------------------------------------------------------------
+dark_mode_key = "ui_dark_mode_toggle_unique"
+
+# Ensure a default state
+if "dark_mode" not in st.session_state:
+    st.session_state["dark_mode"] = False
+
+dark_mode = st.sidebar.toggle(
+    "Dark mode" if st.session_state.get("lang", "en") == "en" else "Mode sombre",
+    value=st.session_state["dark_mode"],
+    help="Toggle dark/light theme" if st.session_state.get("lang", "en") == "en" else "Basculer clair/sombre",
+    key=dark_mode_key,
+)
+
+st.session_state["dark_mode"] = dark_mode
+
 apply_theme(THEME_DARK if dark_mode else THEME_LIGHT)
 
+# --------------------------------------------------------------------------------------
+# AUTRES PARAMÈTRES
+# --------------------------------------------------------------------------------------
 st.sidebar.caption("IT-STORM · Innovation & Consulting")
 
-top_k = st.sidebar.slider("Top-K results", 2, 12, 4, 1)
-sim_thresh = st.sidebar.slider("Similarity threshold (distance)", 0.0, 1.5, 0.0, 0.05)
-model_name = st.sidebar.text_input("Embedding model", EMB_MODEL_NAME)
+top_k = st.sidebar.slider(
+    "Top-K results" if st.session_state.get("lang", "en") == "en" else "Top-K résultats",
+    2, 12, 4, 1,
+    help=(
+        "Number of most similar document chunks retrieved from the vector database "
+        "to build the context for each question."
+        if st.session_state.get("lang", "en") == "en"
+        else "Nombre de segments de documents similaires utilisés pour construire le contexte des réponses."
+    ),
+)
+
+sim_thresh = st.sidebar.slider(
+    "Similarity threshold (distance)" if st.session_state.get("lang", "en") == "en" else "Seuil de similarité (distance)",
+    0.0, 1.5, 0.0, 0.05,
+    help=(
+        "Maximum cosine distance between your query and a document chunk. "
+        "Lower values mean stricter matching."
+        if st.session_state.get("lang", "en") == "en"
+        else "Distance maximale de similarité entre la question et un segment de document. "
+             "Plus la valeur est faible, plus la correspondance est stricte."
+    ),
+)
+
+model_name = st.sidebar.text_input(
+    "Embedding model" if st.session_state.get("lang", "en") == "en" else "Modèle d’embedding",
+    EMB_MODEL_NAME,
+    help=(
+        "The model used to transform text into numerical embeddings for semantic search."
+        if st.session_state.get("lang", "en") == "en"
+        else "Modèle utilisé pour convertir le texte en vecteurs numériques (recherche sémantique)."
+    ),
+)
 if model_name != EMB_MODEL_NAME:
-    st.sidebar.warning("This UI uses MiniLM; change in code to switch model safely.")
+    st.sidebar.warning(
+        "This UI uses MiniLM; change in code to switch model safely."
+        if st.session_state.get("lang", "en") == "en"
+        else "Cette interface utilise MiniLM ; change dans le code pour modifier le modèle en sécurité."
+    )
 
 st.sidebar.markdown("---")
-st.sidebar.subheader("Diagnostics")
-st.sidebar.markdown("LLM backend: **Local Hugging Face** ✅")
-st.sidebar.caption("Theme auto · v2.2 (Local-only, CPU-safe)")
+st.sidebar.subheader("Diagnostics" if st.session_state.get("lang", "en") == "en" else "Diagnostics")
+st.sidebar.markdown(
+    "LLM backend: **Local Hugging Face** ✅"
+    if st.session_state.get("lang", "en") == "en"
+    else "Moteur LLM : **Hugging Face local** ✅"
+)
+st.sidebar.caption(
+    "Auto theme · v2.2 (Local-only, CPU-safe)"
+    if st.session_state.get("lang", "en") == "en"
+    else "Thème auto · v2.2 (Local uniquement, CPU-safe)"
+)
 
 # --------------------------------------------------------------------------------------
 # HEADER
@@ -532,158 +1243,125 @@ render_brand_header(api_ok=None, llm_ok=True)
 
 # KPI row
 k1, k2, k3, k4 = st.columns(4)
-with k1: kpi_card("Indexed Docs", f"{len(list(DATA_RAW.glob('*')))} files")
-with k2: kpi_card("Chunks File", "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
-with k3: kpi_card("Vector DB", "✅" if any(VEC_DIR.glob('*')) else "❌")
-with k4: kpi_card("Output Folder", "✅" if any(OUT_DIR.glob('*')) else "—")
+with k1: kpi_card(t("kpi_indexed_docs"), f"{len(list(DATA_RAW.glob('*')))} files")
+with k2: kpi_card(t("kpi_chunks_file"), "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
+with k3: kpi_card(t("kpi_vector_db"), "✅" if any(VEC_DIR.glob('*')) else "❌")
+with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
 
 # --------------------------------------------------------------------------------------
 # TABS
 # --------------------------------------------------------------------------------------
-tab1, tab2, tab3, tab4 = st.tabs(["💬 Knowledge Chat", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch"])
+tab_chat, tab_upload, tab_generate, tab_market, tab_voice = st.tabs(
+    ["💬 Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch", "🎤 Voice Copilot"]
+)
 
-# ---- TAB 1: CHAT ----
-with tab1:
-    st.markdown("### Knowledge Q&A (RAG with LangChain + Local HF)")
-    q = st.text_input("Ask a question about your indexed documents")
-    btn_search = st.button("🔎 Retrieve & Answer", use_container_width=True)
+render_chatbot()
 
-    k = top_k
-    thresh = sim_thresh
 
-    if btn_search and q:
+
+# ---- TAB 1: CHAT (protégé par 2FA) ----
+with tab_chat:
+    # Si l'utilisateur N'EST PAS authentifié, on montre seulement le login
+    if not auth.render_auth_gate():
+        st.stop()  # On ne montre pas le contenu du chat
+
+    # À partir d'ici, utilisateur authentifié
+    st.markdown("### " + t("chat_title"))
+
+    # Conserver top_k côté session pour l’endpoint /chat (optionnel)
+    st.session_state["top_k_from_ui"] = top_k
+
+    # 🔑 clé unique pour éviter StreamlitDuplicateElementKey
+    q = st.text_input(t("chat_input"), key="main_chat_input")
+
+    c1, c2 = st.columns([1, 1])
+    do_search = c1.button(t("chat_button"), use_container_width=True, key="btn_chat_search")
+    clear_box = c2.button(t("chat_clear"), use_container_width=True, key="btn_chat_clear")
+
+    if clear_box:
+        st.session_state.pop("last_chat_result", None)
+        st.rerun()
+
+    if do_search and q:
+        query = q[:2000] if len(q) > 2000 else q
         if len(q) > 2000:
-            st.warning("Votre question est très longue — j’ai tronqué à 2000 caractères pour stabilité.")
-            q = q[:2000]
-        with st.spinner("Retrieving context & generating answer..."):
+            st.info(t("chat_question_too_long"))
+        with st.spinner("⏳"):
             try:
-                chain = build_rag_chain(k=k)
-                answer = chain.invoke(q)
-                st.markdown("#### Answer")
-                st.write(answer)
-                st.markdown("#### Sources (raw chunks)")
-                rows = retrieve(q, k=k, similarity_threshold=thresh)
-                render_sources(rows)
+                result = ask_rag(
+                    question=query,
+                    k=top_k,
+                    get_sources_fn=_get_source_names_for_query,
+                )
+                st.session_state["last_chat_result"] = {"q": query, **result}
             except Exception as e:
-                st.error(f"RAG chain failed: {e}")
-                st.info("Tip: if you switched embedding model, rebuild your index first.")
+                st.error(f"Erreur RAG : {e}")
+
+    # Affichage du dernier résultat
+    last = st.session_state.get("last_chat_result")
+    if last:
+        st.markdown("#### " + t("chat_answer"))
+        st.write(last.get("answer", ""))
+
+        if last.get("sources"):
+            st.markdown("#### " + t("chat_sources"))
+            st.markdown(", ".join(f"`{s}`" for s in last["sources"]))
 
 # ---- TAB 2: UPLOAD & INDEX ----
-with tab2:
+with tab_upload:
     st.markdown("### Upload documents & (re)build index")
-    files = st.file_uploader("Upload PDF/DOCX/TXT", type=["pdf", "docx", "txt", "md"], accept_multiple_files=True)
-    c1, c2 = st.columns(2)
-    if c1.button("⬆️ Save uploads", use_container_width=True) and files:
-        saved = save_uploaded_files(files)
-        st.success(f"Saved {len(saved)} file(s) to `data/raw/`.")
-    if c2.button("⚙️ Extract & Chunk", use_container_width=True):
-        with st.spinner("Extracting & chunking..."):
-            n, outp = extract_and_chunk()
-        st.success(f"Created {n} chunks → {outp}")
-    if st.button("🧠 Rebuild Vector Index", use_container_width=True):
-        with st.spinner("Encoding & indexing... this can take a moment"):
-            total = rebuild_index()
-        st.success(f"Indexed {total} chunks into ChromaDB.")
 
+    # ✅ Uploader élargi (on garde juste le contrôle d’upload)
+    files = st.file_uploader(
+        "Upload PDF/DOCX/TXT/MD/PPTX/CSV/XLSX/HTML/JSON",
+        type=["pdf", "docx", "txt", "md", "pptx", "csv", "xlsx", "xls", "html", "htm", "json"],
+        accept_multiple_files=True
+    )
+
+    # ✅ Ligne des 2 premiers boutons
+    c1, c2 = st.columns(2)
+    if c1.button("⬆️  Save uploads", use_container_width=True) and files:
+        saved = save_uploaded_files(files)
+        st.success(f"✅ {len(saved)} file(s) saved to `data/raw/`.")
+
+    if c2.button("⚙️  Extract & Chunk", use_container_width=True):
+        with st.spinner("Extracting & chunking..."):
+            n, outp, stats = extract_and_chunk()
+        st.success(f"✅ Created {n} chunks → {outp}")
+        st.caption(f"Seen: {stats['seen']} • Processed: {stats['processed']} • Ignored: {stats['ignored']} • By ext: {stats['by_ext']}")
+
+    # ✅ 3e bouton (plein largeur)
+    if st.button("🧠  Rebuild Vector Index", use_container_width=True):
+        with st.spinner("Encoding & indexing..."):
+            total = rebuild_index()
+        st.success(f"✅ Indexed {total} chunks into ChromaDB.")
+
+    # Aperçu (optionnel)
     if (DATA_PROCESSED / "chunks.jsonl").exists():
         st.markdown("#### Preview extracted chunks")
-        import itertools
-        import json
+        import json, itertools, pandas as pd
         rows = []
         with open(DATA_PROCESSED / "chunks.jsonl", "r", encoding="utf-8") as f:
             for line in itertools.islice(f, 3):
                 rows.append(json.loads(line))
-        df = pd.DataFrame(rows)
-        st.dataframe(df, use_container_width=True, height=200)
+        if rows:
+            df = pd.DataFrame(rows)
+            st.dataframe(df, use_container_width=True, height=200)
 
 # ---- TAB 3: DOCS GENERATION ----
-with tab3:
-    st.markdown("### Generate consulting deliverables")
-    default_title = "Executive Summary – Client X"
-    title = st.text_input("Document Title", value=default_title)
-    st.caption("Tip: Paste text below or run a query in the Chat tab and copy the answer here.")
-    txt = st.text_area("Content (will be summarized if too long)", height=220)
-
-    c1, c2 = st.columns(2)
-    if c1.button("📄 Download DOCX", use_container_width=True):
-        bullets = [b.strip() for b in txt.split("\n") if b.strip()]
-        paragraphs = bullets if bullets else ["No content provided."]
-        data = make_docx(title=title, paragraphs=paragraphs)
-        st.download_button("⬇️ Save DOCX", data=data, file_name="report.docx",
-                           mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                           use_container_width=True)
-    if c2.button("📊 Download PPTX", use_container_width=True):
-        bullets = [b.strip() for b in txt.split("\n") if b.strip()]
-        data = make_ppt(title=title, bullets=bullets[:8] if bullets else ["No content provided."])
-        st.download_button("⬇️ Save PPTX", data=data, file_name="deck.pptx",
-                           mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                           use_container_width=True)
+from src.ui.tabs import generate_docs_rag  # put near your other imports
+with tab_generate:
+    generate_docs_rag.render()
 
 # ---- TAB 4: MARKET WATCH ----
-with tab4:
-    API_BASE = os.getenv("MARKET_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
+with tab_market:
+    market.render()
+# ---- TAB 5: VOICE COPILOT ----
+with tab_voice:
+    speech_chat.render()
+    
+# --------------------------------------------------------------------------------------
+# END OF FILE
+# --------------------------------------------------------------------------------------
 
-    def api_get(path, **params):
-        try:
-            r = requests.get(API_BASE + path, params=params, timeout=10)
-            r.raise_for_status()
-            return r.json()
-        except Exception as e:
-            st.error(f"API error: {e}")
-            return None
 
-    st.header("📈 Market Watch — CAC40")
-
-    symbols = st.multiselect(
-        "Choisissez des symboles (Yahoo: suffixe .PA)",
-        ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"],
-        ["^FCHI", "BNP.PA", "MC.PA"]
-    )
-
-    cols = st.columns(min(len(symbols), 4) or 1)
-    for i, sym in enumerate(symbols):
-        data = api_get(f"/v1/quote/{sym}")
-        with cols[i % len(cols)]:
-            if data:
-                st.metric(label=sym, value=f"{data.get('price', 0):,.2f} {data.get('currency','')}")
-            else:
-                st.error(f"Erreur pour {sym}")
-
-    # Historique OHLCV (chandelier)
-    st.subheader("Historique (chandelier)")
-    chosen = st.selectbox("Historique pour:", options=symbols or ["^FCHI"])
-    interval = st.selectbox("Intervalle", options=["1d", "1h", "30m"], index=0)
-    rng = st.selectbox("Période", options=["1mo", "3mo", "6mo", "1y"], index=0)
-
-    hist = api_get(f"/v1/ohlcv/{chosen}", interval=interval, range=rng)
-
-    def _pick(df, candidates):
-        for name in candidates:
-            if name in df.columns:
-                return name
-        raise KeyError(f"Colonnes manquantes, attendues parmi: {candidates}, trouvé: {list(df.columns)}")
-
-    if hist and hist.get("data"):
-        df = pd.DataFrame(hist["data"])
-        if df.empty:
-            st.info("Pas de données disponibles pour ce symbole/intervalle.")
-        else:
-            df.columns = [str(c).strip().lower() for c in df.columns]
-            ts_col   = _pick(df, ["timestamp", "datetime", "date", "time"])
-            open_col = _pick(df, ["open", "o"])
-            high_col = _pick(df, ["high", "h"])
-            low_col  = _pick(df, ["low", "l"])
-            close_col= _pick(df, ["close", "c"])
-            vol_col  = next((c for c in ["volume", "vol", "v"] if c in df.columns), None)
-            try:
-                df[ts_col] = pd.to_datetime(df[ts_col])
-            except Exception:
-                pass
-            fig = go.Figure(data=[go.Candlestick(
-                x=df[ts_col], open=df[open_col], high=df[high_col], low=df[low_col], close=df[close_col]
-            )])
-            st.plotly_chart(fig, use_container_width=True)
-            st.dataframe(df[[ts_col, open_col, high_col, low_col, close_col] + ([vol_col] if vol_col else [])].tail(10),
-                         use_container_width=True)
-    else:
-        st.info("Pas de données disponibles pour cce symbole/intervalle.")
