@@ -1,0 +1,457 @@
+# ============================================================
+# tech_watch_sources.yaml
+# Veille technologique IT-STORM — Sources structurées
+# ============================================================
+
+cloud_infra:
+  label: "Cloud & Infrastructure"
+  priority: "very_high"
+  sources:
+    - name: "AWS – What's New"
+      url: "https://aws.amazon.com/new/"
+      type: "changelog"
+      lang: "en"
+      tags: ["aws", "cloud", "infra"]
+
+    - name: "AWS – Blog"
+      url: "https://aws.amazon.com/blogs/aws/"
+      type: "blog"
+      lang: "en"
+      tags: ["aws", "cloud"]
+
+    - name: "Azure – Updates"
+      url: "https://azure.microsoft.com/en-us/updates/"
+      type: "changelog"
+      lang: "en"
+      tags: ["azure", "cloud"]
+
+    - name: "Azure – Blog"
+      url: "https://azure.microsoft.com/en-us/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["azure", "cloud"]
+
+    - name: "GCP – Release Notes"
+      url: "https://cloud.google.com/release-notes"
+      type: "changelog"
+      lang: "en"
+      tags: ["gcp", "cloud"]
+
+    - name: "Kubernetes – Official Blog"
+      url: "https://kubernetes.io/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["kubernetes", "containers"]
+
+    - name: "Docker – Blog"
+      url: "https://www.docker.com/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["docker", "containers"]
+
+    - name: "CNCF – Blog"
+      url: "https://www.cncf.io/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["cncf", "cloud_native"]
+
+
+devops:
+  label: "DevOps & CI/CD"
+  priority: "very_high"
+  sources:
+    - name: "GitHub – Changelog"
+      url: "https://github.blog/changelog/"
+      type: "changelog"
+      lang: "en"
+      tags: ["github", "cicd", "devops"]
+
+    - name: "GitHub – Engineering Blog"
+      url: "https://github.blog/category/engineering/"
+      type: "blog"
+      lang: "en"
+      tags: ["github", "engineering"]
+
+    - name: "GitLab – Blog"
+      url: "https://about.gitlab.com/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["gitlab", "devops"]
+
+    - name: "GitLab – Release Notes"
+      url: "https://docs.gitlab.com/ee/releases/"
+      type: "changelog"
+      lang: "en"
+      tags: ["gitlab", "release"]
+
+    - name: "HashiCorp – Blog"
+      url: "https://www.hashicorp.com/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["hashicorp", "terraform", "vault", "iac"]
+
+    - name: "OpenTofu – Blog"
+      url: "https://opentofu.org/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["opentofu", "terraform", "iac"]
+
+    - name: "Ansible – Blog"
+      url: "https://www.ansible.com/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["ansible", "automation"]
+
+    # Ajouts premium DevOps / CI-CD
+    - name: "ThoughtWorks – Technology Radar"
+      url: "https://www.thoughtworks.com/radar"
+      type: "radar"
+      lang: "en"
+      tags: ["devops", "architecture", "trends"]
+
+    - name: "DevOps.com"
+      url: "https://devops.com/"
+      type: "magazine"
+      lang: "en"
+      tags: ["devops", "cicd", "sre"]
+
+    - name: "Spacelift – Blog"
+      url: "https://spacelift.io/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["iac", "terraform", "cicd", "gitops"]
+
+    - name: "Octopus Deploy – Blog"
+      url: "https://octopus.com/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["deployment", "devops", "release_management"]
+
+
+ai_genai:
+  label: "IA / ML / GenAI / RAG"
+  priority: "critical"
+  sources:
+    - name: "Mistral AI – News"
+      url: "https://mistral.ai/news/"
+      type: "blog"
+      lang: "en"
+      tags: ["genai", "mistral"]
+
+    - name: "Meta AI – Blog"
+      url: "https://ai.meta.com/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["meta", "llm"]
+
+    - name: "Hugging Face – Blog"
+      url: "https://huggingface.co/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["huggingface", "llm"]
+
+    - name: "LangChain – Blog"
+      url: "https://blog.langchain.dev/"
+      type: "blog"
+      lang: "en"
+      tags: ["langchain", "rag", "agents"]
+
+    - name: "LlamaIndex – Blog"
+      url: "https://www.llamaindex.ai/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["llamaindex", "rag"]
+
+    - name: "OpenAI – Blog"
+      url: "https://openai.com/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["openai", "llm"]
+
+    - name: "Google DeepMind – Blog"
+      url: "https://deepmind.google/discover/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["deepmind", "research"]
+
+    # Ajouts premium IA / recherche
+    - name: "MIT Technology Review – AI"
+      url: "https://www.technologyreview.com/topic/artificial-intelligence/"
+      type: "magazine"
+      lang: "en"
+      tags: ["ai", "genai", "analysis"]
+
+    - name: "Stanford HAI – News & Insights"
+      url: "https://hai.stanford.edu/news"
+      type: "research_news"
+      lang: "en"
+      tags: ["ai", "research", "policy"]
+
+    - name: "arXiv – cs.CL (NLP)"
+      url: "https://arxiv.org/list/cs.CL/recent"
+      type: "preprint"
+      lang: "en"
+      tags: ["nlp", "research", "arxiv"]
+
+    - name: "arXiv – cs.LG (Machine Learning)"
+      url: "https://arxiv.org/list/cs.LG/recent"
+      type: "preprint"
+      lang: "en"
+      tags: ["machine_learning", "research", "arxiv"]
+
+    - name: "Nature – Machine Intelligence"
+      url: "https://www.nature.com/natmachintell/"
+      type: "journal"
+      lang: "en"
+      tags: ["ai", "machine_learning", "research"]
+
+    - name: "Data Science Central"
+      url: "https://www.datasciencecentral.com/"
+      type: "magazine"
+      lang: "en"
+      tags: ["data_science", "ml", "ai"]
+
+
+data_bigdata:
+  label: "Data & Big Data"
+  priority: "high"
+  sources:
+    - name: "Databricks – Blog"
+      url: "https://www.databricks.com/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["databricks", "lakehouse"]
+
+    - name: "Apache Spark – News"
+      url: "https://spark.apache.org/news/"
+      type: "news"
+      lang: "en"
+      tags: ["spark"]
+
+    - name: "Apache Kafka – Blog"
+      url: "https://kafka.apache.org/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["kafka", "streaming"]
+
+    - name: "Apache Airflow – Blog"
+      url: "https://airflow.apache.org/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["airflow", "orchestration"]
+
+    # Ajouts premium Data Engineering / DataOps
+    - name: "Monte Carlo Data – Blog"
+      url: "https://www.montecarlodata.com/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["data_observability", "data_engineering", "reliability"]
+
+    - name: "lakeFS – Blog"
+      url: "https://lakefs.io/blog/"
+      type: "blog"
+      lang: "en"
+      tags: ["data_lake", "data_engineering", "versioning"]
+
+    - name: "GeeksforGeeks – Data Engineering"
+      url: "https://www.geeksforgeeks.org/data-engineering/"
+      type: "tutorial"
+      lang: "en"
+      tags: ["spark", "kafka", "data_pipelines"]
+
+    - name: "Binariks – Data & Analytics Blog"
+      url: "https://binariks.com/blog/category/data-and-analytics/"
+      type: "blog"
+      lang: "en"
+      tags: ["data_analytics", "dataops", "big_data"]
+
+
+security:
+  label: "Sécurité / Cloud Security"
+  priority: "medium"
+  sources:
+    - name: "Cloud Security Alliance – Blog"
+      url: "https://cloudsecurityalliance.org/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["cloud_security"]
+
+    - name: "OWASP – News"
+      url: "https://owasp.org/news/"
+      type: "news"
+      lang: "en"
+      tags: ["owasp"]
+
+    - name: "MITRE – ATT&CK"
+      url: "https://attack.mitre.org/"
+      type: "technical"
+      lang: "en"
+      tags: ["mitre", "attack"]
+
+    # Ajouts premium sécurité / cloud
+    - name: "Check Point – Cyber Hub"
+      url: "https://www.checkpoint.com/cyber-hub/"
+      type: "blog"
+      lang: "en"
+      tags: ["cybersecurity", "cloud_security", "zero_trust"]
+
+    - name: "Wiz – Security Blog"
+      url: "https://www.wiz.io/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["cloud_security", "cnapp", "kubernetes"]
+
+    - name: "Cyera – Blog"
+      url: "https://cyera.io/blog"
+      type: "blog"
+      lang: "en"
+      tags: ["cspm", "dspm", "cloud_security"]
+
+    - name: "KrebsOnSecurity"
+      url: "https://krebsonsecurity.com/"
+      type: "magazine"
+      lang: "en"
+      tags: ["security", "breaches", "investigation"]
+
+
+portage_consulting:
+  label: "Portage salarial & Freelancing"
+  priority: "high"
+  sources:
+    - name: "IT-STORM – Site Officiel"
+      url: "https://it-storm.fr"
+      type: "company"
+      lang: "fr"
+      tags: ["it-storm", "portage", "consulting"]
+
+    - name: "PEPS – Syndicat du Portage Salarial"
+      url: "https://www.peps-syndicat.fr/"
+      type: "institution"
+      lang: "fr"
+      tags: ["portage salarial", "syndicat", "reglementation"]
+
+    - name: "Syndicat FEPS – Fédération Entreprises de Portage"
+      url: "https://syndicatportagesalarial.fr/"
+      type: "institution"
+      lang: "fr"
+      tags: ["portage salarial", "federation"]
+
+    - name: "LePortageSalarial.com – Blog"
+      url: "https://www.leportagesalarial.com/"
+      type: "blog"
+      lang: "fr"
+      tags: ["portage salarial", "blog"]
+
+    - name: "Guide du Portage – Annuaire & Articles"
+      url: "https://www.guideduportage.com/"
+      type: "guide"
+      lang: "fr"
+      tags: ["portage salarial", "comparatif"]
+
+    - name: "ITG – Introduction au Portage"
+      url: "https://www.itg.fr/portage-salarial/introduction.html"
+      type: "guide"
+      lang: "fr"
+      tags: ["portage salarial", "itg"]
+
+    - name: "Malt – Ressources freelances"
+      url: "https://www.malt.fr/resources"
+      type: "freelance_platform"
+      lang: "fr"
+      tags: ["freelance", "independants", "guides"]
+
+    # Ajouts officiels marché / lois / stats
+    - name: "URSSAF – Indépendants"
+      url: "https://www.urssaf.fr/portail/home/independants.html"
+      type: "gov"
+      lang: "fr"
+      tags: ["portage", "cotisations", "independants"]
+
+    - name: "Ministère du Travail – Travail indépendant"
+      url: "https://travail-emploi.gouv.fr/droit-du-travail/travail-independant"
+      type: "gov"
+      lang: "fr"
+      tags: ["travail_independant", "reglementation"]
+
+    - name: "Légifrance – Code du travail"
+      url: "https://www.legifrance.gouv.fr/codes/id/LEGITEXT000006072050/"
+      type: "law"
+      lang: "fr"
+      tags: ["droit_travail", "portage", "lois"]
+
+    - name: "INSEE – Statistiques sur l'emploi"
+      url: "https://www.insee.fr/fr/statistiques"
+      type: "stats"
+      lang: "fr"
+      tags: ["emploi", "independants", "statistiques"]
+
+    - name: "DARES – Études & Statistiques"
+      url: "https://dares.travail-emploi.gouv.fr/"
+      type: "stats"
+      lang: "fr"
+      tags: ["emploi", "marche_travail", "independants"]
+
+
+community:
+  label: "Sources communautaires"
+  priority: "dynamic"
+  sources:
+    - name: "Reddit – r/devops"
+      url: "https://www.reddit.com/r/devops/"
+      type: "community"
+      lang: "en"
+      tags: ["devops", "reddit"]
+
+    - name: "Reddit – r/MachineLearning"
+      url: "https://www.reddit.com/r/MachineLearning/"
+      type: "community"
+      lang: "en"
+      tags: ["ml", "ai", "reddit"]
+
+    - name: "Reddit – r/dataengineering"
+      url: "https://www.reddit.com/r/dataengineering/"
+      type: "community"
+      lang: "en"
+      tags: ["data", "reddit"]
+
+    - name: "Hacker News – Front Page"
+      url: "https://news.ycombinator.com/"
+      type: "community"
+      lang: "en"
+      tags: ["startups", "tech", "hn"]
+
+    - name: "YouTube – Mistral AI"
+      url: "https://www.youtube.com/@mistralai"
+      type: "video"
+      lang: "en"
+      tags: ["genai", "llm", "mistral"]
+
+    - name: "YouTube – Google Cloud Tech"
+      url: "https://www.youtube.com/@googlecloudtech"
+      type: "video"
+      lang: "en"
+      tags: ["cloud", "gcp", "youtube"]
+
+    - name: "Twitter/X – Mistral AI"
+      url: "https://twitter.com/mistralai"
+      type: "social"
+      lang: "en"
+      tags: ["genai", "llm", "mistral", "x"]
+
+    - name: "Twitter/X – Andrej Karpathy"
+      url: "https://twitter.com/karpathy"
+      type: "social"
+      lang: "en"
+      tags: ["ai", "deep_learning", "x"]
+
+    - name: "LinkedIn – Hashtag #Cloud"
+      url: "https://www.linkedin.com/feed/hashtag/cloud/"
+      type: "social"
+      lang: "en"
+      tags: ["cloud", "linkedin"]
+
+    - name: "LinkedIn – Hashtag #Freelance"
+      url: "https://www.linkedin.com/feed/hashtag/freelance/"
+      type: "social"
+      lang: "fr"
+      tags: ["freelance", "tjm", "linkedin"]

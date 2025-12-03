@@ -27,6 +27,9 @@ from pydantic import BaseModel
 # Import STT + TTS mis à jour
 # ---------------------------------------------------------------------
 from src.api import speech_stt, speech_tts
+from src.api import tech_watch
+
+
 
 # ---------------------------------------------------------------------
 # Import backend CLI
@@ -329,3 +332,4 @@ def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
         raise HTTPException(status_code=500, detail=f"ohlcv error: {e}")
 
 app.include_router(v1)
+app.include_router(tech_watch.router)
