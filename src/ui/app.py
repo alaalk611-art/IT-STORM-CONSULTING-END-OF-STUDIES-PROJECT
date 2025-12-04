@@ -1487,12 +1487,12 @@ tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
 )
 
 # Chatbot flottant (accessible seulement après connexion)
-render_chatbot()
+
 from src.ui.sections import home
 # ---- TAB 1: ACCUEIL / ONBOARDING ----
 with tab_home:
     home.render_home_tab()
-
+    render_chatbot()
 # ---- TAB 2: UPLOAD & INDEX ----
 with tab_upload:
     st.markdown("### Upload documents & (re)build index")
