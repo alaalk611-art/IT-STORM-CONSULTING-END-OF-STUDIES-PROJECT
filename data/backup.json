@@ -46,32 +46,29 @@
     "weight": 1.0
   },
   {
-  "id": "portage_salarial",
-  "question": "En quoi consiste le portage salarial chez IT Storm ?",
-  "answer": "Le portage salarial chez IT Storm permet à un consultant freelance de facturer ses missions via IT Storm tout en bénéficiant du statut de salarié : protection sociale, gestion administrative et accompagnement sur la mission.",
-  "keywords": [
-    "portage",
-    "portage salarial",
-    "freelance",
-    "consultant ind[ée]pendant",
-    "salari[ée] port[ée]",
-    "facturation",
-    "\\btjm\\b",
-    "revenu",
-    "mission"
-  ],
-  "aliases": [
-    "En quoi consiste le portage salarial chez IT Storm ?",
-    "Quel est le principe du portage salarial chez IT Storm ?",
-    "IT Storm fait-elle du portage salarial ?",
-    "IT Storm propose-t-elle du portage pour les freelances ?",
-    "Comment fonctionne le portage salarial IT Storm ?",
-    "Portage salarial IT Storm",
-    "Portage IT Storm"
-  ],
-  "weight": 1.0
-
-
+    "id": "portage_salarial",
+    "question": "Quoi est le portage salarial chez IT Storm ?",
+    "answer": "Le portage salarial chez IT Storm permet à un consultant freelance de facturer ses missions via IT Storm tout en bénéficiant du statut de salarié : protection sociale, gestion administrative et accompagnement sur la mission.",
+    "keywords": [
+      "portage",
+      "portage salarial",
+      "freelance",
+      "consultant ind[ée]pendant",
+      "salari[ée] port[ée]",
+      "facturation",
+      "\\btjm\\b",
+      "revenu",
+      "mission"
+    ],
+    "aliases": [
+      "Qu’est-ce que le portage salarial chez IT Storm ?",
+      "IT Storm fait-elle du portage salarial ?",
+      "IT Storm propose-t-elle du portage pour les freelances ?",
+      "Comment fonctionne le portage salarial IT Storm ?",
+      "Portage salarial IT Storm",
+      "Portage IT Storm"
+    ],
+    "weight": 1.0
   },
   {
     "id": "devops_cicd_k8s",

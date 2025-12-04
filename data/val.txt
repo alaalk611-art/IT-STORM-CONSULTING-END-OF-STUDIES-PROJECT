@@ -1,100 +1,504 @@
-Q: Quelle est l’expertise principale d’IT Storm ?
-A: IT Storm est spécialisée en cloud et intelligence artificielle.
+Q: Quelle est la spécialité principale d’IT Storm ?
+A: IT Storm est spécialisée dans le cloud computing et l’intelligence artificielle, avec un fort ancrage sur les pratiques DevOps et la modernisation des systèmes d’information.
 
 ---
 
-Q: IT Storm propose-t-elle des services en intelligence artificielle ?
-A: Oui, elle propose des POC et des intégrations de modèles IA.
+Q: En quoi consiste le portage salarial chez IT Storm ?
+A: Le portage salarial chez IT Storm permet à un consultant freelance de facturer ses missions via IT Storm tout en bénéficiant du statut de salarié : protection sociale, gestion administrative et accompagnement sur la mission.
 
 ---
 
-Q: Quel est le rôle d’IT Storm dans la modernisation des systèmes d’information ?
-A: Accompagner la modernisation et l’adoption du cloud.
+Q: Dans quels domaines IT Storm concentre-t-elle son expertise ?
+A: Dans le cloud computing et l’intelligence artificielle.
 
 ---
 
-Q: Comment IT Storm contribue-t-elle à l’automatisation des déploiements ?
-A: En mettant en place des pipelines CI/CD et Kubernetes.
+Q: IT Storm travaille-t-elle dans le cloud et l’IA ?
+A: Oui, elle est spécialisée en cloud et IA.
 
 ---
 
-Q: Quels outils DevOps sont utilisés par IT Storm ?
-A: CI/CD et Kubernetes.
+Q: Quel type de consulting propose IT Storm ?
+A: Un consulting orienté cloud, intelligence artificielle et modernisation des systèmes d’information.
 
 ---
 
-Q: Comment IT Storm gère-t-elle l’infrastructure cloud ?
-A: Avec l’infrastructure as code et l’automatisation.
+Q: Quels sont les deux grands pôles d’activité d’IT Storm ?
+A: Le cloud et l’intelligence artificielle.
 
 ---
 
-Q: Quelles solutions IT Storm développe-t-elle pour la donnée ?
-A: Des data pipelines pour la collecte, la qualité et l’exploitation.
+Q: Peut-on dire qu’IT Storm est une société de cloud et IA ?
+A: Oui, c’est sa spécialité principale.
 
 ---
 
-Q: IT Storm intervient-elle dans la qualité des données ?
-A: Oui, via des data pipelines.
+Q: Quel domaine d’innovation couvre IT Storm ?
+A: Le cloud computing et l’intelligence artificielle.
 
 ---
 
-Q: Quels services IT Storm propose-t-elle en IA métier ?
-A: Des POC IA et l’intégration de modèles pour les usages métier.
+Q: En quoi IT Storm se distingue-t-elle ?
+A: Par son expertise en cloud, IA et pratiques DevOps.
 
 ---
 
-Q: Quelles sont les priorités des projets IT Storm ?
-A: La sécurité, la fiabilité et l’optimisation des coûts cloud.
+Q: Quel est le cœur de métier d’IT Storm ?
+A: Le conseil en cloud et intelligence artificielle.
 
 ---
 
-Q: IT Storm garantit-elle la fiabilité de ses projets ?
-A: Oui, la fiabilité fait partie des priorités.
+Q: IT Storm est-elle experte en intelligence artificielle ?
+A: Oui, ainsi qu’en cloud computing.
 
 ---
 
-Q: Quels bénéfices IT Storm apporte-t-elle à ses clients en termes de coûts ?
-A: L’optimisation des coûts cloud.
+Q: Quel est l’objectif d’IT Storm pour les SI ?
+A: Moderniser les systèmes d’information.
 
 ---
 
-Q: IT Storm propose-t-elle de la formation ?
-A: Oui, elle forme les équipes clientes.
+Q: Comment IT Storm accompagne-t-elle ses clients sur leurs SI ?
+A: En modernisant les systèmes et en adoptant le cloud.
 
 ---
 
-Q: Comment IT Storm partage-t-elle ses compétences ?
+Q: IT Storm aide-t-elle à moderniser les systèmes d’information ?
+A: Oui, c’est un de ses rôles.
+
+---
+
+Q: Quel rôle joue IT Storm dans l’évolution des SI ?
+A: La modernisation et l’intégration cloud.
+
+---
+
+Q: Quel service fournit IT Storm pour les infrastructures SI ?
+A: La modernisation et la migration vers le cloud.
+
+---
+
+Q: En quoi consiste la mission d’IT Storm sur les SI ?
+A: À moderniser et optimiser les systèmes d’information.
+
+---
+
+Q: Comment IT Storm participe-t-elle à l’adoption du cloud ?
+A: En accompagnant la modernisation des SI.
+
+---
+
+Q: Pourquoi IT Storm intervient-elle dans les SI ?
+A: Pour les moderniser et intégrer le cloud.
+
+---
+
+Q: Que fait IT Storm pour transformer les SI ?
+A: Elle les modernise et les rend compatibles avec le cloud.
+
+---
+
+Q: IT Storm peut-elle aider une entreprise à moderniser son SI ?
+A: Oui, c’est une de ses missions principales.
+
+---
+
+Q: Quelles pratiques DevOps IT Storm met-elle en place ?
+A: Des pipelines CI/CD et l’orchestration Kubernetes.
+
+---
+
+Q: IT Storm propose-t-elle du DevOps ?
+A: Oui, notamment CI/CD et Kubernetes.
+
+---
+
+Q: Quel type de workflows IT Storm déploie-t-elle ?
+A: Des pipelines CI/CD pour l’industrialisation.
+
+---
+
+Q: Comment IT Storm gère-t-elle les livraisons logicielles ?
+A: Grâce à des pipelines CI/CD et DevOps.
+
+---
+
+Q: IT Storm utilise-t-elle Kubernetes ?
+A: Oui, pour l’orchestration des conteneurs.
+
+---
+
+Q: Quelles solutions IT Storm apporte-t-elle en DevOps ?
+A: CI/CD, automatisation et Kubernetes.
+
+---
+
+Q: Quels outils d’orchestration sont employés par IT Storm ?
+A: Kubernetes fait partie des outils utilisés.
+
+---
+
+Q: Quelle méthode IT Storm applique pour automatiser les déploiements ?
+A: Des pipelines CI/CD et Kubernetes.
+
+---
+
+Q: En DevOps, quelles compétences met en avant IT Storm ?
+A: CI/CD et orchestration Kubernetes.
+
+---
+
+Q: Quelles pratiques agiles de livraison IT Storm met-elle en place ?
+A: Les pipelines CI/CD et le DevOps.
+
+---
+
+Q: Comment IT Storm gère-t-elle l’infrastructure ?
+A: Via l’infrastructure as code et l’automatisation.
+
+---
+
+Q: IT Storm pratique-t-elle l’infrastructure as code ?
+A: Oui, c’est une de ses approches.
+
+---
+
+Q: Quel moyen IT Storm utilise pour automatiser l’infrastructure ?
+A: L’infrastructure as code.
+
+---
+
+Q: En quoi consiste l’approche infra d’IT Storm ?
+A: À automatiser avec l’infrastructure as code.
+
+---
+
+Q: IT Storm déploie-t-elle l’automatisation de l’infrastructure ?
+A: Oui, grâce à l’infrastructure as code.
+
+---
+
+Q: Quelles techniques IT Storm utilise pour gérer les environnements ?
+A: L’automatisation et l’infrastructure as code.
+
+---
+
+Q: IT Storm peut-elle réduire les erreurs humaines en infra ?
+A: Oui, via l’automatisation et l’infra as code.
+
+---
+
+Q: Quelle méthode d’automatisation IT Storm adopte-t-elle ?
+A: L’infrastructure as code.
+
+---
+
+Q: En infrastructure, que propose IT Storm ?
+A: Une gestion automatisée avec l’infrastructure as code.
+
+---
+
+Q: Quel outil conceptuel IT Storm applique à l’infrastructure ?
+A: L’infrastructure as code.
+
+---
+
+Q: Que met en place IT Storm pour la donnée ?
+A: Des data pipelines pour collecter, fiabiliser et exploiter les données.
+
+---
+
+Q: Comment IT Storm traite-t-elle la donnée ?
+A: Avec des data pipelines.
+
+---
+
+Q: Quels pipelines IT Storm développe-t-elle ?
+A: Des pipelines de données.
+
+---
+
+Q: Quel livrable IT Storm fournit pour gérer la donnée ?
+A: Des data pipelines.
+
+---
+
+Q: Quelles solutions IT Storm apporte-t-elle pour la data ?
+A: Des data pipelines pour exploiter les données.
+
+---
+
+Q: IT Storm crée-t-elle des pipelines de données ?
+A: Oui, pour la collecte et l’exploitation.
+
+---
+
+Q: Comment IT Storm assure-t-elle la fiabilité des données ?
+A: Grâce à des data pipelines.
+
+---
+
+Q: IT Storm intervient-elle sur la qualité des données ?
+A: Oui, avec des pipelines dédiés.
+
+---
+
+Q: Qu’apporte IT Storm dans le domaine des données ?
+A: Des pipelines de collecte et de qualité.
+
+---
+
+Q: IT Storm propose-t-elle des solutions data ?
+A: Oui, notamment des data pipelines.
+
+---
+
+Q: Quel type d’accompagnement IA IT Storm propose-t-elle ?
+A: Des POC IA et des intégrations de modèles orientées usages métier.
+
+---
+
+Q: IT Storm fait-elle des POC IA ?
+A: Oui, des preuves de concept en IA.
+
+---
+
+Q: Quel est le rôle d’IT Storm en intelligence artificielle ?
+A: Concevoir des POC et intégrer des modèles IA.
+
+---
+
+Q: En IA, qu’apporte IT Storm ?
+A: Des intégrations de modèles pour les usages métier.
+
+---
+
+Q: IT Storm intègre-t-elle des modèles IA ?
+A: Oui, pour des besoins métier.
+
+---
+
+Q: Que fait IT Storm pour l’IA appliquée ?
+A: Elle réalise des POC et intègre des modèles.
+
+---
+
+Q: Quels services IA propose IT Storm ?
+A: Des preuves de concept et intégrations IA.
+
+---
+
+Q: IT Storm intervient-elle en IA métier ?
+A: Oui, avec des POC et intégrations de modèles.
+
+---
+
+Q: Quels usages IA IT Storm cible-t-elle ?
+A: Des cas d’usage métier concrets.
+
+---
+
+Q: Quelle expertise IA distingue IT Storm ?
+A: La création de POC et l’intégration IA.
+
+---
+
+Q: Quelles priorités encadrent les projets d’IT Storm ?
+A: Sécurité, fiabilité et optimisation des coûts cloud.
+
+---
+
+Q: Quels critères guident les projets IT Storm ?
+A: Sécurité, fiabilité et coûts optimisés.
+
+---
+
+Q: Pourquoi IT Storm insiste sur la sécurité ?
+A: Parce que c’est une priorité de ses projets.
+
+---
+
+Q: Quels objectifs IT Storm poursuit-elle ?
+A: Fiabilité, sécurité et réduction des coûts.
+
+---
+
+Q: La sécurité fait-elle partie des priorités d’IT Storm ?
+A: Oui, avec la fiabilité et les coûts.
+
+---
+
+Q: Quels enjeux cloud IT Storm traite-t-elle ?
+A: Sécurité, optimisation et fiabilité.
+
+---
+
+Q: IT Storm cherche-t-elle à réduire les coûts cloud ?
+A: Oui, c’est une priorité.
+
+---
+
+Q: Quels paramètres IT Storm équilibre-t-elle dans ses projets ?
+A: Sécurité, fiabilité et coûts.
+
+---
+
+Q: Quels sont les trois piliers des projets IT Storm ?
+A: Sécurité, fiabilité et coûts cloud optimisés.
+
+---
+
+Q: Que garantit IT Storm à ses clients ?
+A: Sécurité, fiabilité et maîtrise des coûts.
+
+---
+
+Q: IT Storm partage-t-elle son savoir avec les clients ?
+A: Oui, via formation et transfert de compétences.
+
+---
+
+Q: Quels services de formation propose IT Storm ?
+A: Des formations pour les équipes clientes.
+
+---
+
+Q: IT Storm propose-t-elle du transfert de compétences ?
+A: Oui, aux équipes clientes.
+
+---
+
+Q: Pourquoi IT Storm forme-t-elle les équipes clientes ?
+A: Pour partager ses compétences.
+
+---
+
+Q: Comment IT Storm accompagne-t-elle les clients au-delà des projets ?
 A: Par la formation et le transfert de compétences.
 
 ---
 
-Q: Où se trouve IT Storm ?
+Q: Que propose IT Storm en plus des livrables techniques ?
+A: De la formation et du transfert de compétences.
+
+---
+
+Q: Les clients bénéficient-ils de formations IT Storm ?
+A: Oui, c’est proposé.
+
+---
+
+Q: Quel accompagnement humain IT Storm apporte-t-elle ?
+A: Des formations et du transfert de compétences.
+
+---
+
+Q: IT Storm aide-t-elle les équipes clientes à monter en compétences ?
+A: Oui, par des formations.
+
+---
+
+Q: Quels moyens IT Storm utilise pour partager son savoir ?
+A: Formations et transfert de compétences.
+
+---
+
+Q: Où est située IT Storm ?
+A: À Palaiseau en France.
+
+---
+
+Q: Dans quel pays IT Storm est-elle basée ?
+A: En France.
+
+---
+
+Q: IT Storm intervient-elle uniquement à Palaiseau ?
+A: Non, elle accompagne des entreprises partout en France.
+
+---
+
+Q: Quelle est l’adresse d’IT Storm ?
 A: À Palaiseau, en France.
 
 ---
 
-Q: IT Storm accompagne-t-elle uniquement les entreprises locales ?
-A: Non, elle intervient auprès d’entreprises partout en France.
+Q: Quel est le périmètre d’intervention d’IT Storm ?
+A: Les entreprises en France.
 
 ---
 
-Q: IT Storm est-elle basée en région parisienne ?
+Q: IT Storm travaille-t-elle avec des entreprises françaises ?
+A: Oui, partout en France.
+
+---
+
+Q: Quelle ville héberge IT Storm ?
+A: Palaiseau.
+
+---
+
+Q: Où se trouve le siège d’IT Storm ?
+A: À Palaiseau.
+
+---
+
+Q: IT Storm est-elle implantée en région parisienne ?
 A: Oui, à Palaiseau.
 
 ---
 
-Q: À quoi sert ce document de test ?
-A: À vérifier et évaluer le pipeline RAG.
+Q: Dans quelle zone géographique IT Storm opère-t-elle ?
+A: En France.
 
 ---
 
-Q: Ce fichier fait-il partie du pipeline RAG ?
+Q: À quoi sert ce document de test ?
+A: À vérifier et évaluer un pipeline RAG.
+
+---
+
+Q: Quel est le rôle du présent fichier ?
+A: Servir au test du pipeline RAG.
+
+---
+
+Q: Ce document a-t-il une utilité dans le projet ?
+A: Oui, tester le pipeline RAG.
+
+---
+
+Q: Pourquoi ce fichier existe-t-il ?
+A: Pour vérifier un pipeline RAG.
+
+---
+
+Q: Quel objectif poursuit ce document ?
+A: L’évaluation du pipeline RAG.
+
+---
+
+Q: Le fichier est-il lié au RAG ?
 A: Oui, il sert à le tester.
 
 ---
 
-Q: Quel est l’objectif final de ce document ?
-A: Tester et valider un pipeline RAG.
+Q: Ce fichier fait-il partie du test RAG ?
+A: Oui, il vérifie le pipeline RAG.
 
 ---
 
+Q: Quelle est la finalité du fichier ?
+A: Tester un pipeline RAG.
+
+---
+
+Q: À quoi contribue ce fichier dans le projet ?
+A: À l’évaluation du pipeline RAG.
+
+---
+
+Q: Est-ce un document métier ou technique ?
+A: C’est un document technique de test RAG.
+
+---

@@ -1455,55 +1455,38 @@ with k4:
     kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
 
 # --------------------------------------------------------------------------------------
-# TABS
+# AUTH GATE GLOBAL — page de login avant l'accès aux onglets
 # --------------------------------------------------------------------------------------
-tab_chat, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
-    ["💬 Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch", "🎤 Voice Copilot","🔎 Veille Techno"]
+st.markdown("## 🔐 Authentification StormCopilot")
+
+auth_ok = auth.render_auth_gate()
+if not auth_ok:
+    # Tant que l'utilisateur n'a pas passé les 3 vérifications,
+    # on ne montre PAS les onglets.
+    st.stop()
+
+# Petit message après succès (optionnel)
+st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
+
+# --------------------------------------------------------------------------------------
+# AUTH & TABS
+# --------------------------------------------------------------------------------------
+# ---------- TABS après login ----------
+tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
+    [
+        "🏠 Accueil",
+        "📂 Upload & Index",
+        "📝 Generate Docs",
+        "🌍 Market Watch",
+        "🎤 Voice Copilot",
+        "🔎 Veille Techno",
+    ]
 )
 
-# Chatbot flottant
+# Chatbot flottant (accessible seulement après connexion)
 render_chatbot()
 
-# ---- TAB 1: CHAT (protégé par 2FA) ----
-with tab_chat:
-    if not auth.render_auth_gate():
-        st.stop()
-
-    st.markdown("### " + t("chat_title"))
-    #st.session_state["top_k_from_ui"] = top_k
-
-    q = st.text_input(t("chat_input"), key="main_chat_input")
-
-    c1, c2 = st.columns([1, 1])
-    do_search = c1.button(t("chat_button"), use_container_width=True, key="btn_chat_search")
-    clear_box = c2.button(t("chat_clear"), use_container_width=True, key="btn_chat_clear")
-
-    if clear_box:
-        st.session_state.pop("last_chat_result", None)
-        st.rerun()
-
-    if do_search and q:
-        query = q[:2000] if len(q) > 2000 else q
-        if len(q) > 2000:
-            st.info(t("chat_question_too_long"))
-        with st.spinner("⏳"):
-            try:
-                result = ask_rag(
-                    question=query,
-                    #k=top_k,
-                    get_sources_fn=_get_source_names_for_query,
-                )
-                st.session_state["last_chat_result"] = {"q": query, **result}
-            except Exception as e:
-                st.error(f"Erreur RAG : {e}")
-
-    last = st.session_state.get("last_chat_result")
-    if last:
-        st.markdown("#### " + t("chat_answer"))
-        st.write(last.get("answer", ""))
-        if last.get("sources"):
-            st.markdown("#### " + t("chat_sources"))
-            st.markdown(", ".join(f"`{s}`" for s in last["sources"]))
+# ---- TAB 1: ACCUEIL / ONBOARDING ----
 
 # ---- TAB 2: UPLOAD & INDEX ----
 with tab_upload:
@@ -1556,11 +1539,11 @@ with tab_market:
 # ---- TAB 5: VOICE COPILOT ----
 with tab_voice:
     speech_chat.render()
+
 # ---- TAB 6: TECHNO WATCH ----
 with tab_techno:
     tech_watch.render()
+
 # --------------------------------------------------------------------------------------
 # END OF FILE
 # --------------------------------------------------------------------------------------
-
-

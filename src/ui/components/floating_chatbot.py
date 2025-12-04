@@ -5,7 +5,16 @@
 # - Sinon : suggestions en chaîne (Oui => répond, Non => nouvelle suggestion)
 # - "Une nouvelle Suggestion : ..." à partir de la 2e proposition
 # - Jamais "Plus de suggestions." (on boucle au début)
-# - Garde le style/position d'origine
+# - + Historique persistant (localStorage)
+# - + Typing animation "IRIS est en train d'écrire…"
+# - + Bouton "Effacer l'historique"
+# - + Alignement façon Messenger (bot gauche / user droite)
+# - + Animations d'apparition des messages
+# - + Avatar rond pour IRIS
+# PATCH 2025 :
+#   * "Précision confirmée → ..." affiché seulement après suggestion validée
+#     (pas quand l'utilisateur tape déjà la question exacte)
+#   * Animation "IRIS est en train d'écrire…" visible AU MAX 3 secondes
 # ============================================================
 
 from __future__ import annotations
@@ -22,6 +31,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if TOOLS.exists() and str(TOOLS) not in sys.path:
     sys.path.insert(0, str(TOOLS))
+
 
 def render_chatbot():
     st.session_state.setdefault("chat_history", [])
@@ -42,7 +52,8 @@ def render_chatbot():
     logo_html = (
         f'<img src="data:image/png;base64,{_b64(logo_path)}" width="28" '
         f'style="vertical-align:middle;margin-right:6px;"/>'
-        if logo_path else "🤖"
+        if logo_path
+        else "🤖"
     )
 
     # --- URL API ---
@@ -63,11 +74,7 @@ def render_chatbot():
 
   /* --- Bulle flottante --- */
   #sc-bubble {{
-    /* MILIEU-DROITE */
     position: fixed; top: 50%; right: 24px; transform: translateY(-50%);
-    /* BAS-DROITE
-    position: fixed; bottom: 24px; right: 24px;
-    */
     width: 64px; height: 64px; border-radius: 50%;
     background: linear-gradient(135deg, #004aad, #0060d4);
     color: #fff; font-size: 28px; line-height: 64px; text-align: center;
@@ -76,11 +83,7 @@ def render_chatbot():
 
   /* --- Badge Besoin d’aide ? --- */
   #sc-help-badge {{
-    /* MILIEU-DROITE */
     position: fixed; top: calc(50% - 80px); right: 24px; transform: translateY(-50%);
-    /* BAS-DROITE
-    position: fixed; bottom: 100px; right: 24px;
-    */
     display: none; z-index: 9999;
     background: linear-gradient(135deg, #111827, #1f2937);
     color: #fff; font-size: 12px; padding: 8px 12px; border-radius: 9999px;
@@ -93,21 +96,28 @@ def render_chatbot():
 
   /* --- Fenêtre --- */
   #sc-window {{
-    /* MILIEU-DROITE */
     position: fixed; top: 50%; right: 96px; transform: translateY(-50%);
-    /* BAS-DROITE
-    position: fixed; bottom: 96px; right: 24px;
-    */
     width: 380px; max-height: 560px;
     background: #fff; border-radius: 16px; box-shadow: var(--sc-shadow);
     display: none; z-index: 9999; overflow: hidden;
     font-family: system-ui, -apple-system, Segoe UI, Arial, sans-serif;
   }}
   #sc-header {{
-    background: #004aad; color:#fff; padding: 10px 12px; display:flex; align-items:center; justify-content:space-between;
+    background: #004aad; color:#fff; padding: 10px 12px;
+    display:flex; align-items:center; justify-content:space-between;
   }}
   #sc-title {{ font-weight: 600; }}
-  #sc-close {{ cursor:pointer; }}
+  #sc-header-right {{
+    display:flex; align-items:center; gap:8px;
+  }}
+  #sc-close, #sc-clear {{
+    cursor:pointer;
+    font-size: 14px;
+    opacity: 0.9;
+  }}
+  #sc-close:hover, #sc-clear:hover {{
+    opacity: 1;
+  }}
 
   /* --- Zone de messages --- */
   #sc-msgs {{
@@ -115,20 +125,69 @@ def render_chatbot():
     display: flex; flex-direction: column; gap: 8px;
   }}
 
-  .sc-row-msg {{ display:flex; }}
+  .sc-row-msg {{
+    display:flex;
+    width: 100%;
+  }}
+  .sc-row-bot {{
+    justify-content: flex-start;   /* IRIS à gauche */
+  }}
+  .sc-row-user {{
+    justify-content: flex-end;     /* Toi à droite */
+  }}
+
+  /* Avatar IRIS */
+  .sc-avatar {{
+    width: 32px;
+    height: 32px;
+    border-radius: 9999px;
+    overflow: hidden;
+    margin-right: 8px;
+    flex-shrink: 0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    background: #e5e7eb;
+    box-shadow: 0 0 0 2px #e5e7eb;
+  }}
+  .sc-avatar img {{
+    border-radius: 9999px;
+    display:block;
+  }}
+
+  .sc-bot, .sc-user, .sc-warn {{
+    position: relative;
+    transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+  }}
+
   .sc-bot {{
     max-width: 80%; align-self: flex-start; color:#111; background: var(--sc-bot-bg);
     padding: 10px 12px; border-radius: 14px; border-top-left-radius: 6px; white-space: pre-wrap;
+    animation: sc-msg-left 0.22s ease-out;
   }}
   .sc-user {{
     max-width: 80%; align-self: flex-end; color:#fff; background: var(--sc-blue);
     padding: 10px 12px; border-radius: 14px; border-top-right-radius: 6px; white-space: pre-wrap;
+    animation: sc-msg-right 0.22s ease-out;
   }}
   .sc-user a {{ color:#fff; text-decoration: underline; }}
 
   .sc-warn {{
     max-width: 80%; align-self: center; background: #fff7e6; border:1px solid #ffe58f; color:#8b5e00;
     padding: 10px 12px; border-radius: 10px; white-space: pre-wrap;
+    animation: sc-msg-center 0.22s ease-out;
+  }}
+
+  .sc-bot:hover, .sc-user:hover, .sc-warn:hover {{
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(15,23,42,0.12);
+  }}
+
+  /* Typing indicator */
+  .sc-typing {{
+    font-style: italic;
+    opacity: 0.8;
+    animation: sc-pulse 1.2s ease-in-out infinite;
   }}
 
   /* --- Barre d’entrée --- */
@@ -148,6 +207,25 @@ def render_chatbot():
     display:inline-block; border:1px solid #d1d5db; background:#fff; padding:6px 10px; border-radius:8px; cursor:pointer;
   }}
   .sc-btn:hover {{ background:#f3f4f6; }}
+
+  /* === Animations messages === */
+  @keyframes sc-msg-left {{
+    from {{ opacity:0; transform: translateX(-10px) scale(0.98); }}
+    to   {{ opacity:1; transform: translateX(0) scale(1); }}
+  }}
+  @keyframes sc-msg-right {{
+    from {{ opacity:0; transform: translateX(10px) scale(0.98); }}
+    to   {{ opacity:1; transform: translateX(0) scale(1); }}
+  }}
+  @keyframes sc-msg-center {{
+    from {{ opacity:0; transform: translateY(4px) scale(0.97); }}
+    to   {{ opacity:1; transform: translateY(0) scale(1); }}
+  }}
+  @keyframes sc-pulse {{
+    0%   {{ opacity: 0.5; transform: translateX(0); }}
+    50%  {{ opacity: 1.0; transform: translateX(2px); }}
+    100% {{ opacity: 0.5; transform: translateX(0); }}
+  }}
 </style>
 
 <div id="sc-bubble">{logo_html}</div>
@@ -156,7 +234,10 @@ def render_chatbot():
 <div id="sc-window" role="dialog" aria-label="IRIS — Assistant IT-Storm">
   <div id="sc-header">
     <div id="sc-title">IRIS — Assistant IT-Storm</div>
-    <div id="sc-close" title="Fermer">✖</div>
+    <div id="sc-header-right">
+      <div id="sc-clear" title="Effacer l'historique">🧹</div>
+      <div id="sc-close" title="Fermer">✖</div>
+    </div>
   </div>
   <div id="sc-msgs" aria-live="polite"></div>
   <div class="sc-input-row">
@@ -174,27 +255,145 @@ def render_chatbot():
   const badge  = document.getElementById("sc-help-badge");
   const win    = document.getElementById("sc-window");
   const close  = document.getElementById("sc-close");
+  const clearBtn = document.getElementById("sc-clear");
   const msgs   = document.getElementById("sc-msgs");
   const qin    = document.getElementById("sc-input");
   const send   = document.getElementById("sc-send");
 
-  // Helpers UI
-  const esc = (s) => (s || "").replace(/[&<>\"']/g, m => ({{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;","'":"&#039;"}})[m]);
-  function addMsg(text, cls) {{
+  // ====== Historique (localStorage) ======
+  const HISTORY_KEY = "iris_chat_history_v1";
+  let history = [];
+
+  const esc = (s) => (s || "").replace(/[&<>\"']/g, m => ({{"&":"&amp;","<":"&lt;"," >":"&gt;","\\"":"&quot;","'":"&#039;"}})[m]);
+
+  function saveHistory() {{
+    try {{
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+    }} catch(e) {{}}
+  }}
+
+  function addMsg(text, cls, save=true) {{
     const wrap = document.createElement("div");
-    wrap.className = "sc-row-msg";
+    // Alignement façon Messenger : IRIS à gauche, toi à droite
+    let rowClass = "sc-row-msg ";
+    if (cls === "sc-user") {{
+      rowClass += "sc-row-user";
+    }} else {{
+      rowClass += "sc-row-bot";
+    }}
+    wrap.className = rowClass;
+
+    // Avatar pour IRIS (bot + typing)
+    if (cls === "sc-bot" || cls === "sc-typing") {{
+      const avatar = document.createElement("div");
+      avatar.className = "sc-avatar";
+      avatar.innerHTML = `{logo_html}`;
+      wrap.appendChild(avatar);
+    }}
+
     const d = document.createElement("div");
     d.className = cls;
     d.innerHTML = esc(text).replace(/\\n/g, "<br/>");
     wrap.appendChild(d);
     msgs.appendChild(wrap);
     msgs.scrollTop = msgs.scrollHeight;
+
+    if (save) {{
+      history.push({{ cls, text }});
+      saveHistory();
+    }}
     return d;
   }}
-  function addBot(text)  {{ return addMsg(text, "sc-bot"); }}
-  function addUser(text) {{ return addMsg(text, "sc-user"); }}
-  function addWarn(text) {{ return addMsg(text, "sc-warn"); }}
 
+  function addBot(text, save=true)  {{ return addMsg(text, "sc-bot", save); }}
+  function addUser(text, save=true) {{ return addMsg(text, "sc-user", save); }}
+  function addWarn(text, save=true) {{ return addMsg(text, "sc-warn", save); }}
+
+  function restoreHistory() {{
+    let raw = null;
+    try {{
+      raw = localStorage.getItem(HISTORY_KEY);
+    }} catch(e) {{}}
+    if (!raw) return;
+    try {{
+      history = JSON.parse(raw) || [];
+    }} catch(e) {{
+      history = [];
+      return;
+    }}
+    for (const m of history) {{
+      if (!m || !m.text || !m.cls) continue;
+      addMsg(m.text, m.cls, false);
+    }}
+    if (history.length > 0) {{
+      window.__sc_welcome_once_shown__ = true;
+    }}
+  }}
+
+  // ====== TYPING INDICATOR : "IRIS est en train d'écrire…" ======
+  //          -> visible dès qu'on appelle le backend
+  //          -> disparait quand la réponse arrive
+  //          -> ou automatiquement au bout de 3 secondes max
+  let typingNode = null;
+  let typingTimer = null;
+
+  function showTyping() {{
+    if (typingNode) return;
+    const wrap = document.createElement("div");
+    wrap.className = "sc-row-msg sc-row-bot";
+    const avatar = document.createElement("div");
+    avatar.className = "sc-avatar";
+    avatar.innerHTML = `{logo_html}`;
+    wrap.appendChild(avatar);
+    const d = document.createElement("div");
+    d.className = "sc-bot sc-typing";
+    d.textContent = "IRIS est en train d'écrire…";   // <=== TEXTE DEMANDÉ
+    wrap.appendChild(d);
+    msgs.appendChild(wrap);
+    msgs.scrollTop = msgs.scrollHeight;
+    typingNode = wrap;
+
+    // Auto-hide au bout de 3 secondes MAX
+    if (typingTimer) {{
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }}
+    typingTimer = setTimeout(() => {{
+      if (typingNode) {{
+        try {{ typingNode.remove(); }} catch(e) {{}}
+        typingNode = null;
+      }}
+      typingTimer = null;
+    }}, 1000);
+  }}
+
+  function hideTyping() {{
+    if (typingTimer) {{
+      clearTimeout(typingTimer);
+      typingTimer = null;
+    }}
+    if (!typingNode) return;
+    try {{
+      typingNode.remove();
+    }} catch(e) {{}}
+    typingNode = null;
+  }}
+
+  // Effacer l'historique
+  function clearHistory() {{
+    history = [];
+    try {{
+      localStorage.removeItem(HISTORY_KEY);
+    }} catch(e) {{}}
+    msgs.innerHTML = "";
+    window.__sc_welcome_once_shown__ = false;
+    addBot("Historique effacé. on commence  une nouvelle conversation.", false);
+  }}
+
+  // Restaurer l'historique au chargement
+  restoreHistory();
+
+  // ---- Helpers UI ----
   function openWin() {{
     win.style.display = "block";
     qin.focus();
@@ -209,6 +408,7 @@ def render_chatbot():
 
   bubble.onclick = () => {{ (win.style.display === "block") ? closeWin() : openWin(); }};
   close.onclick  = () => closeWin();
+  clearBtn.onclick = () => clearHistory();
 
   function showHelpBadge() {{ badge.style.display = "block"; }}
   function hideHelpBadge() {{ badge.style.display = "none"; }}
@@ -241,10 +441,20 @@ def render_chatbot():
 
   // ---- Détection hors périmètre (FR/EN) côté front (pas de suggestions) ----
   const SCOPE_KEYWORDS = [
-    "it storm","itstorm","storm","cloud","devops","iac","infra as code","infrastructure as code",
-    "kubernetes","k8s","docker","data","donn","pipeline","etl","elt",
-    "ia","intelligence artificielle","ml","ai","nlp","rag","consult","conseil"
-  ];
+    // IT Storm
+    "it storm","itstorm","storm","services","service","prestation",
+
+    // IA / Data / Cloud / DevOps
+    "cloud","devops","iac","infra as code","infrastructure as code",
+    "kubernetes","k8s","docker","data","donnée","données","pipeline",
+    "etl","elt","ia","intelligence artificielle","ml","ai","nlp","rag",
+    "consult","conseil",
+
+    // Portage salarial
+    "portage","portage salarial","freelance","auto entrepreneur","consultant",
+    "indépendant","facturation","tjm","tj","revenu","salaire","mission"
+];
+
   function isOutOfScopeUserQuestion(q) {{
     if (!q) return true;
     const qq = q.toLowerCase();
@@ -303,7 +513,7 @@ def render_chatbot():
       const norm = normalizeChatOutJSON(j);
       if (norm) return norm;
       if (typeof j === "string") return parseLegacyText(j);
-      return {{ type:"answer", message:"", answer:"Je ne sais pas." }};
+      return {{ type:"answer", message:"", answer:"Je ne sais pas." }}
     }} catch (e) {{
       if (BACKUP_URL) {{
         try {{
@@ -331,7 +541,13 @@ def render_chatbot():
     const bNo  = document.createElement("button"); bNo.className  = "sc-btn";  bNo.textContent  = "Non (n)";
     actions.appendChild(bYes); actions.appendChild(bNo); card.appendChild(actions);
 
-    const wrap = document.createElement("div"); wrap.className = "sc-row-msg"; wrap.appendChild(card);
+    const wrap = document.createElement("div");
+    wrap.className = "sc-row-msg sc-row-bot";
+    const avatar = document.createElement("div");
+    avatar.className = "sc-avatar";
+    avatar.innerHTML = `{logo_html}`;
+    wrap.appendChild(avatar);
+    wrap.appendChild(card);
     msgs.appendChild(wrap); msgs.scrollTop = msgs.scrollHeight;
 
     let keyHandler = null;
@@ -349,10 +565,11 @@ def render_chatbot():
 
     async function onYes(){{
       disable();
-      const loader = addBot("⏳ ...");
+      showTyping();
       const j = await askAPI(normQ, [], 0);  // réponse directe avec la formulation validée
-      loader.parentElement.remove();
+      hideTyping();
       if (j.type === "answer"){{
+        // Ici, on affiche toujours la précision (cas suggestion validée)
         if (j.message) addBot(j.message);
         addBot(j.answer || "Je ne sais pas.");
       }} else {{
@@ -362,10 +579,10 @@ def render_chatbot():
 
     async function onNo(){{
       disable();
-      const loader = addBot("⏳ ...");
+      showTyping();
       let nextHop = hop + 1;
       let j = await askAPI(originalQ, [], nextHop);
-      loader.parentElement.remove();
+      hideTyping();
 
       // Si plus de suggestion -> reboucle au début (jamais "Plus de suggestions.")
       if (j.type !== "suggest"){{
@@ -404,14 +621,33 @@ def render_chatbot():
       return;
     }}
 
-    // 2) Appel backend (hop=0)
-    const loader = addBot("⏳ Réflexion en cours…");
+    // 2) Appel backend (hop=0) + TYPING
+    showTyping();
     let j = await askAPI(userQ, [], 0);
-    loader.parentElement.remove();
+    hideTyping();
 
     if (j.type === "answer"){{
       // Réponse directe -> pas de suggestions
-      if (j.message) addBot(j.message);
+      const msg = j.message || "";
+      let showMsg = true;
+
+      // Si le backend renvoie "Précision confirmée → ..."
+      // ET que l'utilisateur a déjà tapé exactement cette question,
+      // on n'affiche PAS ce message (on garde seulement la réponse).
+      if (msg.startsWith("Précision confirmée")) {{
+        const m = msg.match(/«(.*)»/);
+        if (m && m[1]) {{
+          const nUser  = normalize(userQ);
+          const nInside = normalize(m[1]);
+          if (nUser && nInside && nUser === nInside) {{
+            showMsg = false;
+          }}
+        }}
+      }}
+
+      if (showMsg && msg) {{
+        addBot(msg);
+      }}
       addBot(j.answer || "Je ne sais pas.");
       return;
     }}
@@ -422,11 +658,26 @@ def render_chatbot():
       const nNorm = normalize(j.normalized_question || "");
       if (nUser && nUser === nNorm) {{
         // court-circuit : on demande la réponse directe sans passer par Oui/Non
-        const quick = addBot("⏳ ...");
+        showTyping();
         const j2 = await askAPI(j.normalized_question || userQ, [], 0);
-        quick.parentElement.remove();
+        hideTyping();
         if (j2.type === "answer") {{
-          if (j2.message) addBot(j2.message);
+          const msg2 = j2.message || "";
+          let showMsg2 = true;
+
+          if (msg2.startsWith("Précision confirmée")) {{
+            const m2 = msg2.match(/«(.*)»/);
+            if (m2 && m2[1]) {{
+              const nInside2 = normalize(m2[1]);
+              if (nUser && nInside2 && nUser === nInside2) {{
+                showMsg2 = false;
+              }}
+            }}
+          }}
+
+          if (showMsg2 && msg2) {{
+            addBot(msg2);
+          }}
           addBot(j2.answer || "Je ne sais pas.");
         }} else {{
           // si malgré tout ce n'est pas une answer, on retombe sur le flux suggestion
@@ -441,9 +692,27 @@ def render_chatbot():
     }}
 
     // Fallback doux
+    showTyping();
     const j2 = await askAPI(userQ, [], 0);
+    hideTyping();
     if (j2.type === "answer"){{
-      if (j2.message) addBot(j2.message);
+      const msg3 = j2.message || "";
+      let showMsg3 = true;
+
+      if (msg3.startsWith("Précision confirmée")) {{
+        const m3 = msg3.match(/«(.*)»/);
+        if (m3 && m3[1]) {{
+          const nUser3  = normalize(userQ);
+          const nInside3 = normalize(m3[1]);
+          if (nUser3 && nInside3 && nUser3 === nInside3) {{
+            showMsg3 = false;
+          }}
+        }}
+      }}
+
+      if (showMsg3 && msg3) {{
+        addBot(msg3);
+      }}
       addBot(j2.answer || "Je ne sais pas.");
     }} else if (j2.type === "suggest"){{
       renderSuggestionCard(userQ, j2.normalized_question || userQ, 0);
@@ -465,6 +734,5 @@ def render_chatbot():
 }})();
 </script>
         """,
-        height=600,  # auto-height
-        
+        height=600,
     )
