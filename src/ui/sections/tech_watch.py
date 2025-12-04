@@ -560,13 +560,22 @@ def render() -> None:
         if st.button("🔄 Rafraîchir la veille maintenant"):
             with st.spinner("Collecte des sources et génération des résumés."):
                 res = _api_post("/tech/watch/refresh")
+
             if res.get("status") == "ok":
-                st.success(
-                    f"Veille mise à jour : {res.get('nb_ok', 0)} sources OK, "
-                    f"{res.get('nb_err', 0)} en erreur."
-                )
+                nb_ok = int(res.get("nb_ok", 0) or 0)
+                
+
+                plural_ok = "source" if nb_ok == 1 else "sources"
+                
+
+                # Ligne OK (sans total, comme tu veux)
+                st.success(f"✅ {nb_ok} {plural_ok} à jour")
+
+                
+
             else:
                 st.error("Impossible de rafraîchir la veille. Vérifie le backend.")
+
     with col2:
         st.info(
             "Ce module agrège automatiquement les nouveautés Cloud, Data, IA, DevOps "

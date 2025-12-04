@@ -572,13 +572,22 @@ def apply_theme(theme: dict):
       --accent: {theme['accent']};
     }}
 
-    * {{ transition: background-color .25s ease, color .25s ease, border-color .25s ease; }}
+    /* Transitions globales douces */
+    * {{
+      transition:
+        background-color .25s ease,
+        color .25s ease,
+        border-color .25s ease;
+    }}
 
     html, body, [data-testid="stAppViewContainer"] {{
       background: var(--bg) !important;
       color: var(--text) !important;
     }}
-    [data-testid="stSidebar"] {{ background: var(--subbg) !important; }}
+
+    [data-testid="stSidebar"] {{
+      background: var(--subbg) !important;
+    }}
 
     [data-testid="stAppViewContainer"] > .main .block-container {{
       padding-top: 2.6rem !important;
@@ -590,6 +599,9 @@ def apply_theme(theme: dict):
       box-shadow: none !important;
     }}
 
+    /* =========================
+       BRAND BAR / TITRES / CARTES
+       ========================= */
     .brandbar {{
       background: var(--card);
       border: 1px solid var(--border);
@@ -598,8 +610,15 @@ def apply_theme(theme: dict):
       margin: .25rem 0 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,.08);
     }}
-    .brand-title {{ font-weight: 800; font-size: 22px; line-height: 1.1; }}
-    .brand-sub   {{ opacity: .85; font-size: 13px; }}
+    .brand-title {{
+      font-weight: 800;
+      font-size: 22px;
+      line-height: 1.1;
+    }}
+    .brand-sub {{
+      opacity: .85;
+      font-size: 13px;
+    }}
 
     .brandbar img {{
       display: block;
@@ -610,8 +629,17 @@ def apply_theme(theme: dict):
       filter: drop-shadow(0 2px 6px rgba(0,0,0,.25));
     }}
 
-    .big-title {{ font-size: 2.0rem; font-weight: 800; color: var(--text); margin-bottom: .25rem; }}
-    .sub-title {{ font-size: .95rem; color: var(--text); opacity: .75; }}
+    .big-title {{
+      font-size: 2.0rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: .25rem;
+    }}
+    .sub-title {{
+      font-size: .95rem;
+      color: var(--text);
+      opacity: .75;
+    }}
 
     .kpi-card {{
       border: 1px solid var(--border);
@@ -620,8 +648,17 @@ def apply_theme(theme: dict):
       background: var(--card);
       box-shadow: 0 1px 2px rgba(10, 30, 80, 0.05);
     }}
-    .kpi-label {{ color: var(--text); opacity: .7; font-size: .8rem; margin-bottom: .15rem; }}
-    .kpi-value {{ color: var(--text); font-size: 1.35rem; font-weight: 700; }}
+    .kpi-label {{
+      color: var(--text);
+      opacity: .7;
+      font-size: .8rem;
+      margin-bottom: .15rem;
+    }}
+    .kpi-value {{
+      color: var(--text);
+      font-size: 1.35rem;
+      font-weight: 700;
+    }}
 
     .card {{
       border: 1px solid var(--border);
@@ -631,7 +668,11 @@ def apply_theme(theme: dict):
       box-shadow: 0 1px 2px rgba(10, 30, 80, 0.05);
     }}
 
-    .stButton>button, .stDownloadButton>button {{
+    /* =========================
+       Boutons
+       ========================= */
+    .stButton>button,
+    .stDownloadButton>button {{
       border-radius: 10px;
       padding: .55rem .9rem;
       font-weight: 600;
@@ -639,8 +680,14 @@ def apply_theme(theme: dict):
       background: var(--accent);
       color: #fff;
     }}
-    .stButton>button:hover {{ filter: brightness(1.06); }}
+    .stButton>button:hover,
+    .stDownloadButton>button:hover {{
+      filter: brightness(1.06);
+    }}
 
+    /* =========================
+       Chips & sources
+       ========================= */
     .chip {{
       display: inline-block;
       padding: 3px 9px;
@@ -663,8 +710,73 @@ def apply_theme(theme: dict):
       margin-top: 6px;
     }}
 
-    .stTabs [role="tablist"] button {{ border-radius: 10px; }}
-    hr {{ border: none; border-top: 1px solid var(--border); margin: .8rem 0 1rem; }}
+    /* =========================
+       TABS — style + effet faded actif
+       ========================= */
+    .stTabs [role="tablist"] button {{
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      margin-right: 0.25rem;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      opacity: 0.70;
+      font-weight: 500;
+      font-size: 0.88rem;
+      transition:
+        background 0.25s ease,
+        color 0.25s ease,
+        opacity 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.25s ease;
+    }}
+
+    /* Onglet actif — halo coloré + effet faded/glow */
+    .stTabs [role="tablist"] button[aria-selected="true"] {{
+      opacity: 1;
+      color: #ffffff !important;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(56,189,248,0.50), transparent 55%),
+        radial-gradient(circle at 100% 0%, rgba(129,140,248,0.55), transparent 55%),
+        linear-gradient(90deg, #0ea5e9, #6366f1, #a855f7);
+      box-shadow:
+        0 0 0 1px rgba(129,140,248,0.85),
+        0 10px 24px rgba(15,23,42,0.40);
+      transform: translateY(-1px);
+      animation: tabGlow 1.6s ease-in-out infinite alternate;
+    }}
+
+    /* Hover pour onglets inactifs */
+    .stTabs [role="tablist"] button:not([aria-selected="true"]):hover {{
+      opacity: 0.95;
+      background: linear-gradient(
+        90deg,
+        rgba(148,163,184,0.12),
+        rgba(129,140,248,0.08)
+      );
+      box-shadow: 0 4px 14px rgba(15,23,42,0.18);
+    }}
+
+    /* Animation du glow/fade */
+    @keyframes tabGlow {{
+      0% {{
+        box-shadow:
+          0 0 0 0 rgba(56,189,248,0.55),
+          0 10px 24px rgba(15,23,42,0.40);
+      }}
+      100% {{
+        box-shadow:
+          0 0 0 9px rgba(56,189,248,0.00),
+          0 14px 30px rgba(15,23,42,0.70);
+      }}
+    }}
+
+    /* Ligne de séparation douce */
+    hr {{
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: .8rem 0 1rem;
+    }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -1474,7 +1586,85 @@ with k4:
 # --------------------------------------------------------------------------------------
 # AUTH & TABS
 # --------------------------------------------------------------------------------------
-# ---------- TABS après login ----------
+# =====================================================================
+# UPLOAD & INDEXING — LOGIQUE COMPLÈTE DANS app.py
+# =====================================================================
+from pathlib import Path
+import json
+import itertools
+import pandas as pd
+
+DATA_RAW = Path("data/raw")
+DATA_PROCESSED = Path("data/processed")
+DATA_RAW.mkdir(parents=True, exist_ok=True)
+DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
+
+
+def save_uploaded_files(files):
+    """
+    Sauvegarde les fichiers uploadés dans data/raw/.
+    Retourne la liste des chemins sauvegardés.
+    """
+    saved_paths = []
+    for f in files:
+        out = DATA_RAW / f.name
+        with open(out, "wb") as buffer:
+            buffer.write(f.getbuffer())
+        saved_paths.append(out)
+    return saved_paths
+
+
+def extract_and_chunk():
+    """
+    Fonction simple d'extraction + chunking.
+    Ici c'est un mock minimal pour que l'UI fonctionne.
+    Tu pourras remplacer par ta vraie logique plus tard.
+    """
+    chunks_out = DATA_PROCESSED / "chunks.jsonl"
+    seen, processed, ignored = 0, 0, 0
+    stats_by_ext = {}
+
+    with open(chunks_out, "w", encoding="utf-8") as f:
+        for file in DATA_RAW.iterdir():
+            if not file.is_file():
+                continue
+            seen += 1
+            ext = file.suffix.lower()
+            stats_by_ext[ext] = stats_by_ext.get(ext, 0) + 1
+
+            # Exemple de chunk artificiel
+            fake_chunk = {
+                "file": file.name,
+                "chunk": f"Fake chunk content from {file.name}",
+            }
+            f.write(json.dumps(fake_chunk, ensure_ascii=False) + "\n")
+            processed += 1
+
+    return processed, chunks_out, {
+        "seen": seen,
+        "processed": processed,
+        "ignored": ignored,
+        "by_ext": stats_by_ext,
+    }
+
+
+def rebuild_index():
+    """
+    Mock de rebuild d'index :
+    compte simplement le nombre de lignes dans chunks.jsonl.
+    """
+    chunks_file = DATA_PROCESSED / "chunks.jsonl"
+    if not chunks_file.exists():
+        return 0
+
+    with open(chunks_file, "r", encoding="utf-8") as f:
+        total = sum(1 for _ in f)
+    return total
+
+
+# =====================================================================
+# TABS UI
+# =====================================================================
 tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
     [
         "🏠 Accueil",
@@ -1485,10 +1675,8 @@ tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
         "🔎 Veille Techno",
     ]
 )
-
-# Chatbot flottant (accessible seulement après connexion)
-
 from src.ui.sections import home
+# Chatbot flottant (accessible seulement après connexion
 # ---- TAB 1: ACCUEIL / ONBOARDING ----
 with tab_home:
     home.render_home_tab()
