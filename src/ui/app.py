@@ -8,6 +8,9 @@ import streamlit as st
 from src.ui.sections import  auth
 from src.ui.sections import speech_chat
 from src.ui.sections import tech_watch
+from src.ui.sections import home
+
+
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
 if "lang_initialized" not in st.session_state:
     set_lang_from_query()          # lit ?lang=fr et initialise st.session_state["lang"]
@@ -1457,16 +1460,16 @@ with k4:
 # --------------------------------------------------------------------------------------
 # AUTH GATE GLOBAL — page de login avant l'accès aux onglets
 # --------------------------------------------------------------------------------------
-st.markdown("## 🔐 Authentification StormCopilot")
+#st.markdown("## 🔐 Authentification StormCopilot")
 
-auth_ok = auth.render_auth_gate()
-if not auth_ok:
+#auth_ok = auth.render_auth_gate()
+#if not auth_ok:
     # Tant que l'utilisateur n'a pas passé les 3 vérifications,
     # on ne montre PAS les onglets.
-    st.stop()
+    #st.stop()
 
 # Petit message après succès (optionnel)
-st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
+#st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
 
 # --------------------------------------------------------------------------------------
 # AUTH & TABS
@@ -1485,8 +1488,10 @@ tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
 
 # Chatbot flottant (accessible seulement après connexion)
 render_chatbot()
-
+from src.ui.sections import home
 # ---- TAB 1: ACCUEIL / ONBOARDING ----
+with tab_home:
+    home.render_home_tab()
 
 # ---- TAB 2: UPLOAD & INDEX ----
 with tab_upload:
