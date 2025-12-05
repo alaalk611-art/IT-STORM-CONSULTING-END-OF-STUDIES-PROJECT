@@ -1,0 +1,40 @@
+[
+  {
+    "name": "law",
+    "trigger": "manual",
+    "steps": [
+      {
+        "type": "refresh_market",
+        "params": {
+          "symbols": [
+            "^FCHI",
+            "BNP.PA",
+            "AIR.PA"
+          ],
+          "interval": "1d",
+          "period": "1y",
+          "timeout": 30
+        }
+      }
+    ]
+  },
+  {
+    "name": "RADARX",
+    "trigger": "manual",
+    "steps": [
+      {
+        "type": "refresh_market",
+        "params": {
+          "symbols": [
+            "^FCHI",
+            "BNP.PA",
+            "AIR.PA"
+          ],
+          "interval": "1d",
+          "period": "1y",
+          "timeout": 20
+        }
+      }
+    ]
+  }
+]

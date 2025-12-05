@@ -9,6 +9,7 @@ from src.ui.sections import  auth
 from src.ui.sections import speech_chat
 from src.ui.sections import tech_watch
 from src.ui.sections import home
+from src.ui.sections import automation
 
 
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
@@ -1559,15 +1560,15 @@ st.sidebar.markdown("</div>", unsafe_allow_html=True)
 render_brand_header(api_ok=None, llm_ok=True)
 
 # KPI row
-k1, k2, k3, k4 = st.columns(4)
-with k1:
-    kpi_card(t("kpi_indexed_docs"), f"{len(list(DATA_RAW.glob('*')))} files")
-with k2:
-    kpi_card(t("kpi_chunks_file"), "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
-with k3:
-    kpi_card(t("kpi_vector_db"), "✅" if any(VEC_DIR.glob('*')) else "❌")
-with k4:
-    kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
+#k1, k2, k3, k4 = st.columns(4)
+#with k1:
+#    kpi_card(t("kpi_indexed_docs"), f"{len(list(DATA_RAW.glob('*')))} files")
+#with k2:
+#    kpi_card(t("kpi_chunks_file"), "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
+#with k3:
+#    kpi_card(t("kpi_vector_db"), "✅" if any(VEC_DIR.glob('*')) else "❌")
+#with k4:
+#    kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
 
 # --------------------------------------------------------------------------------------
 # AUTH GATE GLOBAL — page de login avant l'accès aux onglets
@@ -1583,89 +1584,11 @@ with k4:
 # Petit message après succès (optionnel)
 #st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
 
-# --------------------------------------------------------------------------------------
-# AUTH & TABS
-# --------------------------------------------------------------------------------------
-# =====================================================================
-# UPLOAD & INDEXING — LOGIQUE COMPLÈTE DANS app.py
-# =====================================================================
-from pathlib import Path
-import json
-import itertools
-import pandas as pd
-
-DATA_RAW = Path("data/raw")
-DATA_PROCESSED = Path("data/processed")
-DATA_RAW.mkdir(parents=True, exist_ok=True)
-DATA_PROCESSED.mkdir(parents=True, exist_ok=True)
-
-
-def save_uploaded_files(files):
-    """
-    Sauvegarde les fichiers uploadés dans data/raw/.
-    Retourne la liste des chemins sauvegardés.
-    """
-    saved_paths = []
-    for f in files:
-        out = DATA_RAW / f.name
-        with open(out, "wb") as buffer:
-            buffer.write(f.getbuffer())
-        saved_paths.append(out)
-    return saved_paths
-
-
-def extract_and_chunk():
-    """
-    Fonction simple d'extraction + chunking.
-    Ici c'est un mock minimal pour que l'UI fonctionne.
-    Tu pourras remplacer par ta vraie logique plus tard.
-    """
-    chunks_out = DATA_PROCESSED / "chunks.jsonl"
-    seen, processed, ignored = 0, 0, 0
-    stats_by_ext = {}
-
-    with open(chunks_out, "w", encoding="utf-8") as f:
-        for file in DATA_RAW.iterdir():
-            if not file.is_file():
-                continue
-            seen += 1
-            ext = file.suffix.lower()
-            stats_by_ext[ext] = stats_by_ext.get(ext, 0) + 1
-
-            # Exemple de chunk artificiel
-            fake_chunk = {
-                "file": file.name,
-                "chunk": f"Fake chunk content from {file.name}",
-            }
-            f.write(json.dumps(fake_chunk, ensure_ascii=False) + "\n")
-            processed += 1
-
-    return processed, chunks_out, {
-        "seen": seen,
-        "processed": processed,
-        "ignored": ignored,
-        "by_ext": stats_by_ext,
-    }
-
-
-def rebuild_index():
-    """
-    Mock de rebuild d'index :
-    compte simplement le nombre de lignes dans chunks.jsonl.
-    """
-    chunks_file = DATA_PROCESSED / "chunks.jsonl"
-    if not chunks_file.exists():
-        return 0
-
-    with open(chunks_file, "r", encoding="utf-8") as f:
-        total = sum(1 for _ in f)
-    return total
-
 
 # =====================================================================
 # TABS UI
 # =====================================================================
-tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
+tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno, tab_automation = st.tabs(
     [
         "🏠 Accueil",
         "📂 Upload & Index",
@@ -1673,6 +1596,7 @@ tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno = st.tabs(
         "🌍 Market Watch",
         "🎤 Voice Copilot",
         "🔎 Veille Techno",
+        "⚙️ Automation Studio",
     ]
 )
 from src.ui.sections import home
@@ -1736,6 +1660,10 @@ with tab_voice:
 # ---- TAB 6: TECHNO WATCH ----
 with tab_techno:
     tech_watch.render()
+
+# ---- TAB 7: AUTOMATION STUDIO ----
+with tab_automation:
+    automation.render_automation_tab()    
 
 # --------------------------------------------------------------------------------------
 # END OF FILE
