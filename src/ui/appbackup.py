@@ -7,6 +7,11 @@ from src.ui.i18n import set_lang_from_query, get_lang, t
 import streamlit as st
 from src.ui.sections import  auth
 from src.ui.sections import speech_chat
+from src.ui.sections import tech_watch
+from src.ui.sections import home
+from src.ui.sections import automation
+
+
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
 if "lang_initialized" not in st.session_state:
     set_lang_from_query()          # lit ?lang=fr et initialise st.session_state["lang"]
@@ -568,13 +573,22 @@ def apply_theme(theme: dict):
       --accent: {theme['accent']};
     }}
 
-    * {{ transition: background-color .25s ease, color .25s ease, border-color .25s ease; }}
+    /* Transitions globales douces */
+    * {{
+      transition:
+        background-color .25s ease,
+        color .25s ease,
+        border-color .25s ease;
+    }}
 
     html, body, [data-testid="stAppViewContainer"] {{
       background: var(--bg) !important;
       color: var(--text) !important;
     }}
-    [data-testid="stSidebar"] {{ background: var(--subbg) !important; }}
+
+    [data-testid="stSidebar"] {{
+      background: var(--subbg) !important;
+    }}
 
     [data-testid="stAppViewContainer"] > .main .block-container {{
       padding-top: 2.6rem !important;
@@ -586,6 +600,9 @@ def apply_theme(theme: dict):
       box-shadow: none !important;
     }}
 
+    /* =========================
+       BRAND BAR / TITRES / CARTES
+       ========================= */
     .brandbar {{
       background: var(--card);
       border: 1px solid var(--border);
@@ -594,8 +611,15 @@ def apply_theme(theme: dict):
       margin: .25rem 0 10px;
       box-shadow: 0 8px 24px rgba(0,0,0,.08);
     }}
-    .brand-title {{ font-weight: 800; font-size: 22px; line-height: 1.1; }}
-    .brand-sub   {{ opacity: .85; font-size: 13px; }}
+    .brand-title {{
+      font-weight: 800;
+      font-size: 22px;
+      line-height: 1.1;
+    }}
+    .brand-sub {{
+      opacity: .85;
+      font-size: 13px;
+    }}
 
     .brandbar img {{
       display: block;
@@ -606,8 +630,17 @@ def apply_theme(theme: dict):
       filter: drop-shadow(0 2px 6px rgba(0,0,0,.25));
     }}
 
-    .big-title {{ font-size: 2.0rem; font-weight: 800; color: var(--text); margin-bottom: .25rem; }}
-    .sub-title {{ font-size: .95rem; color: var(--text); opacity: .75; }}
+    .big-title {{
+      font-size: 2.0rem;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: .25rem;
+    }}
+    .sub-title {{
+      font-size: .95rem;
+      color: var(--text);
+      opacity: .75;
+    }}
 
     .kpi-card {{
       border: 1px solid var(--border);
@@ -616,8 +649,17 @@ def apply_theme(theme: dict):
       background: var(--card);
       box-shadow: 0 1px 2px rgba(10, 30, 80, 0.05);
     }}
-    .kpi-label {{ color: var(--text); opacity: .7; font-size: .8rem; margin-bottom: .15rem; }}
-    .kpi-value {{ color: var(--text); font-size: 1.35rem; font-weight: 700; }}
+    .kpi-label {{
+      color: var(--text);
+      opacity: .7;
+      font-size: .8rem;
+      margin-bottom: .15rem;
+    }}
+    .kpi-value {{
+      color: var(--text);
+      font-size: 1.35rem;
+      font-weight: 700;
+    }}
 
     .card {{
       border: 1px solid var(--border);
@@ -627,7 +669,11 @@ def apply_theme(theme: dict):
       box-shadow: 0 1px 2px rgba(10, 30, 80, 0.05);
     }}
 
-    .stButton>button, .stDownloadButton>button {{
+    /* =========================
+       Boutons
+       ========================= */
+    .stButton>button,
+    .stDownloadButton>button {{
       border-radius: 10px;
       padding: .55rem .9rem;
       font-weight: 600;
@@ -635,8 +681,14 @@ def apply_theme(theme: dict):
       background: var(--accent);
       color: #fff;
     }}
-    .stButton>button:hover {{ filter: brightness(1.06); }}
+    .stButton>button:hover,
+    .stDownloadButton>button:hover {{
+      filter: brightness(1.06);
+    }}
 
+    /* =========================
+       Chips & sources
+       ========================= */
     .chip {{
       display: inline-block;
       padding: 3px 9px;
@@ -659,8 +711,73 @@ def apply_theme(theme: dict):
       margin-top: 6px;
     }}
 
-    .stTabs [role="tablist"] button {{ border-radius: 10px; }}
-    hr {{ border: none; border-top: 1px solid var(--border); margin: .8rem 0 1rem; }}
+    /* =========================
+       TABS — style + effet faded actif
+       ========================= */
+    .stTabs [role="tablist"] button {{
+      border-radius: 999px;
+      padding: 0.35rem 0.9rem;
+      margin-right: 0.25rem;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text);
+      opacity: 0.70;
+      font-weight: 500;
+      font-size: 0.88rem;
+      transition:
+        background 0.25s ease,
+        color 0.25s ease,
+        opacity 0.25s ease,
+        box-shadow 0.25s ease,
+        transform 0.25s ease;
+    }}
+
+    /* Onglet actif — halo coloré + effet faded/glow */
+    .stTabs [role="tablist"] button[aria-selected="true"] {{
+      opacity: 1;
+      color: #ffffff !important;
+      background:
+        radial-gradient(circle at 0% 0%, rgba(56,189,248,0.50), transparent 55%),
+        radial-gradient(circle at 100% 0%, rgba(129,140,248,0.55), transparent 55%),
+        linear-gradient(90deg, #0ea5e9, #6366f1, #a855f7);
+      box-shadow:
+        0 0 0 1px rgba(129,140,248,0.85),
+        0 10px 24px rgba(15,23,42,0.40);
+      transform: translateY(-1px);
+      animation: tabGlow 1.6s ease-in-out infinite alternate;
+    }}
+
+    /* Hover pour onglets inactifs */
+    .stTabs [role="tablist"] button:not([aria-selected="true"]):hover {{
+      opacity: 0.95;
+      background: linear-gradient(
+        90deg,
+        rgba(148,163,184,0.12),
+        rgba(129,140,248,0.08)
+      );
+      box-shadow: 0 4px 14px rgba(15,23,42,0.18);
+    }}
+
+    /* Animation du glow/fade */
+    @keyframes tabGlow {{
+      0% {{
+        box-shadow:
+          0 0 0 0 rgba(56,189,248,0.55),
+          0 10px 24px rgba(15,23,42,0.40);
+      }}
+      100% {{
+        box-shadow:
+          0 0 0 9px rgba(56,189,248,0.00),
+          0 14px 30px rgba(15,23,42,0.70);
+      }}
+    }}
+
+    /* Ligne de séparation douce */
+    hr {{
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: .8rem 0 1rem;
+    }}
     </style>
     """
     st.markdown(css, unsafe_allow_html=True)
@@ -1076,23 +1193,156 @@ def make_docx(title="Executive Summary", paragraphs=None) -> bytes:
     return bio.read()
 
 # --------------------------------------------------------------------------------------
-# SIDEBAR — DRAPEAUX CLIQUABLES (FR / EN) + THEME + effet visuel
+# SIDEBAR — LANGUE, THEME, CARTES INFO (NON FONCTIONNELLES)
 # --------------------------------------------------------------------------------------
 import base64
 from pathlib import Path
-import streamlit as st
+
+# ========= CSS sidebar (flags + cartes + rotateur) =========
+st.sidebar.markdown("""
+<style>
+section[data-testid="stSidebar"] > div {
+    padding-top: 1rem;
+}
+
+/* Cartes */
+.sidebar-card {
+    border-radius: 16px;
+    padding: 0.9rem 0.85rem 0.8rem 0.85rem;
+    margin-bottom: 0.8rem;
+    background: rgba(255,255,255,0.55);
+    box-shadow: 0 4px 14px rgba(15,23,42,0.05);
+    border: 1px solid rgba(148,163,184,0.35);
+}
+[data-theme="dark"] .sidebar-card {
+    background: rgba(15,23,42,0.95);
+    border-color: rgba(148,163,184,0.35);
+}
+
+/* Titres */
+.sidebar-title {
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+.sidebar-title span.icon {
+    font-size: 1.0rem;
+}
+
+/* Ligne fine */
+.sidebar-sep {
+    height: 1px;
+    background: linear-gradient(90deg,
+                                rgba(148,163,184,0.2),
+                                rgba(79,70,229,0.45),
+                                rgba(148,163,184,0.2));
+    margin: 0.15rem 0 0.55rem 0;
+    border-radius: 999px;
+}
+
+/* Flags langue */
+.lang-flags {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    margin-bottom:6px;
+}
+.lang-flag img {
+    height:32px;
+    border-radius:8px;
+    box-shadow:0 2px 8px rgba(0,0,0,.18);
+    border:2px solid transparent;
+    transition:transform 0.2s, border-color 0.2s;
+    cursor:pointer;
+}
+.lang-flag.active img { border-color:#4f46e5; }
+.lang-flag img:hover { transform:scale(1.07); }
+.lang-flag img:active {
+    border-color:#2563eb !important;
+    box-shadow:0 0 8px rgba(37,99,235,0.6);
+    transform:scale(0.97);
+}
+
+/* Texte d’aide */
+.sidebar-help {
+    font-size: 0.73rem;
+    opacity: 0.8;
+    margin-top: 0.25rem;
+}
+
+/* Listes */
+.sidebar-list {
+    font-size: 0.8rem;
+    padding-left: 1.1rem;
+    margin-bottom: 0.1rem;
+}
+.sidebar-list li { margin-bottom: 0.15rem; }
+
+/* ------- Rotateur IT-STORM (5 messages, fade in/out) ------- */
+.itstorm-rotator {
+    position: relative;
+    overflow: hidden;
+    min-height: 52px;      /* hauteur min du bloc */
+}
+.itstorm-rotator-inner {
+    position: relative;
+}
+
+/* Tous les items sont superposés, un seul visible à la fois */
+.itstorm-rotator .itstorm-rotator-item {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    opacity: 0;
+    display: flex;
+    align-items: center;
+    font-size: 0.8rem;
+    line-height: 1.1rem;
+    padding-right: 4px;
+}
+
+/* Animation de base : visible 0–16%, invisible ensuite */
+@keyframes itstormFade {
+    0%, 16%   { opacity: 1; }
+    20%, 100% { opacity: 0; }
+}
+
+/* 5 messages, chacun avec un décalage de 10s sur 50s */
+.itstorm-rotator .itstorm-rotator-item:nth-child(1) {
+    animation: itstormFade 50s infinite;
+}
+.itstorm-rotator .itstorm-rotator-item:nth-child(2) {
+    animation: itstormFade 50s infinite;
+    animation-delay: 10s;
+}
+.itstorm-rotator .itstorm-rotator-item:nth-child(3) {
+    animation: itstormFade 50s infinite;
+    animation-delay: 20s;
+}
+.itstorm-rotator .itstorm-rotator-item:nth-child(4) {
+    animation: itstormFade 50s infinite;
+    animation-delay: 30s;
+}
+.itstorm-rotator .itstorm-rotator-item:nth-child(5) {
+    animation: itstormFade 50s infinite;
+    animation-delay: 40s;
+}
+</style>
+""", unsafe_allow_html=True)
 
 
-# Chemins vers les drapeaux
+# ========= Helpers langue / flags =========
 flag_en_path = Path("src/ui/assets/flag_en.png")
 flag_fr_path = Path("src/ui/assets/flag_fr.png")
 
 def _b64(p: Path) -> str:
-    """Encode une image en base64 pour affichage HTML"""
     with open(p, "rb") as f:
         return base64.b64encode(f.read()).decode("utf-8")
 
-# Langue (session_state ou URL ?lang=fr)
 url_lang = st.query_params.get("lang")
 if "lang" not in st.session_state:
     st.session_state["lang"] = url_lang if url_lang in {"en", "fr"} else "en"
@@ -1100,141 +1350,209 @@ else:
     if url_lang in {"en", "fr"} and url_lang != st.session_state["lang"]:
         st.session_state["lang"] = url_lang
 
-def _set_lang(lang: str):
-    st.session_state["lang"] = lang
-    st.query_params["lang"] = lang
-    st.toast("Français activé 🇫🇷" if lang == "fr" else "English enabled 🇬🇧")
-
-# --------------------------------------------------------------------------------------
-# CSS pour les drapeaux + effet clic
-# --------------------------------------------------------------------------------------
-st.sidebar.markdown("""
-<style>
-.lang-flags {
-    display:flex;
-    gap:12px;
-    align-items:center;
-    margin-bottom:10px;
-}
-.lang-flag img {
-    height:36px;
-    border-radius:8px;
-    box-shadow:0 2px 8px rgba(0,0,0,.18);
-    border:2px solid transparent;
-    transition:transform 0.2s, border-color 0.2s;
-    cursor:pointer;
-}
-.lang-flag.active img {
-    border-color:#4f46e5;
-}
-.lang-flag img:hover {
-    transform:scale(1.07);
-}
-/* Effet visuel temporaire au clic */
-.lang-flag img:active {
-    border-color:#2563eb !important;
-    box-shadow:0 0 8px rgba(37,99,235,0.6);
-    transform:scale(0.97);
-}
-</style>
-""", unsafe_allow_html=True)
-
-# --------------------------------------------------------------------------------------
-# HTML cliquable (même fenêtre)
-# --------------------------------------------------------------------------------------
 lang = st.session_state["lang"]
-html_flags = f"""
-<div class="lang-flags">
-  <a class="lang-flag {'active' if lang=='en' else ''}" href="?lang=en" target="_self" title="English">
-    <img src="data:image/png;base64,{_b64(flag_en_path)}" />
-  </a>
-  <a class="lang-flag {'active' if lang=='fr' else ''}" href="?lang=fr" target="_self" title="Français">
-    <img src="data:image/png;base64,{_b64(flag_fr_path)}" />
-  </a>
+
+# ========= CARTE 0 : IT-STORM EN BREF (ROTATEUR tout en haut) =========
+st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
+st.sidebar.markdown(
+    f'<div class="sidebar-title"><span class="icon">⚡</span>'
+    f'<span>{"IT-STORM in a few words" if lang=="en" else "IT-STORM en bref"}</span></div>'
+    '<div class="sidebar-sep"></div>',
+    unsafe_allow_html=True
+)
+
+if lang == "en":
+    rotator_html = """
+<div class="itstorm-rotator">
+  <div class="itstorm-rotator-inner">
+    <div class="itstorm-rotator-item">
+      IT-STORM is a consulting studio focused on Cloud, Data, AI and DevOps.
+    </div>
+    <div class="itstorm-rotator-item">
+      StormCopilot centralises documents, market data and tech watch in one place.
+    </div>
+    <div class="itstorm-rotator-item">
+      Goal: help consultants prepare missions faster with reliable information.
+    </div>
+  </div>
 </div>
 """
+else:
+    rotator_html = """
+<div class="itstorm-rotator">
+  <div class="itstorm-rotator-inner">
+    <div class="itstorm-rotator-item">
+      IT-STORM est un studio de conseil orienté Cloud, Data, IA et DevOps.
+    </div>
+    <div class="itstorm-rotator-item">
+      StormCopilot centralise documents, données marchés et veille techno au même endroit.
+    </div>
+    <div class="itstorm-rotator-item">
+      Objectif : aider les consultants à préparer leurs missions plus vite, avec des infos fiables.
+    </div>
+  </div>
+</div>
+"""
+st.sidebar.markdown(rotator_html, unsafe_allow_html=True)
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+# ========= LANGUE =========
 st.sidebar.markdown("### 🌐 Language / Langue")
+
+html_flags = f"""
+<div class="sidebar-card">
+  <div class="sidebar-title">
+    <span class="icon">🌍</span>
+    <span>{'Language selection' if lang=='en' else 'Sélection de la langue'}</span>
+  </div>
+  <div class="sidebar-sep"></div>
+  <div class="lang-flags">
+    <a class="lang-flag {'active' if lang=='en' else ''}" href="?lang=en" target="_self">
+      <img src="data:image/png;base64,{_b64(flag_en_path)}" />
+    </a>
+    <a class="lang-flag {'active' if lang=='fr' else ''}" href="?lang=fr" target="_self">
+      <img src="data:image/png;base64,{_b64(flag_fr_path)}" />
+    </a>
+  </div>
+  <div class="sidebar-help">
+    {'Click a flag to switch the interface.'
+     if lang=='en'
+     else 'Clique sur un drapeau pour changer la langue de l’interface.'}
+  </div>
+</div>
+"""
 st.sidebar.markdown(html_flags, unsafe_allow_html=True)
 
-# --------------------------------------------------------------------------------------
-# MODE SOMBRE / CLAIR
-# --------------------------------------------------------------------------------------
-# --------------------------------------------------------------------------------------
-# MODE SOMBRE / CLAIR — unique key to avoid StreamlitDuplicateElementKey
-# --------------------------------------------------------------------------------------
+# ========= DARK / LIGHT MODE =========
 dark_mode_key = "ui_dark_mode_toggle_unique"
-
-# Ensure a default state
 if "dark_mode" not in st.session_state:
     st.session_state["dark_mode"] = False
 
+st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
+st.sidebar.markdown(
+    f'<div class="sidebar-title"><span class="icon">💡</span>'
+    f'<span>{"Appearance" if lang=="en" else "Apparence"}</span></div>'
+    '<div class="sidebar-sep"></div>',
+    unsafe_allow_html=True
+)
+
 dark_mode = st.sidebar.toggle(
-    "Dark mode" if st.session_state.get("lang", "en") == "en" else "Mode sombre",
+    "Dark mode" if lang == "en" else "Mode sombre",
     value=st.session_state["dark_mode"],
-    help="Toggle dark/light theme" if st.session_state.get("lang", "en") == "en" else "Basculer clair/sombre",
+    help="Toggle light / dark theme" if lang == "en" else "Basculer entre thème clair et sombre",
     key=dark_mode_key,
 )
-
 st.session_state["dark_mode"] = dark_mode
-
 apply_theme(THEME_DARK if dark_mode else THEME_LIGHT)
 
-# --------------------------------------------------------------------------------------
-# AUTRES PARAMÈTRES
-# --------------------------------------------------------------------------------------
 st.sidebar.caption("IT-STORM · Innovation & Consulting")
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-top_k = st.sidebar.slider(
-    "Top-K results" if st.session_state.get("lang", "en") == "en" else "Top-K résultats",
-    2, 12, 4, 1,
-    help=(
-        "Number of most similar document chunks retrieved from the vector database "
-        "to build the context for each question."
-        if st.session_state.get("lang", "en") == "en"
-        else "Nombre de segments de documents similaires utilisés pour construire le contexte des réponses."
-    ),
+# ========= CARTE 1 : CONSEILS D’UTILISATION =========
+st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
+st.sidebar.markdown(
+    f'<div class="sidebar-title"><span class="icon">💬</span>'
+    f'<span>{"How to use StormCopilot" if lang=="en" else "Bien utiliser StormCopilot"}</span></div>'
+    '<div class="sidebar-sep"></div>',
+    unsafe_allow_html=True
 )
 
-sim_thresh = st.sidebar.slider(
-    "Similarity threshold (distance)" if st.session_state.get("lang", "en") == "en" else "Seuil de similarité (distance)",
-    0.0, 1.5, 0.0, 0.05,
-    help=(
-        "Maximum cosine distance between your query and a document chunk. "
-        "Lower values mean stricter matching."
-        if st.session_state.get("lang", "en") == "en"
-        else "Distance maximale de similarité entre la question et un segment de document. "
-             "Plus la valeur est faible, plus la correspondance est stricte."
-    ),
-)
-
-model_name = st.sidebar.text_input(
-    "Embedding model" if st.session_state.get("lang", "en") == "en" else "Modèle d’embedding",
-    EMB_MODEL_NAME,
-    help=(
-        "The model used to transform text into numerical embeddings for semantic search."
-        if st.session_state.get("lang", "en") == "en"
-        else "Modèle utilisé pour convertir le texte en vecteurs numériques (recherche sémantique)."
-    ),
-)
-if model_name != EMB_MODEL_NAME:
-    st.sidebar.warning(
-        "This UI uses MiniLM; change in code to switch model safely."
-        if st.session_state.get("lang", "en") == "en"
-        else "Cette interface utilise MiniLM ; change dans le code pour modifier le modèle en sécurité."
+if lang == "en":
+    st.sidebar.markdown(
+        """
+<ul class="sidebar-list">
+  <li>Start with a clear question or a short objective.</li>
+  <li>Use the tabs above to switch between Docs, Market, Voice and Tech Watch.</li>
+  <li>Keep your prompts simple; the assistant will ask for more details if needed.</li>
+</ul>
+""",
+        unsafe_allow_html=True,
+    )
+else:
+    st.sidebar.markdown(
+        """
+<ul class="sidebar-list">
+  <li>Commence par une question claire ou un objectif précis.</li>
+  <li>Utilise les onglets en haut pour passer de la génération de docs au Market Watch, Voice Copilot ou Veille Techno.</li>
+  <li>Garde tes demandes simples : l’assistant demandera des détails si nécessaire.</li>
+</ul>
+""",
+        unsafe_allow_html=True,
     )
 
-st.sidebar.markdown("---")
-st.sidebar.subheader("Diagnostics" if st.session_state.get("lang", "en") == "en" else "Diagnostics")
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+# ========= CARTE 2 : SECTIONS PRINCIPALES =========
+st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
 st.sidebar.markdown(
-    "LLM backend: **Local Hugging Face** ✅"
-    if st.session_state.get("lang", "en") == "en"
-    else "Moteur LLM : **Hugging Face local** ✅"
+    f'<div class="sidebar-title"><span class="icon">📂</span>'
+    f'<span>{"Main sections" if lang=="en" else "Sections principales"}</span></div>'
+    '<div class="sidebar-sep"></div>',
+    unsafe_allow_html=True
 )
-st.sidebar.caption(
-    "Auto theme · v2.2 (Local-only, CPU-safe)"
-    if st.session_state.get("lang", "en") == "en"
-    else "Thème auto · v2.2 (Local uniquement, CPU-safe)"
+
+if lang == "en":
+    st.sidebar.markdown(
+        """
+<ul class="sidebar-list">
+  <li><strong>Upload & Index</strong> – add new files to the knowledge base.</li>
+  <li><strong>Generate Docs</strong> – create structured documents from your questions.</li>
+  <li><strong>Market Watch</strong> – monitor markets, indicators and ML signals.</li>
+  <li><strong>Voice Copilot</strong> – talk with the assistant in natural language.</li>
+  <li><strong>Tech Watch</strong> – follow Cloud, Data, AI & freelancing trends.</li>
+</ul>
+""",
+        unsafe_allow_html=True,
+    )
+else:
+    st.sidebar.markdown(
+        """
+<ul class="sidebar-list">
+  <li><strong>Upload & Index</strong> : ajouter de nouveaux fichiers à la base de connaissance.</li>
+  <li><strong>Generate Docs</strong> : générer des documents structurés à partir de tes questions.</li>
+  <li><strong>Market Watch</strong> : suivre les marchés, les indicateurs et les signaux ML.</li>
+  <li><strong>Voice Copilot</strong> : dialoguer à l’oral avec l’assistant.</li>
+  <li><strong>Veille Techno</strong> : suivre les tendances Cloud, Data, IA et freelancing.</li>
+</ul>
+""",
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+# ========= CARTE 3 : À PROPOS DE CETTE VERSION =========
+st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
+st.sidebar.markdown(
+    f'<div class="sidebar-title"><span class="icon">🧾</span>'
+    f'<span>{"About this version" if lang=="en" else "À propos de cette version"}</span></div>'
+    '<div class="sidebar-sep"></div>',
+    unsafe_allow_html=True
 )
+
+if lang == "en":
+    st.sidebar.markdown(
+        """
+**StormCopilot • Studio IT-STORM**
+
+• Version: <em>Preview 2025</em>  
+• Mode: local, offline-first  
+• Designed for consultants and tech enthusiasts.
+""",
+        unsafe_allow_html=True,
+    )
+else:
+    st.sidebar.markdown(
+        """
+**StormCopilot • Studio IT-STORM**
+
+• Version : <em>Aperçu 2025</em>  
+• Mode : local, priorité au hors-ligne  
+• Pensé pour les consultants et passionnés de tech.
+""",
+        unsafe_allow_html=True,
+    )
+
+st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------------------
 # HEADER
@@ -1242,83 +1560,61 @@ st.sidebar.caption(
 render_brand_header(api_ok=None, llm_ok=True)
 
 # KPI row
-k1, k2, k3, k4 = st.columns(4)
-with k1: kpi_card(t("kpi_indexed_docs"), f"{len(list(DATA_RAW.glob('*')))} files")
-with k2: kpi_card(t("kpi_chunks_file"), "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
-with k3: kpi_card(t("kpi_vector_db"), "✅" if any(VEC_DIR.glob('*')) else "❌")
-with k4: kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
+#k1, k2, k3, k4 = st.columns(4)
+#with k1:
+#    kpi_card(t("kpi_indexed_docs"), f"{len(list(DATA_RAW.glob('*')))} files")
+#with k2:
+#    kpi_card(t("kpi_chunks_file"), "✅" if (DATA_PROCESSED / "chunks.jsonl").exists() else "❌")
+#with k3:
+#    kpi_card(t("kpi_vector_db"), "✅" if any(VEC_DIR.glob('*')) else "❌")
+#with k4:
+#    kpi_card(t("kpi_output_folder"), "✅" if any(OUT_DIR.glob('*')) else "—")
 
 # --------------------------------------------------------------------------------------
-# TABS
+# AUTH GATE GLOBAL — page de login avant l'accès aux onglets
 # --------------------------------------------------------------------------------------
-tab_chat, tab_upload, tab_generate, tab_market, tab_voice = st.tabs(
-    ["💬 Login", "📂 Upload & Index", "📝 Generate Docs", "🌍 Market Watch", "🎤 Voice Copilot"]
+#st.markdown("## 🔐 Authentification StormCopilot")
+
+#auth_ok = auth.render_auth_gate()
+#if not auth_ok:
+    # Tant que l'utilisateur n'a pas passé les 3 vérifications,
+    # on ne montre PAS les onglets.
+    #st.stop()
+
+# Petit message après succès (optionnel)
+#st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
+
+
+# =====================================================================
+# TABS UI
+# =====================================================================
+tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno, tab_automation = st.tabs(
+    [
+        "🏠 Accueil",
+        "📂 Upload & Index",
+        "📝 Generate Docs",
+        "🌍 Market Watch",
+        "🎤 Voice Copilot",
+        "🔎 Veille Techno",
+        "⚙️ Automation Studio",
+    ]
 )
-
-render_chatbot()
-
-
-
-# ---- TAB 1: CHAT (protégé par 2FA) ----
-with tab_chat:
-    # Si l'utilisateur N'EST PAS authentifié, on montre seulement le login
-    if not auth.render_auth_gate():
-        st.stop()  # On ne montre pas le contenu du chat
-
-    # À partir d'ici, utilisateur authentifié
-    st.markdown("### " + t("chat_title"))
-
-    # Conserver top_k côté session pour l’endpoint /chat (optionnel)
-    st.session_state["top_k_from_ui"] = top_k
-
-    # 🔑 clé unique pour éviter StreamlitDuplicateElementKey
-    q = st.text_input(t("chat_input"), key="main_chat_input")
-
-    c1, c2 = st.columns([1, 1])
-    do_search = c1.button(t("chat_button"), use_container_width=True, key="btn_chat_search")
-    clear_box = c2.button(t("chat_clear"), use_container_width=True, key="btn_chat_clear")
-
-    if clear_box:
-        st.session_state.pop("last_chat_result", None)
-        st.rerun()
-
-    if do_search and q:
-        query = q[:2000] if len(q) > 2000 else q
-        if len(q) > 2000:
-            st.info(t("chat_question_too_long"))
-        with st.spinner("⏳"):
-            try:
-                result = ask_rag(
-                    question=query,
-                    k=top_k,
-                    get_sources_fn=_get_source_names_for_query,
-                )
-                st.session_state["last_chat_result"] = {"q": query, **result}
-            except Exception as e:
-                st.error(f"Erreur RAG : {e}")
-
-    # Affichage du dernier résultat
-    last = st.session_state.get("last_chat_result")
-    if last:
-        st.markdown("#### " + t("chat_answer"))
-        st.write(last.get("answer", ""))
-
-        if last.get("sources"):
-            st.markdown("#### " + t("chat_sources"))
-            st.markdown(", ".join(f"`{s}`" for s in last["sources"]))
-
+from src.ui.sections import home
+# Chatbot flottant (accessible seulement après connexion
+# ---- TAB 1: ACCUEIL / ONBOARDING ----
+with tab_home:
+    home.render_home_tab()
+    render_chatbot()
 # ---- TAB 2: UPLOAD & INDEX ----
 with tab_upload:
     st.markdown("### Upload documents & (re)build index")
 
-    # ✅ Uploader élargi (on garde juste le contrôle d’upload)
     files = st.file_uploader(
         "Upload PDF/DOCX/TXT/MD/PPTX/CSV/XLSX/HTML/JSON",
         type=["pdf", "docx", "txt", "md", "pptx", "csv", "xlsx", "xls", "html", "htm", "json"],
-        accept_multiple_files=True
+        accept_multiple_files=True,
     )
 
-    # ✅ Ligne des 2 premiers boutons
     c1, c2 = st.columns(2)
     if c1.button("⬆️  Save uploads", use_container_width=True) and files:
         saved = save_uploaded_files(files)
@@ -1328,18 +1624,19 @@ with tab_upload:
         with st.spinner("Extracting & chunking..."):
             n, outp, stats = extract_and_chunk()
         st.success(f"✅ Created {n} chunks → {outp}")
-        st.caption(f"Seen: {stats['seen']} • Processed: {stats['processed']} • Ignored: {stats['ignored']} • By ext: {stats['by_ext']}")
+        st.caption(
+            f"Seen: {stats['seen']} • Processed: {stats['processed']} • "
+            f"Ignored: {stats['ignored']} • By ext: {stats['by_ext']}"
+        )
 
-    # ✅ 3e bouton (plein largeur)
     if st.button("🧠  Rebuild Vector Index", use_container_width=True):
         with st.spinner("Encoding & indexing..."):
             total = rebuild_index()
         st.success(f"✅ Indexed {total} chunks into ChromaDB.")
 
-    # Aperçu (optionnel)
     if (DATA_PROCESSED / "chunks.jsonl").exists():
         st.markdown("#### Preview extracted chunks")
-        import json, itertools, pandas as pd
+        import json, itertools
         rows = []
         with open(DATA_PROCESSED / "chunks.jsonl", "r", encoding="utf-8") as f:
             for line in itertools.islice(f, 3):
@@ -1349,19 +1646,25 @@ with tab_upload:
             st.dataframe(df, use_container_width=True, height=200)
 
 # ---- TAB 3: DOCS GENERATION ----
-from src.ui.tabs import generate_docs_rag  # put near your other imports
 with tab_generate:
     generate_docs_rag.render()
 
 # ---- TAB 4: MARKET WATCH ----
 with tab_market:
     market.render()
+
 # ---- TAB 5: VOICE COPILOT ----
 with tab_voice:
     speech_chat.render()
-    
+
+# ---- TAB 6: TECHNO WATCH ----
+with tab_techno:
+    tech_watch.render()
+
+# ---- TAB 7: AUTOMATION STUDIO ----
+with tab_automation:
+    automation.render_automation_tab()    
+
 # --------------------------------------------------------------------------------------
 # END OF FILE
 # --------------------------------------------------------------------------------------
-
-

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from chromadb import PersistentClient
 from langchain_chroma import Chroma
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_community.embeddings import HuggingFaceEmbeddings
 
 from src.config.settings import PROC_DIR, RAW_DIR
 from src.ingestion.chunking import chunk_words

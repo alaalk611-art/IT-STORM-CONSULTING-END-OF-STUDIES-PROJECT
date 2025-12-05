@@ -555,13 +555,13 @@ def render_automation_tab() -> None:
             action = st.selectbox(
                 " ",
                 options=[
-                    ("refresh_tech_watch", "Rafraîchir Tech Watch"),
-                    ("refresh_market", "Rafraîchir Market Watch"),
-                    ("generate_rag_summary", "Générer un résumé RAG"),
+                    ("refresh_market", "Rafraîchir Market Watch (API directe)"),
+                    ("n8n_webhook", "Appeler un workflow n8n (Market Radar)"),
                 ],
                 format_func=lambda x: x[1],
                 label_visibility="collapsed",
             )
+
             st.markdown(
                 '<div class="auto-field-helper">Sélectionnez le premier “node” de votre workflow (veille, marché, résumé...).</div>',
                 unsafe_allow_html=True,
@@ -577,12 +577,43 @@ def render_automation_tab() -> None:
                 """,
                 unsafe_allow_html=True,
             )
+            action_type = action[0]
+
+            if action_type == "refresh_market":
+                default_params = json.dumps(
+                    {
+                        "symbols": ["^FCHI", "BNP.PA", "AIR.PA"],
+                        "interval": "1d",
+                        "period": "1y",
+                        "timeout": 20,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            elif action_type == "n8n_webhook":
+                default_params = json.dumps(
+                    {
+                        "url": "http://localhost:5678/webhook/test-stormcopilot",
+                        "payload": {
+                            "trigger": "stormcopilot",
+                            "scope": "market_only",
+                            "user": "ala",
+                        },
+                        "timeout": 30,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            else:
+                default_params = "{}"
+
             params_json = st.text_area(
                 "Paramètres JSON",
-                value='{"target": "tech"}',
+                value=default_params,
                 height=110,
                 label_visibility="collapsed",
             )
+
             st.markdown(
                 '<div class="auto-field-helper">Optionnel. Utilisez du JSON simple pour préciser la cible (par ex. <code>{"target": "tech"}</code>).</div>',
                 unsafe_allow_html=True,

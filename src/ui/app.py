@@ -10,6 +10,7 @@ from src.ui.sections import speech_chat
 from src.ui.sections import tech_watch
 from src.ui.sections import home
 from src.ui.sections import automation
+from src.ui.sections import upload
 
 
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
@@ -1586,85 +1587,53 @@ render_brand_header(api_ok=None, llm_ok=True)
 
 
 # =====================================================================
-# TABS UI
 # =====================================================================
-tab_home, tab_upload, tab_generate, tab_market, tab_voice, tab_techno, tab_automation = st.tabs(
-    [
-        "🏠 Accueil",
-        "📂 Upload & Index",
-        "📝 Generate Docs",
-        "🌍 Market Watch",
-        "🎤 Voice Copilot",
-        "🔎 Veille Techno",
-        "⚙️ Automation Studio",
-    ]
+# NAVIGATION / TABS (version radio + session_state)
+# =====================================================================
+
+tab_names = [
+    "🏠 Accueil",
+    "📂 Upload & Index",
+    "📝 Generate Docs",
+    "🌍 Market Watch",
+    "🎤 Voice Copilot",
+    "🔎 Veille Techno",
+    "⚙️ Automation Studio",
+]
+
+# Tab actif par défaut
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = tab_names[0]
+
+selected = st.radio(
+    "Navigation",
+    tab_names,
+    index=tab_names.index(st.session_state.active_tab),
+    horizontal=True,
+    label_visibility="collapsed",  # on cache le label "Navigation"
 )
+
+st.session_state.active_tab = selected
 from src.ui.sections import home
-# Chatbot flottant (accessible seulement après connexion
-# ---- TAB 1: ACCUEIL / ONBOARDING ----
-with tab_home:
+# ROUTING
+if selected == "🏠 Accueil":
     home.render_home_tab()
     render_chatbot()
-# ---- TAB 2: UPLOAD & INDEX ----
-with tab_upload:
-    st.markdown("### Upload documents & (re)build index")
 
-    files = st.file_uploader(
-        "Upload PDF/DOCX/TXT/MD/PPTX/CSV/XLSX/HTML/JSON",
-        type=["pdf", "docx", "txt", "md", "pptx", "csv", "xlsx", "xls", "html", "htm", "json"],
-        accept_multiple_files=True,
-    )
+elif selected == "📂 Upload & Index":
+    upload.render_upload_tab()
 
-    c1, c2 = st.columns(2)
-    if c1.button("⬆️  Save uploads", use_container_width=True) and files:
-        saved = save_uploaded_files(files)
-        st.success(f"✅ {len(saved)} file(s) saved to `data/raw/`.")
-
-    if c2.button("⚙️  Extract & Chunk", use_container_width=True):
-        with st.spinner("Extracting & chunking..."):
-            n, outp, stats = extract_and_chunk()
-        st.success(f"✅ Created {n} chunks → {outp}")
-        st.caption(
-            f"Seen: {stats['seen']} • Processed: {stats['processed']} • "
-            f"Ignored: {stats['ignored']} • By ext: {stats['by_ext']}"
-        )
-
-    if st.button("🧠  Rebuild Vector Index", use_container_width=True):
-        with st.spinner("Encoding & indexing..."):
-            total = rebuild_index()
-        st.success(f"✅ Indexed {total} chunks into ChromaDB.")
-
-    if (DATA_PROCESSED / "chunks.jsonl").exists():
-        st.markdown("#### Preview extracted chunks")
-        import json, itertools
-        rows = []
-        with open(DATA_PROCESSED / "chunks.jsonl", "r", encoding="utf-8") as f:
-            for line in itertools.islice(f, 3):
-                rows.append(json.loads(line))
-        if rows:
-            df = pd.DataFrame(rows)
-            st.dataframe(df, use_container_width=True, height=200)
-
-# ---- TAB 3: DOCS GENERATION ----
-with tab_generate:
+elif selected == "📝 Generate Docs":
     generate_docs_rag.render()
 
-# ---- TAB 4: MARKET WATCH ----
-with tab_market:
+elif selected == "🌍 Market Watch":
     market.render()
 
-# ---- TAB 5: VOICE COPILOT ----
-with tab_voice:
+elif selected == "🎤 Voice Copilot":
     speech_chat.render()
 
-# ---- TAB 6: TECHNO WATCH ----
-with tab_techno:
+elif selected == "🔎 Veille Techno":
     tech_watch.render()
 
-# ---- TAB 7: AUTOMATION STUDIO ----
-with tab_automation:
-    automation.render_automation_tab()    
-
-# --------------------------------------------------------------------------------------
-# END OF FILE
-# --------------------------------------------------------------------------------------
+elif selected == "⚙️ Automation Studio":
+    automation.render_automation_tab()

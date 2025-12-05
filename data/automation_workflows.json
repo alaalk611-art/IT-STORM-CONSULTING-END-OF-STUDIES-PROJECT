@@ -1,38 +1,36 @@
 [
   {
-    "name": "law",
+    "name": "n8n",
     "trigger": "manual",
     "steps": [
       {
-        "type": "refresh_market",
+        "type": "n8n_webhook",
         "params": {
-          "symbols": [
-            "^FCHI",
-            "BNP.PA",
-            "AIR.PA"
-          ],
-          "interval": "1d",
-          "period": "1y",
+          "url": "http://localhost:5678/webhook/test-stormcopilot",
+          "payload": {
+            "trigger": "stormcopilot",
+            "scope": "market_only",
+            "user": "ala"
+          },
           "timeout": 30
         }
       }
     ]
   },
   {
-    "name": "RADARX",
+    "name": "HOPE",
     "trigger": "manual",
     "steps": [
       {
-        "type": "refresh_market",
+        "type": "n8n_webhook",
         "params": {
-          "symbols": [
-            "^FCHI",
-            "BNP.PA",
-            "AIR.PA"
-          ],
-          "interval": "1d",
-          "period": "1y",
-          "timeout": 20
+          "url": "http://localhost:5678/webhook/test-stormcopilot",
+          "payload": {
+            "trigger": "stormcopilot",
+            "scope": "market_only",
+            "user": "ala"
+          },
+          "timeout": 30
         }
       }
     ]
