@@ -2,18 +2,13 @@
 # ============================================================
 # Path: src/ui/sections/tech_watch.py
 # Onglet Streamlit : Veille technologique IT-STORM
-# - Bouton "Rafraîchir la veille"
-# - TrendRadar™ Premium (Radar SVG + Heatmap Plotly + Corrélation Plotly)
-# - Filtres avancés + pagination 20/40/60
-# - Score auto + classement Hot / Trending / Fresh
-# - Mini image (favicon / og:image)
-# - Résumé court (règles uniquement, sans RAG)
 # ============================================================
 
 from __future__ import annotations
 import os
 import math
 from typing import Any, Dict, List
+from datetime import datetime, timezone
 
 import requests
 import streamlit as st
@@ -22,6 +17,69 @@ import numpy as np
 import plotly.graph_objects as go
 
 API_BASE = os.getenv("BACKEND_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
+
+
+# ------------------------------------------------------------
+# Helpers dates & scoring temporel
+# ------------------------------------------------------------
+def _parse_dt(dt_str: str) -> datetime | None:
+    """Parse un datetime ISO (avec ou sans 'Z') ou format 'YYYY-MM-DD HH:MM:SS'."""
+    if not dt_str:
+        return None
+
+    try:
+        if dt_str.endswith("Z"):
+            dt_str = dt_str[:-1]
+        if "T" in dt_str:
+            dt = datetime.fromisoformat(dt_str)
+        else:
+            dt = datetime.fromisoformat(dt_str.replace(" ", "T"))
+    except Exception:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def _time_decay_factor(dt: datetime | None, window_hours: int) -> float:
+    """Facteur de décroissance temporelle entre 0.1 et 1.0 sur une fenêtre donnée."""
+    if dt is None:
+        return 0.4
+
+    now = datetime.now(timezone.utc)
+    delta_h = (now - dt).total_seconds() / 3600.0
+    if delta_h <= 0:
+        return 1.0
+    if delta_h >= window_hours:
+        return 0.1
+
+    ratio = 1.0 - (delta_h / window_hours)  # 1 → 0
+    return max(0.1, 0.1 + 0.9 * max(0.0, ratio))
+
+
+def _compute_trending_score(it: Dict[str, Any], base_score: float, window_hours: int) -> float:
+    dt = _parse_dt(it.get("published_at") or it.get("created_at") or "")
+    decay = _time_decay_factor(dt, window_hours)
+    return base_score * decay
+
+
+def _get_base_score(it: Dict[str, Any]) -> float:
+    try:
+        return float(it.get("score") or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _get_effective_score(it: Dict[str, Any], mode: str) -> float:
+    base = _get_base_score(it)
+    if mode == "Trending 24h":
+        return _compute_trending_score(it, base, window_hours=24)
+    if mode == "Trending 48h":
+        return _compute_trending_score(it, base, window_hours=48)
+    return base
 
 
 # ------------------------------------------------------------
@@ -201,7 +259,7 @@ _TW_CSS = """
     text-decoration: underline;
 }
 
-/* Résumé filtres + pagination */
+/* Résumé pagination */
 .tw-toolbar {
     display: flex;
     justify-content: space-between;
@@ -214,9 +272,8 @@ _TW_CSS = """
 </style>
 """
 
-
 # ------------------------------------------------------------
-# CSS — TrendRadar™ Premium
+# CSS — TrendRadar™
 # ------------------------------------------------------------
 _TREND_CSS = """
 <style>
@@ -241,8 +298,68 @@ _TREND_CSS = """
 </style>
 """
 
+# ------------------------------------------------------------
+# CSS — Panneau de filtres (plus beau)
+# ------------------------------------------------------------
+_FILTERS_CSS = """
+<style>
+.tw-filters-panel {
+    padding: 0.75rem 1rem 1rem;
+    border-radius: 18px;
+    background:
+        radial-gradient(circle at 0% 0%, rgba(56,189,248,0.18), transparent 55%),
+        radial-gradient(circle at 100% 0%, rgba(129,140,248,0.20), transparent 55%),
+        #f8fafc;
+    border: 1px solid rgba(148,163,184,0.45);
+    box-shadow: 0 14px 40px rgba(15,23,42,0.08);
+}
 
+.tw-filters-row {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    margin-bottom: 0.75rem;
+}
+
+.tw-filters-col {
+    flex: 1 1 0;
+    min-width: 260px;
+}
+
+.tw-filters-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 0.15rem;
+}
+
+.tw-filters-help {
+    font-size: 0.70rem;
+    color: #94a3b8;
+    margin-top: 0.15rem;
+}
+
+.tw-filters-footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.tw-filters-footer > div {
+    flex: 1 1 0;
+    min-width: 240px;
+}
+</style>
+"""
+
+# ------------------------------------------------------------
 # Thématiques pour la matrice de corrélation
+# ------------------------------------------------------------
 _THEME_DEFS: Dict[str, List[str]] = {
     "Cloud & Infrastructure": ["cloud", "cloud_infra", "kubernetes", "docker"],
     "Data & Big Data": ["data_bigdata", "apache-spark", "apache-kafka", "apache-airflow"],
@@ -265,7 +382,6 @@ def _compute_trends(items: List[Dict[str, Any]]):
     for it in items:
         cat = it.get("block_label") or it.get("block") or "Divers"
 
-        # On exclut les sources communautaires du radar/heatmap
         if "communautaire" in cat.lower():
             continue
 
@@ -280,17 +396,15 @@ def _compute_trends(items: List[Dict[str, Any]]):
     score_mean = {k: (sum(v) / len(v) if v else 0.0) for k, v in bucket.items()}
     return freq, score_mean
 
+
 def _render_radar_plotly(freq: Dict[str, int], intensity: Dict[str, float]) -> None:
-    """Radar interactif Plotly avec hover et légende 'Intensité (%)'."""
     if not freq:
         st.info("Pas assez de données pour le radar.")
         return
 
     labels = list(freq.keys())
-    # intensité normalisée 0–1 → en pourcentage
     values = [max(0.0, min(1.0, float(intensity.get(k, 0.0)))) * 100 for k in labels]
 
-    # on ferme le polygone en répétant le premier point
     r = values + [values[0]]
     theta = labels + [labels[0]]
 
@@ -306,82 +420,18 @@ def _render_radar_plotly(freq: Dict[str, int], intensity: Dict[str, float]) -> N
 
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 100],
-                tickfont=dict(size=9),
-            ),
-            angularaxis=dict(
-                tickfont=dict(size=11),
-            ),
+            radialaxis=dict(visible=True, range=[0, 100], tickfont=dict(size=9)),
+            angularaxis=dict(tickfont=dict(size=11)),
         ),
         showlegend=True,
-        legend=dict(
-            orientation="h",
-            y=-0.15,
-            x=0.5,
-            xanchor="center",
-        ),
+        legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center"),
         margin=dict(l=40, r=40, t=40, b=80),
         height=420,
     )
 
     st.plotly_chart(fig, use_container_width=False)
 
-def _generate_radar_svg(labels: List[str], values: List[float]) -> str:
-    """Radar circulaire SVG (0–1) avec labels non coupés."""
-    if not labels:
-        return "<div>Aucune donnée pour le radar.</div>"
 
-    size = 600  # plus grand pour les labels
-    cx = cy = size // 2
-    r_max = 150
-    n = len(values)
-    if n == 0:
-        return "<div>Aucune donnée pour le radar.</div>"
-
-    # Polygone
-    points = []
-    for i, val in enumerate(values):
-        v = max(0.0, min(1.0, float(val)))
-        angle = (math.pi * 2 / n) * i - math.pi / 2
-        radius = r_max * v
-        x = cx + radius * math.cos(angle)
-        y = cy + radius * math.sin(angle)
-        points.append(f"{x},{y}")
-    polygon = " ".join(points)
-
-    # Labels autour
-    label_radius = 190
-    label_elements = ""
-    for i, lab in enumerate(labels):
-        angle = (math.pi * 2 / n) * i - math.pi / 2
-        x = cx + label_radius * math.cos(angle)
-        y = cy + label_radius * math.sin(angle)
-        label_elements += f"""
-            <text x="{x}" y="{y}" font-size="13" font-weight="600"
-            text-anchor="middle" fill="#0f172a">
-                {lab}
-            </text>
-        """
-
-    svg = f"""
-    <svg width="{size}" height="{size}">
-        <circle cx="{cx}" cy="{cy}" r="40" fill="none" stroke="#e2e8f0"/>
-        <circle cx="{cx}" cy="{cy}" r="80" fill="none" stroke="#e2e8f0"/>
-        <circle cx="{cx}" cy="{cy}" r="120" fill="none" stroke="#e2e8f0"/>
-
-        <polygon points="{polygon}" fill="#3b82f6aa" stroke="#1d4ed8" stroke-width="2"/>
-
-        {label_elements}
-    </svg>
-    """
-    return svg
-
-
-# ------------------------------------------------------------
-# Heatmap activité / intensité — Plotly
-# ------------------------------------------------------------
 def _render_heatmap(freq: Dict[str, int], intensity: Dict[str, float]) -> None:
     st.markdown("#### 🔥 Heatmap Activité / Intensité")
 
@@ -391,8 +441,6 @@ def _render_heatmap(freq: Dict[str, int], intensity: Dict[str, float]) -> None:
 
     labels = list(freq.keys())
     z_values = [freq[l] for l in labels]
-
-    # Texte sur les cellules
     texts = [
         f"{l}<br>{freq[l]} posts<br>score moyen {int(intensity.get(l, 0.0) * 100)} %"
         for l in labels
@@ -411,16 +459,10 @@ def _render_heatmap(freq: Dict[str, int], intensity: Dict[str, float]) -> None:
             hovertemplate="%{text}<extra></extra>",
         )
     )
-    fig.update_layout(
-        height=260,
-        margin=dict(l=40, r=40, t=10, b=40),
-    )
+    fig.update_layout(height=260, margin=dict(l=40, r=40, t=10, b=40))
     st.plotly_chart(fig, use_container_width=True)
 
 
-# ------------------------------------------------------------
-# Matrice de corrélation (co-occurrence) — Plotly
-# ------------------------------------------------------------
 def _compute_thematic_matrix(items: List[Dict[str, Any]]):
     names = list(_THEME_DEFS.keys())
     n = len(names)
@@ -439,7 +481,6 @@ def _compute_thematic_matrix(items: List[Dict[str, Any]]):
                 present[idx] = True
 
         if sum(present) < 2:
-            # on ne compte que s'il y a au moins 2 thématiques dans la même source
             continue
 
         for i in range(n):
@@ -460,11 +501,8 @@ def _render_thematic_correlation(items: List[Dict[str, Any]]) -> None:
         st.info("Pas encore de co-occurrence significative entre les thématiques.")
         return
 
-    # on garde les valeurs pour l'affichage, mais on met la diagonale à 0 pour la couleur
-    diag_vals = np.diag(mat_arr).copy()
     np.fill_diagonal(mat_arr, 0)
 
-    # texte affiché (diagonale = '—')
     text = []
     for i in range(len(names)):
         row = []
@@ -484,7 +522,6 @@ def _render_thematic_correlation(items: List[Dict[str, Any]]) -> None:
             texttemplate="%{text}",
             textfont={"size": 10},
             colorscale="Blues",
-            reversescale=False,
             hovertemplate="(%{y}, %{x})<br>co-occurrences : %{z:.0f}<extra></extra>",
             zmin=0,
         )
@@ -499,19 +536,17 @@ def _render_thematic_correlation(items: List[Dict[str, Any]]) -> None:
 
     st.plotly_chart(fig, use_container_width=True)
     st.markdown(
-        "<div class='tr-corr-legend'>Plus la cellule est foncée, plus les deux thématiques co-apparaissent dans les mêmes sources. La diagonale (même thématique) est affichée comme « — ».</div>",
+        "<div class='tr-corr-legend'>Plus la cellule est foncée, plus les deux thématiques co-apparaissent dans les mêmes sources. "
+        "La diagonale (même thématique) est affichée comme « — ».</div>",
         unsafe_allow_html=True,
     )
 
 
-# ------------------------------------------------------------
-# TrendRadar main renderer
-# ------------------------------------------------------------
 def _render_trend_radar(items: List[Dict[str, Any]]) -> None:
     st.markdown(_TREND_CSS, unsafe_allow_html=True)
     st.markdown("### 📊 TrendRadar™ Premium")
     st.markdown(
-        "Radar circulaire, heatmap et corrélation des tendances Cloud, Data, IA, DevOps et Portage salarial.",
+        "Radar circulaire, heatmap et corrélation des tendances Cloud, Data, IA, DevOps et Portage salarial."
     )
 
     if not items:
@@ -520,23 +555,16 @@ def _render_trend_radar(items: List[Dict[str, Any]]) -> None:
 
     freq, intensity = _compute_trends(items)
 
-    # Radar
-        # Radar Plotly interactif
     st.markdown("#### 🧭 Radar circulaire")
     _render_radar_plotly(freq, intensity)
 
-    # Heatmap Plotly
     _render_heatmap(freq, intensity)
-
-    # Matrice de corrélation Plotly
     _render_thematic_correlation(items)
 
-    # Top catégories
     st.markdown("#### 🏆 Top catégories actives")
     for k, v in freq.most_common(5):
         st.markdown(f"- **{k}** — {v} nouvelles publications")
 
-    # Top intensité
     st.markdown("#### ⚡ Intensité technique")
     sorted_int = sorted(intensity.items(), key=lambda x: x[1], reverse=True)
     for k, v in sorted_int[:5]:
@@ -547,6 +575,78 @@ def _render_trend_radar(items: List[Dict[str, Any]]) -> None:
 
 
 # ------------------------------------------------------------
+# Logos Top Trending 24h
+# ------------------------------------------------------------
+from urllib.parse import urljoin
+
+def _render_trending_logos(items: List[Dict[str, Any]], top_n: int = 8) -> None:
+    """Affiche les logos des sources les plus trending sur 24h."""
+    if not items:
+        return
+
+    scored: List[Dict[str, Any]] = []
+
+    for it in items:
+        raw_favicon = it.get("og_image") or it.get("favicon_url") or ""
+        page_url = it.get("url") or ""
+
+        favicon = None
+
+        if isinstance(raw_favicon, str):
+            raw_favicon = raw_favicon.strip()
+
+            # Cas 1 : déjà une URL absolue http(s)
+            if raw_favicon.startswith(("http://", "https://")):
+                favicon = raw_favicon
+
+            # Cas 2 : chemin relatif ("/images/..." ou "images/...")
+            elif raw_favicon.startswith("/") or raw_favicon.startswith("images/"):
+                if page_url.startswith(("http://", "https://")):
+                    favicon = urljoin(page_url, raw_favicon)
+
+        # Si on n'a toujours rien de propre → on skip
+        if not favicon:
+            continue
+
+        score_24h = _get_effective_score(it, "Trending 24h")
+        if score_24h <= 0:
+            continue
+
+        scored.append(
+            {
+                "item": it,
+                "favicon": favicon,
+                "score_24h": score_24h,
+            }
+        )
+
+    if not scored:
+        return
+
+    scored.sort(key=lambda x: x["score_24h"], reverse=True)
+    top = scored[:top_n]
+
+    st.markdown("### 🔥 Top sources Trending 24h")
+
+    cols = st.columns(min(4, len(top)))
+    for idx, entry in enumerate(top):
+        it = entry["item"]
+        favicon = entry["favicon"]
+        score_24h = entry["score_24h"]
+
+        col = cols[idx % len(cols)]
+        source_name = it.get("source_name") or it.get("block_label") or "Source"
+        score_pct = int(max(0.0, min(1.0, score_24h)) * 100)
+
+        with col:
+            try:
+                st.image(favicon, width=40)
+            except Exception:
+                # Si l'image ne charge pas, on ne casse pas toute la page
+                st.write("🧩")
+            st.caption(f"{source_name}\n{score_pct}/100")
+
+# ------------------------------------------------------------
 # RENDER TAB
 # ------------------------------------------------------------
 def render() -> None:
@@ -554,6 +654,7 @@ def render() -> None:
     st.caption("Cloud • Data • IA • DevOps • Portage salarial & freelancing")
 
     st.markdown(_TW_CSS, unsafe_allow_html=True)
+    st.markdown(_FILTERS_CSS, unsafe_allow_html=True)
 
     col1, col2 = st.columns([1, 2])
     with col1:
@@ -563,16 +664,8 @@ def render() -> None:
 
             if res.get("status") == "ok":
                 nb_ok = int(res.get("nb_ok", 0) or 0)
-                
-
                 plural_ok = "source" if nb_ok == 1 else "sources"
-                
-
-                # Ligne OK (sans total, comme tu veux)
                 st.success(f"✅ {nb_ok} {plural_ok} à jour")
-
-                
-
             else:
                 st.error("Impossible de rafraîchir la veille. Vérifie le backend.")
 
@@ -582,7 +675,6 @@ def render() -> None:
             "et les informations sur le marché du portage salarial pour les consultants IT-STORM."
         )
 
-    # Récupération des données
     res = _api_get("/tech/watch/latest", params={"limit": 120})
     if res.get("status") != "ok":
         st.error("Impossible de charger la veille. Vérifie l'API backend.")
@@ -593,77 +685,121 @@ def render() -> None:
         st.warning("Aucun résultat disponible. Lance un rafraîchissement pour initialiser la veille.")
         return
 
-    # TrendRadar
+    # TrendRadar global
     _render_trend_radar(items)
 
-    # --------------------------------------------------------
-    # Construction listes pour filtres
-    # --------------------------------------------------------
+    # Logos Trending 24h
+    _render_trending_logos(items)
+
+    # ---------------------------- Filtres ----------------------------
     blocks = sorted({it.get("block_label") or it.get("block") or "Autre" for it in items})
     all_tags = sorted({tag for it in items for tag in it.get("tags", [])})
     all_status = sorted({it.get("rank_label", "🆕 Fresh") for it in items})
-
     default_blocks = [b for b in blocks if "communautaire" not in b.lower()] or blocks
 
-    with st.expander("🎛️ Filtres & affichage", expanded=True):
-        c1, c2 = st.columns(2)
-        with c1:
+    with st.expander("🧩 Filtres & affichage", expanded=True):
+        st.markdown("<div class='tw-filters-panel'>", unsafe_allow_html=True)
+
+        # Ligne principale (thématiques + tags / tri)
+        st.markdown("<div class='tw-filters-row'>", unsafe_allow_html=True)
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown(
+                "<div class='tw-filters-label'>Thématiques à afficher</div>",
+                unsafe_allow_html=True,
+            )
             selected_blocks = st.multiselect(
-                "Thématiques à afficher",
+                " ",
                 options=blocks,
                 default=default_blocks,
             )
+
+            st.markdown(
+                "<div class='tw-filters-label' style='margin-top:0.6rem;'>Statut</div>",
+                unsafe_allow_html=True,
+            )
             selected_status = st.multiselect(
-                "Statut",
+                "  ",
                 options=all_status,
                 default=all_status,
                 help="Filtre sur Hot / Trending / Fresh.",
             )
-        with c2:
+
+        with col_right:
+            st.markdown(
+                "<div class='tw-filters-label'>Tags</div>",
+                unsafe_allow_html=True,
+            )
             selected_tags = st.multiselect(
-                "Tags",
+                "   ",
                 options=all_tags,
                 default=[],
                 help="Laisse vide pour ne pas filtrer par tag.",
             )
+
+            st.markdown(
+                "<div class='tw-filters-label' style='margin-top:0.6rem;'>Trier par</div>",
+                unsafe_allow_html=True,
+            )
             sort_mode = st.selectbox(
-                "Trier par",
-                options=[
+                "    ",
+                [
+                    "Trending 24h",
                     "Score décroissant",
+                    "Trending 48h",
                     "Plus récents",
                     "Thématique A→Z",
                 ],
-                index=0,
+                index=0,  # Trending 24h par défaut
             )
 
-        col_p1, col_p2 = st.columns(2)
-        with col_p1:
+        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-row
+
+        # Footer : résultats par page + recherche
+        st.markdown("<div class='tw-filters-footer'>", unsafe_allow_html=True)
+        col_fp, col_fq = st.columns(2)
+
+        with col_fp:
+            st.markdown(
+                "<div class='tw-filters-label'>Résultats par page</div>",
+                unsafe_allow_html=True,
+            )
             per_page = st.radio(
-                "Résultats par page",
+                "     ",
                 options=[20, 40, 60],
                 horizontal=True,
                 index=0,
             )
-        with col_p2:
+
+        with col_fq:
+            st.markdown(
+                "<div class='tw-filters-label'>Rechercher dans les titres / résumés</div>",
+                unsafe_allow_html=True,
+            )
             query = st.text_input(
-                "Rechercher dans les titres / résumés",
+                "      ",
                 placeholder="kubernetes, mistral, freelance, spark…",
             )
 
-    # --------------------------------------------------------
-    # Filtrage
-    # --------------------------------------------------------
+        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-footer
+        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-panel
+
+    # ------------------------- Filtrage & tri -------------------------
     def _match(it: Dict[str, Any]) -> bool:
         if selected_blocks:
             if (it.get("block_label") or it.get("block")) not in selected_blocks:
                 return False
+
         if selected_status:
             if it.get("rank_label", "🆕 Fresh") not in selected_status:
                 return False
+
+        tags = set(it.get("tags", []))
         if selected_tags:
-            tags = set(it.get("tags", []))
             if not tags.intersection(selected_tags):
                 return False
+
         if query:
             q = query.lower()
             haystack = " ".join(
@@ -678,6 +814,7 @@ def render() -> None:
             ).lower()
             if q not in haystack:
                 return False
+
         return True
 
     filtered_items = [it for it in items if _match(it)]
@@ -685,18 +822,9 @@ def render() -> None:
         st.warning("Aucun résultat ne correspond aux filtres actuels.")
         return
 
-    # --------------------------------------------------------
-    # Tri
-    # --------------------------------------------------------
-    def _get_score(it: Dict[str, Any]) -> float:
-        try:
-            return float(it.get("score") or 0.0)
-        except Exception:
-            return 0.0
-
     if sort_mode == "Score décroissant":
         filtered_items.sort(
-            key=lambda x: (_get_score(x), x.get("created_at", "")),
+            key=lambda x: (_get_base_score(x), x.get("created_at", "")),
             reverse=True,
         )
     elif sort_mode == "Plus récents":
@@ -708,13 +836,19 @@ def render() -> None:
         filtered_items.sort(
             key=lambda x: (
                 (x.get("block_label") or x.get("block") or ""),
-                -_get_score(x),
+                -_get_base_score(x),
             )
         )
+    elif sort_mode in {"Trending 24h", "Trending 48h"}:
+        filtered_items.sort(
+            key=lambda x: (
+                _get_effective_score(x, sort_mode),
+                x.get("created_at", ""),
+            ),
+            reverse=True,
+        )
 
-    # --------------------------------------------------------
-    # Pagination
-    # --------------------------------------------------------
+    # ------------------------- Pagination -------------------------
     total = len(filtered_items)
     max_page = max(1, (total + per_page - 1) // per_page)
 
@@ -736,7 +870,6 @@ def render() -> None:
     end = start + per_page
     page_items = filtered_items[start:end]
 
-    # Résumé pagination
     st.markdown(
         "<div class='tw-toolbar'>"
         f"<span>{total} résultats · page {int(page)}/{max_page}</span>"
@@ -744,9 +877,7 @@ def render() -> None:
         unsafe_allow_html=True,
     )
 
-    # --------------------------------------------------------
-    # Affichage News Feed (cartes)
-    # --------------------------------------------------------
+    # ------------------------- Cartes -------------------------
     st.markdown("<div class='tw-feed'>", unsafe_allow_html=True)
 
     for it in page_items:
@@ -760,8 +891,10 @@ def render() -> None:
             it.get("short_summary")
             or ((it.get("summary") or "")[:280] + "…") if it.get("summary") else ""
         )
-        score = _get_score(it)
-        score_pct = int(max(0.0, min(1.0, score)) * 100)
+
+        base_score = _get_base_score(it)
+        score_pct = int(max(0.0, min(1.0, base_score)) * 100)
+
         rank_label = it.get("rank_label") or "🆕 Fresh"
         risk_login = bool(it.get("risk_login"))
         favicon = it.get("og_image") or it.get("favicon_url") or ""

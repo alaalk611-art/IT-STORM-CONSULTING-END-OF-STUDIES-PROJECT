@@ -1017,7 +1017,7 @@ def ask_multi_ollama(
     question: str,
     models: Optional[List[str]] = None,
     topk_context: int = 12,
-    timeout: float = 100.0
+    timeout: float = 600.0
 ) -> Dict[str, Any]:
     """
     Pose la même question à plusieurs modèles Ollama avec un contexte EXTRACTIF
@@ -1234,7 +1234,7 @@ def ask_multi_ollama(
                 temperature=0.2,          # max de déterminisme
                 max_tokens=220,           # un peu plus pour permettre 2 paragraphes confortables
                 stream=True,
-                timeout=float(timeout),
+                timeout=600.0,
                 options={
                     "num_ctx": 2048,      # plus de contexte, meilleure couverture
                     "top_k": 40,
@@ -1425,3 +1425,4 @@ def ensure_qa_indexed(possible_paths: Optional[List[str]] = None) -> Dict[str, A
                 return {"status": "error", "tried": p, "detail": res}
 
     return {"status": "missing", "tried": paths, "hint": "Place the file and call ensure_qa_indexed([...])"}
+######

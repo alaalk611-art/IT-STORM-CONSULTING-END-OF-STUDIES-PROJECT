@@ -853,13 +853,14 @@ def render() -> None:
     # ------------------------------------------------------------------
     # Sous-onglets : graphes & analyses
     # ------------------------------------------------------------------
-    tab_price, tab_mom, tab_diag, tab_bt, tab_data = st.tabs(
+    tab_price, tab_mom, tab_diag, tab_bt, tab_data,tab_report = st.tabs(
         [
             "📊 Prix & moyennes mobiles",
             "📈 Momentum & oscillateurs",
             "🧪 Diagnostics ML",
             "📈 Backtest SMA & RL",
             "📄 Données brutes",
+             "📰 Daily Report",
         ]
     )
 
@@ -1577,3 +1578,398 @@ def render() -> None:
 
         st.markdown("---")
         _glossary_ui()
+       
+            # ===== TAB 6 : Daily Market Intelligence Report =====
+    # ===== TAB 6 : Daily Market Intelligence Report =====
+    # ===== TAB 6 : Daily Market Intelligence Report =====
+    with tab_report:
+        st.markdown("### 📰 Daily Market Intelligence Report")
+        st.caption(
+            "Synthèse quotidienne construite à partir de toutes les briques du Market Watch : "
+            "prix, indicateurs techniques, anomalies ML, tendance, régimes de marché et backtest SMA."
+        )
+
+        st.markdown(
+            "Clique sur le bouton ci-dessous pour analyser automatiquement les 6 actifs suivis "
+            "et obtenir des **pistes de décision** lisibles (court / moyen terme)."
+        )
+
+        if st.button("🔍 Analyser le marché aujourd'hui", key="btn_daily_report"):
+            with st.spinner("Analyse du marché en cours..."):
+
+                symbols = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
+                results: list[dict] = []
+
+                for sym in symbols:
+                    data_sym = api_get(f"/v1/ohlcv/{sym}", interval="1d", period="1y")
+                    if not data_sym or "candles" not in data_sym:
+                        continue
+
+                    df_sym = pd.DataFrame(data_sym["candles"])
+                    df_sym = _compute_indicators(df_sym, interval="1d")
+
+                    if df_sym.empty or "close" not in df_sym.columns:
+                        continue
+
+                    # ---------- 1) Infos prix & indicateurs ----------
+                    last = df_sym.iloc[-1]
+
+                    price = float(last["close"])
+                    last_ret = float(last.get("ret", 0.0)) if not pd.isna(last.get("ret", np.nan)) else 0.0
+
+                    sma_gap = (
+                        float(last["close"] / last["sma20"] - 1.0)
+                        if "sma20" in df_sym.columns and not pd.isna(last.get("sma20", np.nan))
+                        else None
+                    )
+                    rsi = float(last["rsi14"]) if "rsi14" in df_sym.columns and not pd.isna(last.get("rsi14", np.nan)) else None
+                    vol = float(last["vol20"]) if "vol20" in df_sym.columns and not pd.isna(last.get("vol20", np.nan)) else None
+
+                    # Plus haut / bas 55 périodes (pour zones support/résistance)
+                    hh55 = (
+                        float(last["hh_55"])
+                        if "hh_55" in df_sym.columns and not pd.isna(last.get("hh_55", np.nan))
+                        else None
+                    )
+                    ll55 = (
+                        float(last["ll_55"])
+                        if "ll_55" in df_sym.columns and not pd.isna(last.get("ll_55", np.nan))
+                        else None
+                    )
+
+                    # ---------- 2) Signal global (ACHAT / NEUTRE / VENTE) ----------
+                    reco = _score_and_reco(df_sym)
+
+                    # ---------- 3) Anomalies (z-score) ----------
+                    z_mask = _rolling_zscore_anomalies(df_sym, window=20, z_thresh=2.0)
+                    anom_rate = float(z_mask.tail(60).mean())
+
+                    # ---------- 4) Tendance (régression linéaire) ----------
+                    trend = _trend_slope_and_projection(df_sym, lookback=60, horizon=10)
+                    slope_pct = trend[4] if trend else 0.0  # annualisé en %
+
+                    # Cibles très simples (projection linéaire → 1 et 3 mois)
+                    monthly_drift = slope_pct / 100.0 / 12.0
+                    target_1m = price * (1.0 + monthly_drift)
+                    target_3m = price * (1.0 + monthly_drift * 3.0)
+
+                    # ---------- 5) Régimes (K-Means sur [ret, vol20]) ----------
+                    reg_risk_share = None
+                    labels, _colors = _kmeans_regimes(df_sym, n_clusters=3)
+                    if labels is not None and "vol20" in df_sym.columns:
+                        try:
+                            reg_df = pd.DataFrame(
+                                {"vol20": df_sym["vol20"].fillna(df_sym["vol20"].median()), "regime": labels},
+                                index=df_sym.index,
+                            )
+                            vol_by_reg = reg_df.groupby("regime")["vol20"].mean()
+                            high_reg = vol_by_reg.idxmax()
+                            high_mask = reg_df["regime"] == high_reg
+                            reg_risk_share = float(high_mask.tail(60).mean())
+                        except Exception:
+                            reg_risk_share = None
+
+                    # ---------- 6) Backtest SMA 20/50 par défaut ----------
+                    stats_sma = None
+                    stats_bh = None
+                    base_sym = df_sym.dropna(subset=["close"]).copy()
+                    if len(base_sym) > 80:
+                        bt_sym = _backtest_sma(base_sym, fast=20, slow=50, fee_bps=5.0)
+                        stats_sma = _bt_stats(bt_sym["strat_ret"].fillna(0.0), interval="1d")
+                        stats_bh = _bt_stats(bt_sym["bh_ret"].fillna(0.0), interval="1d")
+
+                    results.append(
+                        {
+                            "symbol": sym,
+                            "price": price,
+                            "last_ret": last_ret,
+                            "sma_gap": sma_gap,
+                            "rsi": rsi,
+                            "vol": vol,
+                            "hh55": hh55,
+                            "ll55": ll55,
+                            "label": reco["label"],
+                            "score": reco["score"],
+                            "bullets": reco["bullets"],
+                            "anom_rate": anom_rate,
+                            "slope_pct": slope_pct,
+                            "target_1m": target_1m,
+                            "target_3m": target_3m,
+                            "reg_risk_share": reg_risk_share,
+                            "stats_sma": stats_sma,
+                            "stats_bh": stats_bh,
+                        }
+                    )
+
+                if not results:
+                    st.warning("Impossible de générer le rapport : aucune donnée exploitable.")
+                else:
+                    df_rep = pd.DataFrame(results)
+
+                    # ==========================
+                    # 0) Texte de décision à partir des signaux
+                    # ==========================
+                    def _decision_from_row(row) -> str:
+                        label = row.get("label", "NEUTRE")
+                        slope = float(row.get("slope_pct", 0.0))
+                        anom = float(row.get("anom_rate", 0.0))
+                        rsi_v = float(row.get("rsi", 50.0) or 50.0)
+
+                        if label == "ACHAT":
+                            if slope > 5 and anom < 0.08 and 50 <= rsi_v <= 70:
+                                return "Biais haussier propre → conserver / renforcer sur repli léger."
+                            elif anom >= 0.12:
+                                return "Signal haussier mais contexte volatil → taille de position modérée."
+                            else:
+                                return "Léger avantage haussier → conserver, entrées progressives possibles."
+                        elif label == "VENTE":
+                            if slope < -5:
+                                return "Biais baissier marqué → réduire l'exposition / sécuriser les gains."
+                            else:
+                                return "Tonalité fragile → alléger sur rebond, vigilance renforcée."
+                        else:  # NEUTRE
+                            if abs(slope) < 2 and anom < 0.08:
+                                return "Marché neutre et calme → observer, pas de prise de position forte."
+                            elif slope > 0:
+                                return "Neutre mais légèrement haussier → petites entrées progressives possibles."
+                            else:
+                                return "Neutre avec biais baissier → attendre un meilleur point d'entrée."
+
+                    df_rep["decision"] = df_rep.apply(_decision_from_row, axis=1)
+
+                    # ==========================
+                    # 1) Vue globale du marché (jolie)
+                    # ==========================
+                    nb_achat = (df_rep["label"] == "ACHAT").sum()
+                    nb_vente = (df_rep["label"] == "VENTE").sum()
+                    nb_neutre = (df_rep["label"] == "NEUTRE").sum()
+
+                    mean_anom = float(df_rep["anom_rate"].mean()) if "anom_rate" in df_rep else 0.0
+                    mean_vol = float(df_rep["vol"].mean()) if "vol" in df_rep else 0.0
+
+                    if mean_anom < 0.05 and mean_vol < 0.2:
+                        risk_label = "Faible"
+                        risk_icon = "🟢"
+                        risk_comment = "Marché globalement calme : peu d'anomalies et volatilité modérée."
+                    elif mean_anom < 0.12 and mean_vol < 0.3:
+                        risk_label = "Modéré"
+                        risk_icon = "🟡"
+                        risk_comment = "Quelques tensions ou mouvements atypiques, mais rien d'extrême."
+                    else:
+                        risk_label = "Élevé"
+                        risk_icon = "🔴"
+                        risk_comment = "Multiples signaux d’anomalies et/ou volatilité marquée sur plusieurs valeurs."
+
+                    st.markdown("""
+                    <div style="
+                        font-size: 1.4rem; 
+                        font-weight: 600; 
+                        margin-bottom: 0.5rem;
+                    ">
+                    🌍 Vue globale du marché — <span style='color:#888'>(6 actifs suivis)</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    col1, col2, col3, col4 = st.columns(4)
+
+                    # ----- ACHAT -----
+                    with col1:
+                        st.markdown("""
+                        <div style="
+                            background: linear-gradient(135deg, #0f5132, #198754);
+                            padding: 18px;
+                            border-radius: 12px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        ">
+                            <div style="font-size: 1.1rem; font-weight: 600;">📈 Signaux ACHAT</div>
+                            <div style="font-size: 2rem; font-weight: 700; margin-top: 5px;">{}</div>
+                        </div>
+                        """.format(nb_achat), unsafe_allow_html=True)
+
+                    # ----- NEUTRE -----
+                    with col2:
+                        st.markdown("""
+                        <div style="
+                            background: linear-gradient(135deg, #6c757d, #adb5bd);
+                            padding: 18px;
+                            border-radius: 12px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        ">
+                            <div style="font-size: 1.1rem; font-weight: 600;">⚖️ Signaux NEUTRE</div>
+                            <div style="font-size: 2rem; font-weight: 700; margin-top: 5px;">{}</div>
+                        </div>
+                        """.format(nb_neutre), unsafe_allow_html=True)
+
+                    # ----- VENTE -----
+                    with col3:
+                        st.markdown("""
+                        <div style="
+                            background: linear-gradient(135deg, #842029, #dc3545);
+                            padding: 18px;
+                            border-radius: 12px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        ">
+                            <div style="font-size: 1.1rem; font-weight: 600;">📉 Signaux VENTE</div>
+                            <div style="font-size: 2rem; font-weight: 700; margin-top: 5px;">{}</div>
+                        </div>
+                        """.format(nb_vente), unsafe_allow_html=True)
+
+                    # ----- RISQUE GLOBAL -----
+                    with col4:
+                        if risk_label == "Faible":
+                            bg = "linear-gradient(135deg, #0f5132, #198754)"
+                            icon = "🟢"
+                        elif risk_label == "Modéré":
+                            bg = "linear-gradient(135deg, #664d03, #ffc107)"
+                            icon = "🟡"
+                        else:
+                            bg = "linear-gradient(135deg, #842029, #dc3545)"
+                            icon = "🔴"
+
+                        st.markdown(f"""
+                        <div style="
+                            background: {bg};
+                            padding: 18px;
+                            border-radius: 12px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        ">
+                            <div style="font-size: 1.1rem; font-weight: 600;">{icon} Risque global</div>
+                            <div style="font-size: 1.9rem; font-weight: 700; margin-top: 5px;">{risk_label}</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
+                    st.markdown(f"""
+                    <div style="margin-top: 1rem; font-size: 1rem; color: #555;">
+                    <strong>Analyse IA :</strong> {risk_comment}<br>
+                    Anomalies ML moyennes : <strong>{mean_anom*100:.1f}%</strong> — 
+                    Volatilité 20j annualisée : <strong>{mean_vol*100:.0f}%</strong>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("---")
+
+                    # ==========================
+                    # 2) Tableau récap (index à partir de 1)
+                    # ==========================
+                    st.markdown("### 📊 Résumé par actif (decision-friendly)")
+
+                    def _safe_cagr(stats):
+                        if not isinstance(stats, dict):
+                            return None
+                        return float(stats.get("cagr", 0.0))
+
+                    df_rep_display = pd.DataFrame(
+                        {
+                            "Actif": df_rep["symbol"],
+                            "Prix": df_rep["price"].round(2),
+                            "Var. jour %": (df_rep["last_ret"] * 100).round(2),
+                            "Signal": df_rep["label"],
+                            "Score": df_rep["score"].round(2),
+                            "RSI(14)": df_rep["rsi"].round(1),
+                            "Vol 20j ann. %": (df_rep["vol"] * 100).round(0),
+                            "Anomalies (60j) %": (df_rep["anom_rate"] * 100).round(1),
+                            "Tendance ann. %": df_rep["slope_pct"].round(1),
+                            "CAGR SMA(20/50) %": df_rep["stats_sma"].apply(_safe_cagr).astype(float).round(1),
+                            "Décision suggérée": df_rep["decision"],
+                        }
+                    )
+
+                    df_to_show = df_rep_display.reset_index(drop=True)
+                    df_to_show.index = df_to_show.index + 1  # index qui commence à 1
+                    st.dataframe(df_to_show, use_container_width=True)
+
+                    st.markdown(
+                        "_Lecture rapide :_  \n"
+                        "- **Signal** = synthèse de tendance, momentum, MACD, breakouts et volatilité.  \n"
+                        "- **Décision suggérée** = phrase en français qui résume la posture : renforcer, alléger, observer…  \n"
+                        "- **Tendance ann.** = pente approximative de la régression linéaire sur ~60 points.  \n"
+                        "- **Anomalies (60j)** = fréquence des retours extrêmes (z-score).  \n"
+                        "- **CAGR SMA(20/50)** = performance annualisée d’une stratégie de croisement de moyennes (pédagogique, pas un conseil d’investissement)."
+                    )
+
+                    st.markdown("---")
+
+                    # ==========================
+                    # 3) Focus par actif (expanders)
+                    # ==========================
+                    st.markdown("### 🔍 Détail lisible par actif (court / moyen terme)")
+
+                    for r in results:
+                        with st.expander(f"{r['symbol']} — détail des signaux & pistes de décision"):
+                            c1, c2, c3 = st.columns(3)
+                            with c1:
+                                st.metric("Prix", f"{r['price']:.2f}")
+                                st.metric("Variation jour", f"{r['last_ret']*100:+.2f}%")
+                            with c2:
+                                if r["sma_gap"] is not None:
+                                    st.metric("Écart vs SMA20", f"{r['sma_gap']*100:+.2f}%")
+                                if r["rsi"] is not None:
+                                    st.metric("RSI(14)", f"{r['rsi']:.1f}")
+                            with c3:
+                                if r["vol"] is not None:
+                                    st.metric("Vol 20j (ann.)", f"{r['vol']*100:.0f}%")
+                                st.metric("Anomalies (60j)", f"{r['anom_rate']*100:.1f}%")
+
+                            # Zones techniques
+                            st.markdown("**Zones techniques clés :**")
+                            zt = []
+                            if r["ll55"] is not None:
+                                zt.append(f"- Support 55 périodes ≈ **{r['ll55']:.2f}**")
+                            if r["hh55"] is not None:
+                                zt.append(f"- Résistance 55 périodes ≈ **{r['hh55']:.2f}**")
+                            if zt:
+                                st.markdown("\n".join(zt))
+                            else:
+                                st.markdown("_Pas de support/résistance 55 périodes disponibles._")
+
+                            st.markdown(
+                                f"\n**Signal global : {r['label']}** (score {r['score']:+.2f})  \n"
+                                f"- Tendance annualisée estimée : **{r['slope_pct']:+.1f}%**  \n"
+                                f"- Part du régime le plus volatil (60 derniers points) : "
+                                f"**{(r['reg_risk_share'] or 0.0)*100:.1f}%**"
+                            )
+
+                            # Pistes décisionnelles
+                            st.markdown("**🧭 Suggestion de décision court terme (1–5 jours)**")
+                            st.markdown(f"➡️ {_decision_from_row(pd.Series(r))}")
+
+                            st.markdown("**🎯 Piste de scénario moyen terme (1–3 mois)**")
+                            st.markdown(
+                                f"- Cible 1 mois (projection linéaire simple) : **{r['target_1m']:.2f}**  \n"
+                                f"- Cible 3 mois (projection linéaire simple) : **{r['target_3m']:.2f}**  \n"
+                                "_Ces cibles sont des extrapolations techniques simplifiées, à manier avec prudence, "
+                                "uniquement à des fins pédagogiques._"
+                            )
+
+                            st.markdown("**Signaux techniques clés :**")
+                            for b in r["bullets"]:
+                                st.markdown(f"- {b}")
+
+                            stats_sma = r["stats_sma"]
+                            stats_bh = r["stats_bh"]
+                            if isinstance(stats_sma, dict) and isinstance(stats_bh, dict):
+                                st.markdown("**Backtest SMA 20/50 vs Buy & Hold (1 an) :**")
+                                cb1, cb2, cb3, cb4 = st.columns(4)
+                                with cb1:
+                                    st.metric("CAGR SMA", f"{stats_sma.get('cagr', 0.0)*100:.1f}%")
+                                with cb2:
+                                    st.metric("CAGR BH", f"{stats_bh.get('cagr', 0.0)*100:.1f}%")
+                                with cb3:
+                                    st.metric("Sharpe SMA", f"{stats_sma.get('sharpe', 0.0):.2f}")
+                                with cb4:
+                                    st.metric("MaxDD SMA", f"{stats_sma.get('maxdd', 0.0)*100:.1f}%")
+
+                    st.info(
+                        "Ce rapport reste volontairement lisible : une vue globale, un tableau synthétique "
+                        "avec des phrases de décision, puis un focus par actif (court terme / moyen terme) "
+                        "avec zones techniques et scénarios de cibles. "
+                        "Il ne constitue pas un conseil d’investissement mais un support pédagogique de lecture du marché."
+                    )

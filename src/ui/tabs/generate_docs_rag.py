@@ -370,7 +370,7 @@ def _call_smart_rag(question: str, lang: str = "fr", mode: str = "definition") -
         st.error(f"smart_rag_answer a échoué: {e}")
         return {}
 
-def _call_jury(question: str, models: List[str], topk_context: int = 6, timeout: float = 60.0) -> Dict[str, Any]:
+def _call_jury(question: str, models: List[str], topk_context: int = 6, timeout: float = 600.0) -> Dict[str, Any]:
     if not (ask_multi_ollama and callable(ask_multi_ollama)):
         return {}
     try:
@@ -386,7 +386,7 @@ def _call_jury(question: str, models: List[str], topk_context: int = 6, timeout:
         st.warning(f"Jury indisponible: {e}")
         return {}
 
-def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: float = 60.0) -> Dict[str, Any]:
+def _ask_one_model(question: str, model: str, topk_context: int = 6, timeout: float = 600.0) -> Dict[str, Any]:
     jury = _call_jury(question, models=[model], topk_context=topk_context, timeout=timeout)
     res = (jury.get("results") or [])
     if res:
@@ -1146,7 +1146,7 @@ def render():
             st.subheader("🧪 Réponses par modèle (séquentiel)")
             for m in models:
                 with st.spinner(f"{m} génère une réponse."):
-                    r = _ask_one_model(q, model=m, topk_context=topk_context, timeout=60.0)
+                    r = _ask_one_model(q, model=m, topk_context=topk_context, timeout=600.0)
                 st.markdown(_decorate_model_label(r.get("model", "—")), unsafe_allow_html=True)
                 st.write(r.get("answer", ""))
                 collected.append(r)
@@ -1161,7 +1161,7 @@ def render():
         if do_cmp:
             if len(models) < 3:
                 st.info("Astuce: pour une comparaison significative, sélectionne ≥ 3 modèles.")
-            jury = _call_jury(q, models=models, topk_context=topk_context, timeout=60.0) or {}
+            jury = _call_jury(q, models=models, topk_context=topk_context, timeout=600.0) or {}
             results = jury.get("results") or []
             for r in results:
                 met = r.get("metrics") or {}
@@ -1371,3 +1371,4 @@ def render():
 # Compat app.py
 def render_generate_docs_tab():
     render()
+####

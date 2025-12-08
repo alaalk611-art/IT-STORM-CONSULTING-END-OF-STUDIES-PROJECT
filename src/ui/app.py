@@ -1590,32 +1590,60 @@ render_brand_header(api_ok=None, llm_ok=True)
 # =====================================================================
 # NAVIGATION / TABS (version radio + session_state)
 # =====================================================================
+# ---------------------------
+# Définition des routes
+# ---------------------------
+ROUTES = {
+    "home": "🏠 Accueil",
+    "upload": "📂 Upload & Index",
+    "docs": "📝 Generate Docs",
+    "market": "🌍 Market Watch",
+    "voice": "🎤 Voice Copilot",
+    "tech": "🔎 Veille Techno",
+    "automation": "⚙️ Automation Studio",
+}
 
-tab_names = [
-    "🏠 Accueil",
-    "📂 Upload & Index",
-    "📝 Generate Docs",
-    "🌍 Market Watch",
-    "🎤 Voice Copilot",
-    "🔎 Veille Techno",
-    "⚙️ Automation Studio",
-]
+tab_names = list(ROUTES.values())
 
-# Tab actif par défaut
-if "active_tab" not in st.session_state:
-    st.session_state.active_tab = tab_names[0]
+# ---------------------------
+# Lire l’URL actuelle
+# ---------------------------
+params = st.query_params
 
+# si la clé n'existe pas → "home"
+current_page = params.get("page", "home")
+# Streamlit peut renvoyer une liste si plusieurs valeurs, on normalise en str
+if isinstance(current_page, list):
+    current_page = current_page[0]
+
+# Convertir le paramètre "page" → nom d'onglet
+selected_tab_name = ROUTES.get(current_page, "🏠 Accueil")
+
+# ---------------------------
+# Sélecteur d’onglets
+# ---------------------------
 selected = st.radio(
     "Navigation",
     tab_names,
-    index=tab_names.index(st.session_state.active_tab),
+    index=tab_names.index(selected_tab_name),
     horizontal=True,
-    label_visibility="collapsed",  # on cache le label "Navigation"
+    label_visibility="collapsed",
 )
 
-st.session_state.active_tab = selected
-from src.ui.sections import home
+# ---------------------------
+# Mettre à jour l'URL en fonction de l'onglet choisi
+# ---------------------------
+reverse_routes = {v: k for k, v in ROUTES.items()}
+new_page_param = reverse_routes[selected]
+
+# ICI la correction : on met à jour l'objet, on ne l'appelle pas
+st.query_params.update({"page": new_page_param})
+
+# ---------------------------
 # ROUTING
+# ---------------------------
+from src.ui.sections import home
+
 if selected == "🏠 Accueil":
     home.render_home_tab()
     render_chatbot()
