@@ -15,8 +15,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import numpy as np
 import plotly.graph_objects as go
+from urllib.parse import urljoin
 
+# ------------------------------------------------------------
+# CONFIG API & n8n
+# ------------------------------------------------------------
 API_BASE = os.getenv("BACKEND_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
+N8N_BASE = os.getenv("N8N_BASE_URL", "http://127.0.0.1:5678").rstrip("/")
 
 
 # ------------------------------------------------------------
@@ -83,7 +88,7 @@ def _get_effective_score(it: Dict[str, Any], mode: str) -> float:
 
 
 # ------------------------------------------------------------
-# Helpers API
+# Helpers API backend
 # ------------------------------------------------------------
 def _api_get(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]:
     try:
@@ -103,6 +108,36 @@ def _api_post(path: str, params: Dict[str, Any] | None = None) -> Dict[str, Any]
     except Exception as e:
         st.error(f"Erreur API (POST {path}) : {e}")
         return {"status": "error"}
+
+
+# ------------------------------------------------------------
+# Helper n8n – Tech Radar
+# ------------------------------------------------------------
+def call_n8n_tech_radar(scope: str = "tech_only", timeout: int = 90):
+    """
+    Appelle le workflow n8n 'Tech Radar - IT-STORM' via le webhook
+    et renvoie un JSON structuré prêt à utiliser dans Streamlit.
+    """
+    url = f"{N8N_BASE}/webhook/tech-radar"
+    payload = {
+        "scope": scope,
+        "timeout": timeout,
+    }
+
+    try:
+        resp = requests.post(url, json=payload, timeout=timeout)
+        resp.raise_for_status()
+    except Exception as e:
+        st.error(f"Erreur appel n8n Tech Radar : {e}")
+        return None
+
+    try:
+        data = resp.json()
+    except Exception:
+        st.warning("Réponse n8n Tech Radar non-JSON, contenu brut affiché.")
+        return resp.text
+
+    return data
 
 
 # ------------------------------------------------------------
@@ -577,8 +612,6 @@ def _render_trend_radar(items: List[Dict[str, Any]]) -> None:
 # ------------------------------------------------------------
 # Logos Top Trending 24h
 # ------------------------------------------------------------
-from urllib.parse import urljoin
-
 def _render_trending_logos(items: List[Dict[str, Any]], top_n: int = 8) -> None:
     """Affiche les logos des sources les plus trending sur 24h."""
     if not items:
@@ -642,9 +675,208 @@ def _render_trending_logos(items: List[Dict[str, Any]], top_n: int = 8) -> None:
             try:
                 st.image(favicon, width=40)
             except Exception:
-                # Si l'image ne charge pas, on ne casse pas toute la page
                 st.write("🧩")
             st.caption(f"{source_name}\n{score_pct}/100")
+
+
+# ------------------------------------------------------------
+# Tech Radar (via n8n) — sous-onglet dédié
+# ------------------------------------------------------------
+def _render_tech_radar_panel() -> None:
+    """Sous-onglet complet pour le Tech Radar via n8n."""
+    st.markdown("### 🛰️ Tech Radar (via n8n)")
+    st.caption(
+        "Pilotage de la veille via le workflow n8n « Tech Radar - IT-STORM » "
+        "(webhook `/webhook/tech-radar`)."
+    )
+
+    col_ctrl1, col_ctrl2 = st.columns([3, 1])
+    with col_ctrl1:
+        scope = st.selectbox(
+            "Scope de la veille",
+            ["tech_only", "full"],
+            format_func=lambda x: (
+                "Veille technique uniquement (Cloud, Data, IA, DevOps)"
+                if x == "tech_only"
+                else "Tous les contenus (tech + marché / portage)"
+            ),
+            key="tech_radar_scope",
+        )
+    with col_ctrl2:
+        timeout = st.slider(
+            "Timeout n8n (secondes)",
+            min_value=30,
+            max_value=240,
+            value=90,
+            step=10,
+            key="tech_radar_timeout",
+        )
+
+    if not st.button("🚀 Lancer Tech Radar (n8n)", key="btn_tech_radar_n8n"):
+        st.info("Configure le scope puis lance le Tech Radar pour voir la synthèse.")
+        return
+
+    with st.spinner("Interrogation du workflow n8n et consolidation des métriques…"):
+        data = call_n8n_tech_radar(scope=scope, timeout=int(timeout))
+
+    if not data:
+        st.info("Tech Radar (via n8n) non disponible pour le moment.")
+        return
+
+    # n8n peut renvoyer une liste ou un dict
+    item: Dict[str, Any] | None = None
+    if isinstance(data, list):
+        if data and isinstance(data[0], dict) and "json" in data[0]:
+            item = data[0]["json"]
+        elif data and isinstance(data[0], dict):
+            item = data[0]
+    elif isinstance(data, dict):
+        item = data
+
+    if not item:
+        st.info("Réponse Tech Radar inattendue.")
+        st.json(data)
+        return
+
+    status = str(item.get("status") or "unknown")
+    quality = str(item.get("quality") or "Inconnu")
+    headline = str(item.get("headline") or "Etat de la veille inconnu.")
+    metrics = item.get("metrics") or {}
+
+    nb_ok = int(metrics.get("nb_ok") or 0)
+    nb_err = int(metrics.get("nb_err") or 0)
+    sources_total = int(metrics.get("sources_total") or 0)
+    sources_ok = int(metrics.get("sources_ok") or nb_ok)
+    sources_error = int(metrics.get("sources_error") or nb_err)
+    duration_sec = metrics.get("duration_sec")
+    truncated = bool(metrics.get("truncated", False))
+    hot = int(metrics.get("hot") or 0)
+    trending = int(metrics.get("trending") or 0)
+    # On garde fresh uniquement pour information interne (JSON debug)
+    fresh = int(metrics.get("fresh") or max(0, sources_ok - hot - trending))
+
+    fetched_at = item.get("fetched_at")
+
+    # ----------------- Cartes de synthèse jolies -----------------
+    col_a, col_b, col_c, col_d = st.columns(4)
+
+    # Total / actives
+    with col_a:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg,#0d6efd,#4dabf7);
+                padding: 18px;
+                border-radius: 18px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(13,110,253,0.30);
+            ">
+                <div style="font-size:0.9rem;opacity:0.9;">🌍 Sources total</div>
+                <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{sources_total}</div>
+                <div style="font-size:0.8rem;opacity:0.9;">{sources_ok} actives</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Hot
+    with col_b:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg,#b91c1c,#f97316);
+                padding: 18px;
+                border-radius: 18px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(248,113,113,0.30);
+            ">
+                <div style="font-size:0.9rem;opacity:0.9;">🔥 Hot</div>
+                <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{hot}</div>
+                <div style="font-size:0.8rem;opacity:0.9;">Sources très prioritaires</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Trending
+    with col_c:
+        st.markdown(
+            f"""
+            <div style="
+                background: linear-gradient(135deg,#92400e,#facc15);
+                padding: 18px;
+                border-radius: 18px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(250,204,21,0.30);
+            ">
+                <div style="font-size:0.9rem;opacity:0.9;">⭐ Trending</div>
+                <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{trending}</div>
+                <div style="font-size:0.8rem;opacity:0.9;">Sources en montée</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Qualité / statut
+    with col_d:
+        if "Complet" in quality:
+            bg = "linear-gradient(135deg, #0f5132, #198754)"
+            icon = "🟢"
+        elif "Vide" in quality:
+            bg = "linear-gradient(135deg, #664d03, #ffc107)"
+            icon = "🟡"
+        else:
+            bg = "linear-gradient(135deg, #842029, #dc3545)"
+            icon = "🔴"
+
+        st.markdown(
+            f"""
+            <div style="
+                background: {bg};
+                padding: 18px;
+                border-radius: 18px;
+                color: white;
+                text-align: center;
+                box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            ">
+                <div style="font-size:0.9rem;opacity:0.9;">{icon} Qualité globale</div>
+                <div style="font-size:1.4rem;font-weight:700;margin-top:4px;">{quality}</div>
+                <div style="font-size:0.75rem;opacity:0.9;">Statut API : {status}</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # ----------------- Résumé lisible -----------------
+    st.markdown("#### 🧭 Résumé Tech Radar")
+    st.markdown(f"**➜ {headline}**")
+
+    bullets = [
+        f"- **Sources actives :** {sources_ok}/{sources_total} (erreurs : {sources_error})",
+        f"- **Répartition :** {hot} Hot · {trending} Trending",
+    ]
+
+    if truncated:
+        bullets.append("- ⚠️ Couverture tronquée (limite de sources atteinte).")
+    else:
+        bullets.append("- ✅ Couverture complète des sources configurées.")
+    st.markdown("\n".join(bullets))
+
+    if isinstance(duration_sec, (int, float)):
+        st.caption(f"⏱ Durée d'exécution n8n + backend : {duration_sec:.1f} s")
+
+    if fetched_at:
+        st.caption(f"🕒 Dernier rafraîchissement consolidé : {fetched_at}")
+
+    # JSON brut pour debug si besoin
+    with st.expander("🔍 Détail JSON complet (debug)"):
+        st.json(item)
+
 
 # ------------------------------------------------------------
 # RENDER TAB
@@ -656,301 +888,320 @@ def render() -> None:
     st.markdown(_TW_CSS, unsafe_allow_html=True)
     st.markdown(_FILTERS_CSS, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if st.button("🔄 Rafraîchir la veille maintenant"):
-            with st.spinner("Collecte des sources et génération des résumés."):
-                res = _api_post("/tech/watch/refresh")
+    # Sous-tabs : vue locale + vue n8n (comme Market.py)
+    tab_local, tab_n8n = st.tabs(
+        [
+            "📡 TrendRadar & Feed",
+            "🛰️ Tech Watch · n8n",
+        ]
+    )
 
-            if res.get("status") == "ok":
-                nb_ok = int(res.get("nb_ok", 0) or 0)
-                plural_ok = "source" if nb_ok == 1 else "sources"
-                st.success(f"✅ {nb_ok} {plural_ok} à jour")
+    # =========================
+    # TAB 1 : TrendRadar & Feed
+    # =========================
+    with tab_local:
+        col1, col2 = st.columns([1, 2])
+        with col1:
+            if st.button("🔄 Rafraîchir la veille maintenant"):
+                with st.spinner("Collecte des sources et génération des résumés."):
+                    res = _api_post("/tech/watch/refresh")
+
+                if res.get("status") == "ok":
+                    nb_ok = int(res.get("nb_ok", 0) or 0)
+                    plural_ok = "source" if nb_ok == 1 else "sources"
+                    st.success(f"✅ {nb_ok} {plural_ok} à jour")
+                else:
+                    st.error("Impossible de rafraîchir la veille. Vérifie le backend.")
+
+        with col2:
+            st.info(
+                "Ce module agrège automatiquement les nouveautés Cloud, Data, IA, DevOps "
+                "et les informations sur le marché du portage salarial pour les consultants IT-STORM."
+            )
+
+        # Données détaillées pour TrendRadar et feed
+        res = _api_get("/tech/watch/latest", params={"limit": 120})
+        if res.get("status") != "ok":
+            st.error("Impossible de charger la veille. Vérifie l'API backend.")
+            return
+
+        items: List[Dict[str, Any]] = res.get("items") or []
+        if not items:
+            st.warning("Aucun résultat disponible. Lance un rafraîchissement pour initialiser la veille.")
+            return
+
+        # TrendRadar global
+        _render_trend_radar(items)
+
+        # Logos Trending 24h
+        _render_trending_logos(items)
+
+        # ---------------------------- Filtres ----------------------------
+        blocks = sorted({it.get("block_label") or it.get("block") or "Autre" for it in items})
+        all_tags = sorted({tag for it in items for tag in it.get("tags", [])})
+        all_status = sorted({it.get("rank_label", "🆕 Fresh") for it in items})
+        default_blocks = [b for b in blocks if "communautaire" not in b.lower()] or blocks
+
+        with st.expander("🧩 Filtres & affichage", expanded=True):
+            st.markdown("<div class='tw-filters-panel'>", unsafe_allow_html=True)
+
+            # Ligne principale (thématiques + tags / tri)
+            st.markdown("<div class='tw-filters-row'>", unsafe_allow_html=True)
+            col_left, col_right = st.columns(2)
+
+            with col_left:
+                st.markdown(
+                    "<div class='tw-filters-label'>Thématiques à afficher</div>",
+                    unsafe_allow_html=True,
+                )
+                selected_blocks = st.multiselect(
+                    " ",
+                    options=blocks,
+                    default=default_blocks,
+                )
+
+                st.markdown(
+                    "<div class='tw-filters-label' style='margin-top:0.6rem;'>Statut</div>",
+                    unsafe_allow_html=True,
+                )
+                selected_status = st.multiselect(
+                    "  ",
+                    options=all_status,
+                    default=all_status,
+                    help="Filtre sur Hot / Trending / Fresh.",
+                )
+
+            with col_right:
+                st.markdown(
+                    "<div class='tw-filters-label'>Tags</div>",
+                    unsafe_allow_html=True,
+                )
+                selected_tags = st.multiselect(
+                    "   ",
+                    options=all_tags,
+                    default=[],
+                    help="Laisse vide pour ne pas filtrer par tag.",
+                )
+
+                st.markdown(
+                    "<div class='tw-filters-label' style='margin-top:0.6rem;'>Trier par</div>",
+                    unsafe_allow_html=True,
+                )
+                sort_mode = st.selectbox(
+                    "    ",
+                    [
+                        "Trending 24h",
+                        "Score décroissant",
+                        "Trending 48h",
+                        "Plus récents",
+                        "Thématique A→Z",
+                    ],
+                    index=0,  # Trending 24h par défaut
+                )
+
+            st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-row
+
+            # Footer : résultats par page + recherche
+            st.markdown("<div class='tw-filters-footer'>", unsafe_allow_html=True)
+            col_fp, col_fq = st.columns(2)
+
+            with col_fp:
+                st.markdown(
+                    "<div class='tw-filters-label'>Résultats par page</div>",
+                    unsafe_allow_html=True,
+                )
+                per_page = st.radio(
+                    "     ",
+                    options=[20, 40, 60],
+                    horizontal=True,
+                    index=0,
+                )
+
+            with col_fq:
+                st.markdown(
+                    "<div class='tw-filters-label'>Rechercher dans les titres / résumés</div>",
+                    unsafe_allow_html=True,
+                )
+                query = st.text_input(
+                    "      ",
+                    placeholder="kubernetes, mistral, freelance, spark…",
+                )
+
+            st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-footer
+            st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-panel
+
+        # ------------------------- Filtrage & tri -------------------------
+        def _match(it: Dict[str, Any]) -> bool:
+            if selected_blocks:
+                if (it.get("block_label") or it.get("block")) not in selected_blocks:
+                    return False
+
+            if selected_status:
+                if it.get("rank_label", "🆕 Fresh") not in selected_status:
+                    return False
+
+            tags = set(it.get("tags", []))
+            if selected_tags:
+                if not tags.intersection(selected_tags):
+                    return False
+
+            if query:
+                q = query.lower()
+                haystack = " ".join(
+                    [
+                        str(it.get("source_name") or ""),
+                        str(it.get("summary") or ""),
+                        str(it.get("short_summary") or ""),
+                        str(it.get("block_label") or ""),
+                        str(it.get("url") or ""),
+                        " ".join(it.get("tags", [])),
+                    ]
+                ).lower()
+                if q not in haystack:
+                    return False
+
+            return True
+
+        filtered_items = [it for it in items if _match(it)]
+        if not filtered_items:
+            st.warning("Aucun résultat ne correspond aux filtres actuels.")
+            return
+
+        if sort_mode == "Score décroissant":
+            filtered_items.sort(
+                key=lambda x: (_get_base_score(x), x.get("created_at", "")),
+                reverse=True,
+            )
+        elif sort_mode == "Plus récents":
+            filtered_items.sort(
+                key=lambda x: x.get("created_at", ""),
+                reverse=True,
+            )
+        elif sort_mode == "Thématique A→Z":
+            filtered_items.sort(
+                key=lambda x: (
+                    (x.get("block_label") or x.get("block") or ""),
+                    -_get_base_score(x),
+                )
+            )
+        elif sort_mode in {"Trending 24h", "Trending 48h"}:
+            filtered_items.sort(
+                key=lambda x: (
+                    _get_effective_score(x, sort_mode),
+                    x.get("created_at", ""),
+                ),
+                reverse=True,
+            )
+
+        # ------------------------- Pagination -------------------------
+        total = len(filtered_items)
+        max_page = max(1, (total + per_page - 1) // per_page)
+
+        key_page = "tech_watch_page"
+        if key_page not in st.session_state:
+            st.session_state[key_page] = 1
+        st.session_state[key_page] = min(st.session_state[key_page], max_page)
+
+        page = st.number_input(
+            "Page",
+            min_value=1,
+            max_value=max_page,
+            value=st.session_state[key_page],
+            step=1,
+        )
+        st.session_state[key_page] = page
+
+        start = (page - 1) * per_page
+        end = start + per_page
+        page_items = filtered_items[start:end]
+
+        st.markdown(
+            "<div class='tw-toolbar'>"
+            f"<span>{total} résultats · page {int(page)}/{max_page}</span>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ------------------------- Cartes -------------------------
+        st.markdown("<div class='tw-feed'>", unsafe_allow_html=True)
+
+        for it in page_items:
+            title = it.get("source_name") or it.get("url") or "Source"
+            url = it.get("url") or "#"
+            block_label = it.get("block_label") or it.get("block") or "Divers"
+            created_at = (it.get("created_at") or "")[:19].replace("T", " ")
+            tags = it.get("tags", []) or []
+
+            short_summary = (
+                it.get("short_summary")
+                or ((it.get("summary") or "")[:280] + "…") if it.get("summary") else ""
+            )
+
+            base_score = _get_base_score(it)
+            score_pct = int(max(0.0, min(1.0, base_score)) * 100)
+
+            rank_label = it.get("rank_label") or "🆕 Fresh"
+            risk_login = bool(it.get("risk_login"))
+            favicon = it.get("og_image") or it.get("favicon_url") or ""
+
+            rank_class = ""
+            if str(rank_label).startswith("🔥"):
+                rank_class = "hot"
+            elif str(rank_label).startswith("⭐"):
+                rank_class = "trending"
+
+            if tags:
+                chips = " ".join(f"<span class='tw-tag'>{t}</span>" for t in tags)
+                tags_html = f"<div class='tw-tags'>{chips}</div>"
             else:
-                st.error("Impossible de rafraîchir la veille. Vérifie le backend.")
+                tags_html = ""
 
-    with col2:
-        st.info(
-            "Ce module agrège automatiquement les nouveautés Cloud, Data, IA, DevOps "
-            "et les informations sur le marché du portage salarial pour les consultants IT-STORM."
-        )
+            risk_html = ""
+            if risk_login:
+                risk_html = (
+                    "<span style='font-size:11px;padding:2px 8px;border-radius:999px;"
+                    "background:#fee2e2;color:#b91c1c;font-weight:500;margin-left:6px;'>"
+                    "⚠ login/cookies</span>"
+                )
 
-    res = _api_get("/tech/watch/latest", params={"limit": 120})
-    if res.get("status") != "ok":
-        st.error("Impossible de charger la veille. Vérifie l'API backend.")
-        return
+            img_html = f'<img src="{favicon}" class="tw-icon" />' if favicon else ""
 
-    items: List[Dict[str, Any]] = res.get("items") or []
-    if not items:
-        st.warning("Aucun résultat disponible. Lance un rafraîchissement pour initialiser la veille.")
-        return
-
-    # TrendRadar global
-    _render_trend_radar(items)
-
-    # Logos Trending 24h
-    _render_trending_logos(items)
-
-    # ---------------------------- Filtres ----------------------------
-    blocks = sorted({it.get("block_label") or it.get("block") or "Autre" for it in items})
-    all_tags = sorted({tag for it in items for tag in it.get("tags", [])})
-    all_status = sorted({it.get("rank_label", "🆕 Fresh") for it in items})
-    default_blocks = [b for b in blocks if "communautaire" not in b.lower()] or blocks
-
-    with st.expander("🧩 Filtres & affichage", expanded=True):
-        st.markdown("<div class='tw-filters-panel'>", unsafe_allow_html=True)
-
-        # Ligne principale (thématiques + tags / tri)
-        st.markdown("<div class='tw-filters-row'>", unsafe_allow_html=True)
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            st.markdown(
-                "<div class='tw-filters-label'>Thématiques à afficher</div>",
-                unsafe_allow_html=True,
-            )
-            selected_blocks = st.multiselect(
-                " ",
-                options=blocks,
-                default=default_blocks,
+            card_html = (
+                '<div class="tw-card">'
+                '<div class="tw-left">'
+                f"{img_html}"
+                "</div>"
+                '<div class="tw-right">'
+                '<div class="tw-topline">'
+                f'<span class="tw-pill-block">{block_label}</span>'
+                f'<span class="tw-pill-rank {rank_class}">{rank_label}</span>'
+                f"{risk_html}"
+                '<span class="tw-score-chip">'
+                f"Score {score_pct}/100"
+                '<span class="tw-score-bar">'
+                f'<span class="tw-score-bar-inner" style="width:{score_pct}%;"></span>'
+                "</span>"
+                "</span>"
+                "</div>"
+                '<div class="tw-title">'
+                f'<a href="{url}" target="_blank">🔹 {title}</a>'
+                "</div>"
+                f'<div class="tw-meta">🕒 {created_at} UTC</div>'
+                f'<div class="tw-summary-short">{short_summary}</div>'
+                f"{tags_html}"
+                '<div class="tw-link">'
+                f'<a href="{url}" target="_blank">🔗 Ouvrir la source</a>'
+                "</div>"
+                "</div>"
+                "</div>"
             )
 
-            st.markdown(
-                "<div class='tw-filters-label' style='margin-top:0.6rem;'>Statut</div>",
-                unsafe_allow_html=True,
-            )
-            selected_status = st.multiselect(
-                "  ",
-                options=all_status,
-                default=all_status,
-                help="Filtre sur Hot / Trending / Fresh.",
-            )
+            st.markdown(card_html, unsafe_allow_html=True)
 
-        with col_right:
-            st.markdown(
-                "<div class='tw-filters-label'>Tags</div>",
-                unsafe_allow_html=True,
-            )
-            selected_tags = st.multiselect(
-                "   ",
-                options=all_tags,
-                default=[],
-                help="Laisse vide pour ne pas filtrer par tag.",
-            )
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            st.markdown(
-                "<div class='tw-filters-label' style='margin-top:0.6rem;'>Trier par</div>",
-                unsafe_allow_html=True,
-            )
-            sort_mode = st.selectbox(
-                "    ",
-                [
-                    "Trending 24h",
-                    "Score décroissant",
-                    "Trending 48h",
-                    "Plus récents",
-                    "Thématique A→Z",
-                ],
-                index=0,  # Trending 24h par défaut
-            )
-
-        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-row
-
-        # Footer : résultats par page + recherche
-        st.markdown("<div class='tw-filters-footer'>", unsafe_allow_html=True)
-        col_fp, col_fq = st.columns(2)
-
-        with col_fp:
-            st.markdown(
-                "<div class='tw-filters-label'>Résultats par page</div>",
-                unsafe_allow_html=True,
-            )
-            per_page = st.radio(
-                "     ",
-                options=[20, 40, 60],
-                horizontal=True,
-                index=0,
-            )
-
-        with col_fq:
-            st.markdown(
-                "<div class='tw-filters-label'>Rechercher dans les titres / résumés</div>",
-                unsafe_allow_html=True,
-            )
-            query = st.text_input(
-                "      ",
-                placeholder="kubernetes, mistral, freelance, spark…",
-            )
-
-        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-footer
-        st.markdown("</div>", unsafe_allow_html=True)  # fin .tw-filters-panel
-
-    # ------------------------- Filtrage & tri -------------------------
-    def _match(it: Dict[str, Any]) -> bool:
-        if selected_blocks:
-            if (it.get("block_label") or it.get("block")) not in selected_blocks:
-                return False
-
-        if selected_status:
-            if it.get("rank_label", "🆕 Fresh") not in selected_status:
-                return False
-
-        tags = set(it.get("tags", []))
-        if selected_tags:
-            if not tags.intersection(selected_tags):
-                return False
-
-        if query:
-            q = query.lower()
-            haystack = " ".join(
-                [
-                    str(it.get("source_name") or ""),
-                    str(it.get("summary") or ""),
-                    str(it.get("short_summary") or ""),
-                    str(it.get("block_label") or ""),
-                    str(it.get("url") or ""),
-                    " ".join(it.get("tags", [])),
-                ]
-            ).lower()
-            if q not in haystack:
-                return False
-
-        return True
-
-    filtered_items = [it for it in items if _match(it)]
-    if not filtered_items:
-        st.warning("Aucun résultat ne correspond aux filtres actuels.")
-        return
-
-    if sort_mode == "Score décroissant":
-        filtered_items.sort(
-            key=lambda x: (_get_base_score(x), x.get("created_at", "")),
-            reverse=True,
-        )
-    elif sort_mode == "Plus récents":
-        filtered_items.sort(
-            key=lambda x: x.get("created_at", ""),
-            reverse=True,
-        )
-    elif sort_mode == "Thématique A→Z":
-        filtered_items.sort(
-            key=lambda x: (
-                (x.get("block_label") or x.get("block") or ""),
-                -_get_base_score(x),
-            )
-        )
-    elif sort_mode in {"Trending 24h", "Trending 48h"}:
-        filtered_items.sort(
-            key=lambda x: (
-                _get_effective_score(x, sort_mode),
-                x.get("created_at", ""),
-            ),
-            reverse=True,
-        )
-
-    # ------------------------- Pagination -------------------------
-    total = len(filtered_items)
-    max_page = max(1, (total + per_page - 1) // per_page)
-
-    key_page = "tech_watch_page"
-    if key_page not in st.session_state:
-        st.session_state[key_page] = 1
-    st.session_state[key_page] = min(st.session_state[key_page], max_page)
-
-    page = st.number_input(
-        "Page",
-        min_value=1,
-        max_value=max_page,
-        value=st.session_state[key_page],
-        step=1,
-    )
-    st.session_state[key_page] = page
-
-    start = (page - 1) * per_page
-    end = start + per_page
-    page_items = filtered_items[start:end]
-
-    st.markdown(
-        "<div class='tw-toolbar'>"
-        f"<span>{total} résultats · page {int(page)}/{max_page}</span>"
-        "</div>",
-        unsafe_allow_html=True,
-    )
-
-    # ------------------------- Cartes -------------------------
-    st.markdown("<div class='tw-feed'>", unsafe_allow_html=True)
-
-    for it in page_items:
-        title = it.get("source_name") or it.get("url") or "Source"
-        url = it.get("url") or "#"
-        block_label = it.get("block_label") or it.get("block") or "Divers"
-        created_at = (it.get("created_at") or "")[:19].replace("T", " ")
-        tags = it.get("tags", []) or []
-
-        short_summary = (
-            it.get("short_summary")
-            or ((it.get("summary") or "")[:280] + "…") if it.get("summary") else ""
-        )
-
-        base_score = _get_base_score(it)
-        score_pct = int(max(0.0, min(1.0, base_score)) * 100)
-
-        rank_label = it.get("rank_label") or "🆕 Fresh"
-        risk_login = bool(it.get("risk_login"))
-        favicon = it.get("og_image") or it.get("favicon_url") or ""
-
-        rank_class = ""
-        if str(rank_label).startswith("🔥"):
-            rank_class = "hot"
-        elif str(rank_label).startswith("⭐"):
-            rank_class = "trending"
-
-        if tags:
-            chips = " ".join(f"<span class='tw-tag'>{t}</span>" for t in tags)
-            tags_html = f"<div class='tw-tags'>{chips}</div>"
-        else:
-            tags_html = ""
-
-        risk_html = ""
-        if risk_login:
-            risk_html = (
-                "<span style='font-size:11px;padding:2px 8px;border-radius:999px;"
-                "background:#fee2e2;color:#b91c1c;font-weight:500;margin-left:6px;'>"
-                "⚠ login/cookies</span>"
-            )
-
-        img_html = f'<img src="{favicon}" class="tw-icon" />' if favicon else ""
-
-        card_html = (
-            '<div class="tw-card">'
-            '<div class="tw-left">'
-            f"{img_html}"
-            "</div>"
-            '<div class="tw-right">'
-            '<div class="tw-topline">'
-            f'<span class="tw-pill-block">{block_label}</span>'
-            f'<span class="tw-pill-rank {rank_class}">{rank_label}</span>'
-            f"{risk_html}"
-            '<span class="tw-score-chip">'
-            f"Score {score_pct}/100"
-            '<span class="tw-score-bar">'
-            f'<span class="tw-score-bar-inner" style="width:{score_pct}%;"></span>'
-            "</span>"
-            "</span>"
-            "</div>"
-            '<div class="tw-title">'
-            f'<a href="{url}" target="_blank">🔹 {title}</a>'
-            "</div>"
-            f'<div class="tw-meta">🕒 {created_at} UTC</div>'
-            f'<div class="tw-summary-short">{short_summary}</div>'
-            f"{tags_html}"
-            '<div class="tw-link">'
-            f'<a href="{url}" target="_blank">🔗 Ouvrir la source</a>'
-            "</div>"
-            "</div>"
-            "</div>"
-        )
-
-        st.markdown(card_html, unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+    # =========================
+    # TAB 2 : Tech Watch · n8n
+    # =========================
+    with tab_n8n:
+        _render_tech_radar_panel()
