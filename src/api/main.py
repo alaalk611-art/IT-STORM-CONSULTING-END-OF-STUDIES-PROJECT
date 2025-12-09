@@ -290,13 +290,31 @@ def get_quote(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"quote error: {e}")
 
+
 @v1.get("/ohlcv/{symbol}")
 def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
+    """
+    Endpoint OHLCV robuste :
+    - Interroge yfinance avec history()
+    - Normalise les colonnes en t/o/h/l/c/v
+    - Retourne toujours un JSON cohérent, même sans données
+    - Ajoute une clé 'warning' en cas de dataset vide
+    """
     try:
-        t = yf.Ticker(symbol)
-        df = t.history(period=period, interval=interval)
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period, interval=interval, actions=False)
+
+        # --- Aucun résultat → on renvoie un payload vide mais explicite ---
         if df is None or df.empty:
-            raise HTTPException(status_code=404, detail="No OHLCV data.")
+            return {
+                "symbol": symbol,
+                "interval": interval,
+                "period": period,
+                "bars": [],
+                "candles": [],
+                "source": "yfinance",
+                "warning": "NO_DATA",
+            }
 
         df = df.reset_index()
         time_col = "Datetime" if "Datetime" in df.columns else "Date"
@@ -306,17 +324,19 @@ def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
             ts = r[time_col]
             try:
                 ts = ts.isoformat()
-            except:
+            except Exception:
                 ts = str(ts)
 
-            out.append({
-                "t": ts,
-                "o": _to_float(r.get("Open")),
-                "h": _to_float(r.get("High")),
-                "l": _to_float(r.get("Low")),
-                "c": _to_float(r.get("Close")),
-                "v": _to_float(r.get("Volume")),
-            })
+            out.append(
+                {
+                    "t": ts,
+                    "o": _to_float(r.get("Open")),
+                    "h": _to_float(r.get("High")),
+                    "l": _to_float(r.get("Low")),
+                    "c": _to_float(r.get("Close")),
+                    "v": _to_float(r.get("Volume")),
+                }
+            )
 
         return {
             "symbol": symbol,
@@ -325,9 +345,9 @@ def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
             "bars": out,
             "candles": out,
             "source": "yfinance",
+            "warning": None,
         }
-    except HTTPException:
-        raise
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ohlcv error: {e}")
 

@@ -39,7 +39,6 @@ try:
     from chromadb.utils import embedding_functions
 except Exception as e:
     raise RuntimeError(f"[RAG] ChromaDB manquant: {e}")
-from sentence_transformers import CrossEncoder
 
 
 def _build_embedding_fn(model_name: str):
@@ -549,7 +548,6 @@ class SmartRAG:
         collection_name: str = DEFAULT_COLLECTION,
         embed_model_name: str = EMBED_MODEL_NAME,
     ):
-        # === Initialisation Chroma ===
         try:
             self.client = chromadb.PersistentClient(
                 path=db_path,
@@ -558,7 +556,7 @@ class SmartRAG:
         except Exception as e:
             raise RuntimeError(f"[RAG] Échec init ChromaDB (path={db_path}): {e}")
 
-        # === Embedding function ===
+        # 🔥 Embedding function optimisée (FastEmbed + fallback)
         self.emb_fn = _build_embedding_fn(embed_model_name)
 
         try:
@@ -568,20 +566,6 @@ class SmartRAG:
             )
         except Exception as e:
             raise RuntimeError(f"[RAG] Échec accès collection '{collection_name}': {e}")
-
-        # ----------------------------------------------------------------------
-        # ✅ AJOUTER ICI : initialisation Cross Encoder (rerank neural)
-        # ----------------------------------------------------------------------
-        if os.getenv("ENABLE_CROSS_ENCODER", "1") == "1":
-            model_name = os.getenv("CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-            try:
-                from sentence_transformers import CrossEncoder
-                self.cross = CrossEncoder(model_name)
-            except Exception as e:
-                print(f"[RAG] CrossEncoder KO ({e}), désactivé.")
-                self.cross = None
-        else:
-            self.cross = None
 
     # Dense retrieve
     def retrieve_dense(self, query: str, k: int) -> List[RetrievedChunk]:
@@ -694,12 +678,6 @@ class SmartRAG:
 
         selected.sort(key=lambda z: z.score_final, reverse=True)
         return selected
-    def rerank_cross(self, query, chunks):
-        pairs = [[query, c.text] for c in chunks]
-        scores = self.cross.predict(pairs)
-        for i, c in enumerate(chunks):
-            c.score_final = 0.65 * c.score_final + 0.35 * float(scores[i])
-        return sorted(chunks, key=lambda x: x.score_final, reverse=True)
 
     # Citations (extraits complets), interleave QA + non-QA, limites par source
     def make_quotes(self, chunks: List[RetrievedChunk], max_quotes: int = MAX_QUOTES) -> List[Dict[str, str]]:
@@ -980,7 +958,8 @@ class SmartRAG:
         fused = self.late_fusion(dense, q0)
 
         # 3) Rerank + balance (intention unique 'default')
-        ranked = self.rerank_cross(q0, ranked)
+        ranked = self.rerank_balance(fused, intent="default")
+
         # 4) Confiance
         conf = self.estimate_confidence(ranked)
 
@@ -1240,73 +1219,28 @@ def ask_multi_ollama(
 
     def _confidence(ans: str) -> float:
         """
-        Score final de confiance :
-        - grounding (g)
-        - coverage (cov)
-        - style (sty)
-        - longueur (len_score)
-        - diversité des extraits (diversity)
-        - dispersion des scores (compactness)
-        - pénalisation QA excessive
+        Combinaison globale : grounding + coverage + style + longueur.
         """
-
         g = _grounding(ans)
         cov = _coverage(ans, snippets)
         sty = _style(ans)
-
         L = len((ans or "").strip())
 
-        # ---- Score de longueur idéal : 80–600 caractères
+        # Score de longueur : on favorise 4–6 phrases (~100–500 caractères)
         if 80 <= L <= 600:
             len_score = 1.0
         elif L < 60:
-            len_score = 0.6
+            len_score = 0.7
         else:
             len_score = 0.8
 
-        # ---- Diversité du contexte (nombre de snippets différents)
-        uniq_sources = len(snippets) if snippets else 1
-        diversity = min(1.0, uniq_sources / 6.0)
+        conf = 0.45 * g + 0.25 * cov + 0.20 * len_score + 0.10 * sty
 
-        # ---- Dispersion interne : favorise scoring compact
-        # (Les réponses parfaites sont cohérentes, pas trop dispersées)
-        if snippets:
-            lengths = [len(s.split()) for s in snippets]
-            dispersion = (max(lengths) - min(lengths)) / max(1, max(lengths))
-            compactness = 1 - min(1.0, dispersion)
-        else:
-            compactness = 0.7
-
-        # ---- QA ratio (si une réponse contient trop de QA → suspicion)
-        qa_ratio = 0.0
-        if snippets:
-            qa_ratio = sum(
-                1 for s in snippets if "q:" in s.lower() or "question:" in s.lower()
-            ) / len(snippets)
-
-        qa_penalty = max(0.0, 1.0 - qa_ratio)
-
-        # ---- Combinaison finale pondérée
-        conf = (
-            0.35 * g +
-            0.20 * cov +
-            0.15 * len_score +
-            0.10 * sty +
-            0.10 * diversity +
-            0.10 * compactness
-        ) * qa_penalty
-
-        # ---- Bonus si réponse parfaite sur tous les axes
-        if (
-            g >= 0.90
-            and cov >= 0.35
-            and len_score == 1.0
-            and diversity >= 0.7
-            and compactness >= 0.8
-        ):
+        # Bonus si tout est bien aligné (réponse idéale)
+        if g >= 0.90 and cov >= 0.25 and 80 <= L <= 400:
             conf = max(conf, 0.95)
 
-        return round(min(1.0, max(0.0, conf)), 3)
+        return round(min(1.0, max(0.0, conf)), 2)
 
     def _score(m: Dict[str, float]) -> float:
         """

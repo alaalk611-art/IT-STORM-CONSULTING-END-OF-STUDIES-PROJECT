@@ -10,177 +10,281 @@ from typing import List, Dict, Tuple
 
 import streamlit as st
 
-# === Backend : on utilise directement tes briques existantes ===
 from src.config.settings import RAW_DIR, PROC_DIR
 from src.ingestion.chunking import chunk_words
 from src.ingestion.extract_text import extract_any
 from src.utils.io import write_jsonl
 
-DATA_PROCESSED = PROC_DIR  # pour chunks.jsonl
+DATA_PROCESSED = PROC_DIR
 
 
-# ========== STYLES ==========
+# ============================================================
+# ======================= STYLES GLOBAUX =====================
+# ============================================================
 def _inject_css() -> None:
-    """Style simple, clair (white / light) avec un peu d'animation."""
     st.markdown(
         dedent(
             """
             <style>
             .upload-wrapper {
-                padding: 0.5rem 0.2rem 0.2rem 0.2rem;
+                padding: 0.75rem 0.2rem 0.2rem 0.2rem;
             }
 
             .upload-header-box {
-                background-color: #ffffff;
-                border-radius: 16px;
-                padding: 1.0rem 1.2rem;
-                border: 1px solid #e5e7eb;
-                animation: uploadFadeIn 0.35s ease-out;
+                background: linear-gradient(135deg,#eff6ff,#e0f2fe);
+                border-radius: 18px;
+                padding: 1.0rem 1.2rem 1.0rem 1.2rem;
+                border: 1px solid #bae6fd;
+                box-shadow: 0 10px 25px rgba(15,23,42,0.06);
+                margin-bottom: 1.0rem;
             }
 
             .upload-title {
-                font-size: 1.25rem;
-                font-weight: 600;
-                color: #0f172a;
-                margin: 0 0 0.25rem 0;
+                font-size: 1.32rem;
+                font-weight: 750;
+                color: #0369a1;
+                margin: 0.10rem 0 0.18rem 0;
             }
 
             .upload-subtitle {
-                font-size: 0.90rem;
-                color: #4b5563;
+                font-size: 0.92rem;
+                color: #1f2937;
                 margin: 0;
             }
 
-            .upload-steps {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.4rem;
-                margin-top: 0.75rem;
-                font-size: 0.80rem;
+            /* ================= PIPELINE ================= */
+
+            .pipeline-row-wrapper {
+                margin-top: 1.0rem;
+                margin-bottom: 0.3rem;
             }
 
-            .upload-step-pill {
-                padding: 0.18rem 0.6rem;
+            .pipeline-card {
+                border-radius: 14px;
+                padding: 0.90rem 1.0rem;
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                box-shadow: 0 4px 10px rgba(15,23,42,0.03);
+                height: 100%;
+                transition:
+                    background-color 0.25s ease,
+                    border-color 0.25s ease,
+                    box-shadow 0.25s ease,
+                    transform 0.20s ease,
+                    opacity 0.25s ease;
+            }
+
+            .pipeline-card.status-active {
+                border-color: #bae6fd;
+                background: #f0f9ff;
+                box-shadow: 0 6px 14px rgba(59,130,246,0.12);
+                opacity: 1.0;
+            }
+
+            .pipeline-card.status-done {
+                border-color: #bbf7d0;
+                background: #f0fdf4;
+                box-shadow: 0 6px 14px rgba(34,197,94,0.10);
+                opacity: 1.0;
+            }
+
+            .pipeline-card.status-locked {
+                border-style: dashed;
+                background: #f9fafb;
+                opacity: 0.60;
+            }
+
+            .pipeline-card-header {
+                display: flex;
+                align-items: flex-start;
+                gap: 0.6rem;
+                margin-bottom: 0.35rem;
+            }
+
+            .pipeline-circle {
+                width: 28px;
+                height: 28px;
+                border-radius: 999px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 0.82rem;
+                font-weight: 600;
+                border: 1px solid #d1d5db;
+                background: #ffffff;
+                color: #374151;
+                flex-shrink: 0;
+            }
+
+            .pipeline-circle.done {
+                background: #22c55e;
+                border-color: #16a34a;
+                color: #f9fafb;
+            }
+
+            .pipeline-circle.active {
+                background: #0ea5e9;
+                border-color: #0284c7;
+                color: #f9fafb;
+            }
+
+            .pipeline-circle.locked {
+                background: #f3f4f6;
+                color: #9ca3af;
+                border-style: dashed;
+            }
+
+            .pipeline-title-block {
+                display: flex;
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.20rem;
+            }
+
+            .pipeline-title {
+                font-size: 0.92rem;
+                font-weight: 600;
+                color: #111827;
+            }
+
+            .pipeline-status {
+                font-size: 0.70rem;
+                padding: 0.10rem 0.60rem;
                 border-radius: 999px;
                 border: 1px solid #e5e7eb;
-                background-color: #f9fafb;
-                color: #4b5563;
+                background: #ffffff;
+                color: #6b7280;
             }
 
-            .upload-step-pill.active {
-                border-color: #2563eb;
-                background-color: #dbeafe;
-                color: #1f2937;
-                font-weight: 500;
+            .pipeline-status.done {
+                background: #dcfce7;
+                border-color: #22c55e;
+                color: #166534;
             }
 
-            .upload-grid {
-                display: grid;
-                grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-                gap: 0.9rem;
-                margin-top: 1.0rem;
+            .pipeline-status.active {
+                background: #e0f2fe;
+                border-color: #0ea5e9;
+                color: #0369a1;
+            }
+
+            .pipeline-status.locked {
+                background: #f3f4f6;
+                color: #9ca3af;
+                border-style: dashed;
+            }
+
+            .pipeline-desc {
+                font-size: 0.80rem;
+                color: #6b7280;
+                margin-top: 0.15rem;
+            }
+
+            .pipeline-arrow {
+                text-align: center;
+                font-size: 1.6rem;
+                color: #cbd5f5;
+                padding-top: 1.7rem;
+                opacity: 0.8;
             }
 
             @media (max-width: 900px) {
-                .upload-grid {
-                    grid-template-columns: minmax(0, 1fr);
+                .pipeline-arrow {
+                    display: none;
                 }
             }
 
-            .upload-card {
-                background-color: #ffffff;
-                border-radius: 14px;
-                padding: 0.9rem 1.0rem;
-                border: 1px solid #e5e7eb;
-                box-shadow: 0 8px 16px rgba(15,23,42,0.03);
-                transition: box-shadow 0.18s ease-out,
-                            transform 0.18s ease-out,
-                            border-color 0.18s ease-out;
-                animation: uploadFadeInUp 0.40s ease-out;
+            /* ================= NAVIGATION D'ÉTAPES ================= */
+
+            .upload-steps-label {
+                font-size: 0.80rem;
+                color: #6b7280;
+                margin: 0.4rem 0 0.1rem 0;
+                text-align: center;
             }
 
-            .upload-card:hover {
-                border-color: #bfdbfe;
-                box-shadow: 0 14px 28px rgba(37,99,235,0.10);
+            div[role="radiogroup"] {
+                justify-content: center !important;
+                gap: 0.4rem !important;
+            }
+
+            div[role="radiogroup"] > label > div:first-child {
+                display: none;
+            }
+
+            div[role="radiogroup"] > label {
+                border-radius: 999px;
+                border: 1px solid #e5e7eb;
+                background: #f9fafb;
+                padding: 0.20rem 0.9rem;
+                font-size: 0.82rem;
+                color: #4b5563;
+                cursor: pointer;
+                text-align: center;
+            }
+
+            div[role="radiogroup"] > label[data-checked="true"] {
+                border-color: #0ea5e9;
+                background: #e0f2fe;
+                color: #0369a1;
+                box-shadow: 0 4px 10px rgba(14,165,233,0.22);
                 transform: translateY(-1px);
             }
 
-            .upload-card-title {
-                font-size: 0.95rem;
-                font-weight: 600;
-                color: #0f172a;
-                margin-bottom: 0.35rem;
-                display: flex;
-                align-items: center;
-                gap: 0.4rem;
+            div[role="radiogroup"] > label[data-checked="false"] {
+                display: none;
             }
 
-            .upload-card-title span.icon {
-                font-size: 1.1rem;
-            }
+            /* ================= AUTRES ================= */
 
-            .upload-card-sub {
-                font-size: 0.82rem;
-                color: #4b5563;
-                margin-bottom: 0.6rem;
-            }
-
-            .stButton > button {
-                border-radius: 999px !important;
-                border: 1px solid #e5e7eb;
-                background-color: #f9fafb;
-                color: #111827;
-                font-size: 0.85rem;
-                padding: 0.35rem 0.9rem;
-            }
-            .stButton > button:hover {
-                border-color: #2563eb;
-                background-color: #eff6ff;
-                color: #1d4ed8;
+            .upload-card-hint {
+                font-size: 0.76rem;
+                color: #6b7280;
+                margin-top: 0.6rem;
             }
 
             div[data-testid="stFileUploader"] > label {
-                font-size: 0.82rem;
+                font-size: 0.80rem;
                 font-weight: 500;
                 color: #374151;
                 margin-bottom: 0.25rem;
             }
             div[data-testid="stFileUploader"] {
-                background-color: #f9fafb;
+                background: #f9fafb;
                 border-radius: 10px;
-                padding: 0.6rem 0.6rem 0.7rem 0.6rem;
+                padding: 0.7rem;
                 border: 1px dashed #d1d5db;
             }
 
-            .upload-chunks-title {
-                font-size: 0.90rem;
+            .stButton > button {
+                border-radius: 999px !important;
+                border: 1px solid #d1d5db;
+                background: linear-gradient(90deg,#eff6ff,#dbeafe);
+                color: #1f2937;
+                font-size: 0.85rem;
+                padding: 0.35rem 0.9rem;
                 font-weight: 500;
-                color: #111827;
-                margin-top: 0.9rem;
-                margin-bottom: 0.2rem;
-                display: flex;
-                align-items: center;
-                gap: 0.35rem;
             }
-            .upload-chunks-title span.badge {
-                font-size: 0.70rem;
-                text-transform: uppercase;
-                letter-spacing: 0.08em;
-                padding: 0.12rem 0.45rem;
-                border-radius: 999px;
-                border: 1px solid #e5e7eb;
-                color: #4b5563;
-                background-color: #f9fafb;
+            .stButton > button:hover {
+                border-color: #2563eb;
+                background: linear-gradient(90deg,#dbeafe,#bfdbfe);
+                color: #1d4ed8;
+                box-shadow: 0 6px 14px rgba(37,99,235,0.20);
+            }
+            .stButton > button:disabled {
+                opacity: 0.45;
+                cursor: not-allowed;
+                box-shadow: none;
             }
 
-            @keyframes uploadFadeIn {
-                0% { opacity: 0; transform: translateY(4px); }
-                100% { opacity: 1; transform: translateY(0); }
+            .upload-summary {
+                margin-top: 0.55rem;
+                font-size: 0.78rem;
+                color: #374151;
             }
-
-            @keyframes uploadFadeInUp {
-                0% { opacity: 0; transform: translateY(6px); }
-                100% { opacity: 1; transform: translateY(0); }
+            .upload-summary h3 {
+                font-size: 0.86rem;
+                margin-bottom: 0.35rem;
             }
             </style>
             """
@@ -189,42 +293,121 @@ def _inject_css() -> None:
     )
 
 
-# ========== BACKEND HELPERS (local, sans pipeline.py) ==========
+# ============================================================
+# ==================== PIPELINE (3 ÉTAPES) ===================
+# ============================================================
+def _render_pipeline(step1_done: bool, step2_done: bool, step3_done: bool) -> None:
+    def status(idx: int) -> str:
+        if idx == 1:
+            return "done" if step1_done else "active"
+        if idx == 2:
+            if step2_done:
+                return "done"
+            return "active" if step1_done else "locked"
+        if idx == 3:
+            if step3_done:
+                return "done"
+            return "active" if step2_done else "locked"
+        return "locked"
 
+    def label(sts: str) -> str:
+        return {"done": "Validée", "active": "En cours", "locked": "Verrouillée"}[sts]
+
+    st.markdown('<div class="pipeline-row-wrapper">', unsafe_allow_html=True)
+
+    col1, col_arrow1, col2, col_arrow2, col3 = st.columns([4, 1, 4, 1, 4])
+
+    s1 = status(1)
+    col1.markdown(
+        f"""
+        <div class="pipeline-card status-{s1}">
+          <div class="pipeline-card-header">
+            <div class="pipeline-circle {s1}">1</div>
+            <div class="pipeline-title-block">
+              <div class="pipeline-title">Upload des documents</div>
+              <span class="pipeline-status {s1}">{label(s1)}</span>
+            </div>
+          </div>
+          <div class="pipeline-desc">
+            Ajoute tes fichiers bruts dans le dossier RAW (PDF, DOCX, TXT, ...).
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_arrow1.markdown('<div class="pipeline-arrow">➜</div>', unsafe_allow_html=True)
+
+    s2 = status(2)
+    col2.markdown(
+        f"""
+        <div class="pipeline-card status-{s2}">
+          <div class="pipeline-card-header">
+            <div class="pipeline-circle {s2}">2</div>
+            <div class="pipeline-title-block">
+              <div class="pipeline-title">Extraction & Chunking</div>
+              <span class="pipeline-status {s2}">{label(s2)}</span>
+            </div>
+          </div>
+          <div class="pipeline-desc">
+            Extraction du texte et découpage en petits segments pour le RAG.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    col_arrow2.markdown('<div class="pipeline-arrow">➜</div>', unsafe_allow_html=True)
+
+    s3 = status(3)
+    col3.markdown(
+        f"""
+        <div class="pipeline-card status-{s3}">
+          <div class="pipeline-card-header">
+            <div class="pipeline-circle {s3}">3</div>
+            <div class="pipeline-title-block">
+              <div class="pipeline-title">Index vectoriel</div>
+              <span class="pipeline-status {s3}">{label(s3)}</span>
+            </div>
+          </div>
+          <div class="pipeline-desc">
+            Construction / mise à jour de l’index exploité par StormCopilot.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ============================================================
+# ======================= BACKEND HELPERS ====================
+# ============================================================
 def _save_uploaded_files(files) -> List[Path]:
     RAW_DIR.mkdir(parents=True, exist_ok=True)
     saved: List[Path] = []
-
     for f in files:
         dest = RAW_DIR / f.name
         with open(dest, "wb") as out:
             out.write(f.read())
         saved.append(dest)
-
     return saved
 
 
 def _extract_and_chunk() -> Tuple[int, Path, Dict]:
-    """
-    Lit les fichiers dans RAW_DIR, extrait le texte, chunk,
-    et écrit data/processed/chunks.jsonl (via PROC_DIR).
-    """
     in_dir = Path(RAW_DIR)
     out_path = Path(PROC_DIR) / "chunks.jsonl"
     PROC_DIR.mkdir(parents=True, exist_ok=True)
 
     records = []
-    stats: Dict = {"seen": 0, "processed": 0, "ignored": 0, "by_ext": {}}
+    stats: Dict = {"seen": 0, "processed": 0, "ignored": 0}
 
     for p in in_dir.glob("*"):
         if not p.is_file():
             continue
 
         stats["seen"] += 1
-        ext = p.suffix.lower() or "<no_ext>"
-        stats["by_ext"].setdefault(ext, 0)
-        stats["by_ext"][ext] += 1
-
         text = extract_any(p)
         if not text:
             stats["ignored"] += 1
@@ -243,12 +426,6 @@ def _extract_and_chunk() -> Tuple[int, Path, Dict]:
 
 
 def _rebuild_index() -> int:
-    """
-    Implémentation minimale :
-    - lit chunks.jsonl
-    - retourne le nombre de lignes
-    (Tu pourras plus tard brancher ici ton vrai build_index / Chroma.)
-    """
     chunks_path = DATA_PROCESSED / "chunks.jsonl"
     if not chunks_path.exists():
         return 0
@@ -260,10 +437,7 @@ def _rebuild_index() -> int:
     return total
 
 
-def _animate_progress(label: str = "Traitement en cours...", duration: float = 0.45) -> None:
-    """
-    Petite barre de progression animée (cosmétique) après une opération lourde.
-    """
+def _animate_progress(label: str, duration: float = 0.45) -> None:
     progress = st.progress(0, text=label)
     steps = 8
     for i in range(steps + 1):
@@ -273,52 +447,76 @@ def _animate_progress(label: str = "Traitement en cours...", duration: float = 0
     progress.empty()
 
 
-# ========== RENDER ==========
+# ============================================================
+# =========================== RENDER =========================
+# ============================================================
 def render_upload_tab() -> None:
-    """
-    Tab 2 : 📂 Upload & Index — version claire, simple, avec progress bar et résumé.
-    """
     _inject_css()
+
+    if "upload_done_step1" not in st.session_state:
+        st.session_state["upload_done_step1"] = False
+    if "upload_done_step2" not in st.session_state:
+        st.session_state["upload_done_step2"] = False
+    if "upload_done_step3" not in st.session_state:
+        st.session_state["upload_done_step3"] = False
+    if "upload_active_step_idx" not in st.session_state:
+        st.session_state["upload_active_step_idx"] = 0
+
+    step1_done = bool(st.session_state["upload_done_step1"])
+    step2_done = bool(st.session_state["upload_done_step2"])
+    step3_done = bool(st.session_state["upload_done_step3"])
 
     st.markdown('<div class="upload-wrapper">', unsafe_allow_html=True)
 
-    # En-tête
+    # Nouveau titre / sous-titre
     st.markdown(
-        dedent(
-            """
-            <div class="upload-header-box">
-              <div class="upload-title">📂 Upload & Index</div>
-              <p class="upload-subtitle">
-                Uploade tes documents, lance l’extraction en chunks puis reconstruis l’index RAG.
-              </p>
-              <div class="upload-steps">
-                <span class="upload-step-pill active">1. Upload</span>
-                <span class="upload-step-pill">2. Chunk</span>
-                <span class="upload-step-pill">3. Index</span>
-              </div>
-            </div>
-            """
-        ),
+        """
+        <div class="upload-header-box">
+          <h2 class="upload-title">Organise ton corpus en 3 étapes</h2>
+          <p class="upload-subtitle">
+            Importe les fichiers, crée les chunks nécessaires puis mets à jour l’index utilisé par le copilot.
+          </p>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-    # Grille : gauche = upload/chunk, droite = index
-    st.markdown('<div class="upload-grid">', unsafe_allow_html=True)
+    _render_pipeline(step1_done, step2_done, step3_done)
 
-    # --------- Colonne gauche : Upload & Chunk ----------
-    with st.container():
-        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
-        st.markdown(
-            """
-            <div class="upload-card-title">
-              <span class="icon">📁</span>
-              <span>Étape 1 & 2 · Upload & Chunk</span>
-            </div>
-            <div class="upload-card-sub">
-              Sélectionne tes fichiers, sauvegarde-les puis déclenche l’extraction & le découpage en chunks.
-            </div>
-            """,
-            unsafe_allow_html=True,
+    st.markdown(
+        '<p class="upload-steps-label">Étape en cours :</p>',
+        unsafe_allow_html=True,
+    )
+
+    labels = [
+        "① Étape 1 · Upload",
+        "② Étape 2 · Chunking",
+        "③ Étape 3 · Index",
+    ]
+
+    current_idx = st.session_state["upload_active_step_idx"]
+
+    # centrer la radio dans la page
+    col_left, col_center, col_right = st.columns([1, 2, 1])
+    with col_center:
+        selected_label = st.radio(
+            "",
+            labels,
+            index=current_idx,
+            horizontal=True,
+            key="upload_steps_radio",
+        )
+
+    selected_idx = labels.index(selected_label)
+    st.session_state["upload_active_step_idx"] = selected_idx
+
+    st.markdown("---")
+
+    if selected_idx == 0:
+        st.markdown("### 📁 Étape 1 · Upload des documents")
+        st.caption(
+            "Sélectionne tes fichiers et enregistre-les dans le dossier brut RAW pour qu’ils "
+            "puissent être analysés."
         )
 
         files = st.file_uploader(
@@ -339,80 +537,95 @@ def render_upload_tab() -> None:
             accept_multiple_files=True,
         )
 
-        col_save, col_chunk = st.columns(2)
-
-        # Save uploads
-        if col_save.button("⬆️  Save uploads"):
+        if st.button("⬆️ Enregistrer les fichiers dans RAW"):
             if not files:
                 st.warning("Aucun fichier sélectionné.")
             else:
                 saved = _save_uploaded_files(files)
-                st.success(f"{len(saved)} fichier(s) sauvegardé(s) dans `{RAW_DIR}`.")
-
-        # Extract & Chunk
-        if col_chunk.button("⚙️  Extract & Chunk"):
-            with st.spinner("Extraction & découpage en chunks..."):
-                n, outp, stats = _extract_and_chunk()
-            _animate_progress("Finalisation de l’extraction & du chunking...")
-
-            st.success(f"{n} chunks générés → {outp}")
-
-            # Petit résumé automatique
-            seen = stats.get("seen", 0)
-            processed = stats.get("processed", 0)
-            ignored = stats.get("ignored", 0)
-            by_ext = stats.get("by_ext", {})
-
-            summary_lines = [
-                "### 🧾 Résumé de l’extraction",
-                f"- 📄 Documents détectés : **{seen}**",
-                f"- ✅ Documents traités : **{processed}**",
-                f"- 🚫 Ignorés : **{ignored}**",
-                f"- 🧩 Chunks générés : **{n}**",
-            ]
-
-            if by_ext:
-                exts_str = ", ".join(
-                    f"`{ext}`: {count}" for ext, count in by_ext.items()
+                st.success(
+                    f"Étape 1 validée : {len(saved)} fichier(s) sauvegardé(s) dans `{RAW_DIR}`."
                 )
-                summary_lines.append(f"- 📂 Répartition par extension : {exts_str}")
+                st.session_state["upload_done_step1"] = True
 
-            st.markdown("\n".join(summary_lines))
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # --------- Colonne droite : Index ----------
-    with st.container():
-        st.markdown('<div class="upload-card">', unsafe_allow_html=True)
         st.markdown(
             """
-            <div class="upload-card-title">
-              <span class="icon">🧠</span>
-              <span>Étape 3 · Index vectoriel</span>
-            </div>
-            <div class="upload-card-sub">
-              Recrée l’index (compte des chunks) à partir du fichier généré.
-              Tu pourras plus tard brancher ici ton vrai index Chroma.
-            </div>
+            <p class="upload-card-hint">
+              Astuce : évite les fichiers protégés par mot de passe ou trop volumineux.
+            </p>
             """,
             unsafe_allow_html=True,
         )
 
-        if st.button("🧠  Rebuild Vector Index"):
-            with st.spinner("Reconstruction de l’index..."):
-                total = _rebuild_index()
-            _animate_progress("Mise à jour de l’index...")
+    elif selected_idx == 1:
+        st.markdown("### ✂️ Étape 2 · Extraction & Chunking")
+        st.caption(
+            "À partir des fichiers présents dans RAW, le système extrait le texte et le découpe "
+            "en segments (chunks) pour le RAG."
+        )
 
-            st.success(f"{total} chunks détectés dans `chunks.jsonl`.")
-
-        # Statut chunks.jsonl
-        chunks_file = DATA_PROCESSED / "chunks.jsonl"
-        if chunks_file.exists():
-            st.info(f"Fichier de chunks détecté : `{chunks_file.as_posix()}`", icon="✅")
+        if not st.session_state["upload_done_step1"]:
+            st.info(
+                "L’étape 2 sera disponible une fois que l’étape 1 aura été validée."
+            )
+            st.button("⚙️ Lancer l’extraction & le chunking", disabled=True)
         else:
-            st.warning("Aucun fichier `chunks.jsonl` détecté pour l’instant.", icon="ℹ️")
+            if st.button("⚙️ Lancer l’extraction & le chunking"):
+                with st.spinner("Extraction du texte & découpage en chunks..."):
+                    n, outp, stats = _extract_and_chunk()
+                _animate_progress("Finalisation de l’extraction & du chunking...")
 
-        st.markdown("</div>", unsafe_allow_html=True)
+                st.success(f"Étape 2 validée : {n} chunks générés → {outp}")
+                st.session_state["upload_done_step2"] = True
 
-    st.markdown("</div>", unsafe_allow_html=True)  # fin upload-grid
-    st.markdown("</div>", unsafe_allow_html=True)  # fin upload-wrapper
+                seen = stats.get("seen", 0)
+                processed = stats.get("processed", 0)
+                ignored = stats.get("ignored", 0)
+
+                st.markdown(
+                    f"""
+                    <div class="upload-summary">
+                      <h3>🧾 Résumé de l’extraction</h3>
+                      <ul>
+                        <li>Documents détectés : <b>{seen}</b></li>
+                        <li>Documents traités : <b>{processed}</b></li>
+                        <li>Ignorés (vides / non lisibles) : <b>{ignored}</b></li>
+                        <li>Chunks générés : <b>{n}</b></li>
+                      </ul>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+    else:
+        st.markdown("### 🧠 Étape 3 · Index vectoriel")
+        st.caption(
+            "Reconstruis l’index à partir des chunks générés. Cet index sera ensuite utilisé "
+            "par le moteur RAG du copilot."
+        )
+
+        if not st.session_state["upload_done_step2"]:
+            st.info(
+                "L’étape 3 sera disponible une fois que l’étape 2 aura été validée."
+            )
+            st.button("🧠 Reconstruire l’index vectoriel", disabled=True)
+        else:
+            if st.button("🧠 Reconstruire l’index vectoriel"):
+                with st.spinner("Reconstruction de l’index (lecture chunks.jsonl)..."):
+                    total = _rebuild_index()
+                _animate_progress("Mise à jour de l’index...")
+                st.success(
+                    f"Étape 3 validée : {total} chunks détectés dans `chunks.jsonl`."
+                )
+                st.session_state["upload_done_step3"] = True
+
+        st.markdown(
+            """
+            <p class="upload-card-hint">
+              Conseil : reconstruis l’index après un gros import de documents ou un changement
+              de modèle d’embedding.
+            </p>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("</div>", unsafe_allow_html=True)

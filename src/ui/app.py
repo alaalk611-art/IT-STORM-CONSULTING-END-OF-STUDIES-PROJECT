@@ -713,64 +713,83 @@ def apply_theme(theme: dict):
     }}
 
     /* =========================
-       TABS — style + effet faded actif
+       NAVIGATION PRINCIPALE : st.radio → pills
        ========================= */
-    .stTabs [role="tablist"] button {{
-      border-radius: 999px;
-      padding: 0.35rem 0.9rem;
-      margin-right: 0.25rem;
-      border: 1px solid transparent;
-      background: transparent;
-      color: var(--text);
-      opacity: 0.70;
-      font-weight: 500;
-      font-size: 0.88rem;
-      transition:
-        background 0.25s ease,
-        color 0.25s ease,
-        opacity 0.25s ease,
-        box-shadow 0.25s ease,
-        transform 0.25s ease;
+
+    /* Le conteneur du radio */
+    div[data-testid="stRadio"] > div[role="radiogroup"] {{
+        gap: 0.6rem !important;
+        flex-wrap: wrap;
     }}
 
-    /* Onglet actif — halo coloré + effet faded/glow */
-    .stTabs [role="tablist"] button[aria-selected="true"] {{
-      opacity: 1;
-      color: #ffffff !important;
-      background:
-        radial-gradient(circle at 0% 0%, rgba(56,189,248,0.50), transparent 55%),
-        radial-gradient(circle at 100% 0%, rgba(129,140,248,0.55), transparent 55%),
-        linear-gradient(90deg, #0ea5e9, #6366f1, #a855f7);
-      box-shadow:
-        0 0 0 1px rgba(129,140,248,0.85),
-        0 10px 24px rgba(15,23,42,0.40);
-      transform: translateY(-1px);
-      animation: tabGlow 1.6s ease-in-out infinite alternate;
+    /* On cache le petit rond du radio */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label > div:first-child {{
+        display: none;
     }}
 
-    /* Hover pour onglets inactifs */
-    .stTabs [role="tablist"] button:not([aria-selected="true"]):hover {{
-      opacity: 0.95;
-      background: linear-gradient(
-        90deg,
-        rgba(148,163,184,0.12),
-        rgba(129,140,248,0.08)
-      );
-      box-shadow: 0 4px 14px rgba(15,23,42,0.18);
+    /* Chaque option devient un pill */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label {{
+        border-radius: 999px;
+        border: 1px solid #e2e8f0;
+        background: #f8fafc;
+        padding: 0.25rem 1.0rem;
+        font-size: 0.92rem;
+        font-weight: 500;
+        color: #1e293b;
+        box-shadow: 0 1px 2px rgba(15,23,42,0.06);
+        cursor: pointer;
+        transition: all .20s ease;
     }}
 
-    /* Animation du glow/fade */
-    @keyframes tabGlow {{
-      0% {{
-        box-shadow:
-          0 0 0 0 rgba(56,189,248,0.55),
-          0 10px 24px rgba(15,23,42,0.40);
-      }}
-      100% {{
-        box-shadow:
-          0 0 0 9px rgba(56,189,248,0.00),
-          0 14px 30px rgba(15,23,42,0.70);
-      }}
+    /* Option sélectionnée (onglet actif) */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"] {{
+        background: #ffffff;
+        border-color: #38bdf8;         /* sky blue */
+        color: #0c4a6e;
+        box-shadow: 0 4px 12px rgba(56,189,248,0.25);
+        transform: translateY(-1px);
+    }}
+
+    /* Hover */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label:hover {{
+        background: #eef2ff;
+        opacity: 0.97;
+    }}
+
+    /* =========================
+       (Optionnel) style pour de futurs st.tabs
+       ========================= */
+    .stTabs [role="tablist"] {{
+        gap: 0.6rem;
+        border-bottom: none !important;
+        padding-bottom: 0.6rem;
+    }}
+
+    .stTabs [role="tab"] {{
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 0.35rem 1rem;
+        font-size: 0.92rem;
+        font-weight: 500;
+        color: #1e293b;
+        opacity: 0.85;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+        transition: all .20s ease;
+    }}
+
+    .stTabs [aria-selected="true"] {{
+        background: #ffffff !important;
+        border-color: #38bdf8 !important;
+        opacity: 1 !important;
+        color: #0c4a6e !important;
+        box-shadow: 0 4px 12px rgba(56,189,248,0.25);
+        transform: translateY(-1px);
+    }}
+
+    .stTabs [role="tab"]:hover {{
+        opacity: 0.95;
+        background: #eef2ff;
     }}
 
     /* Ligne de séparation douce */

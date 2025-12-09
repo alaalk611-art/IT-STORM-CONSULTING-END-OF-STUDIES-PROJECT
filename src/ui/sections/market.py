@@ -9,7 +9,7 @@ import streamlit as st
 from datetime import date
 from collections import deque
 import random
-
+import json 
 # Import DL optionnel (autoencoder + DQN)
 try:
     import torch
@@ -744,6 +744,78 @@ def _glossary_ui():
 # UI principale
 # ===============================
 DEFAULT_SYMBOLS = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
+def call_n8n_market_radar(
+    symbols: str = "^FCHI,BNP.PA,AIR.PA,MC.PA,OR.PA,ORA.PA",
+    interval: str = "1d",
+    period: str = "1y",
+):
+    """
+    Appelle le workflow n8n 'Market Radar - IT-STORM' via le webhook
+    et renvoie un DataFrame avec une ligne par symbole.
+    """
+    base = os.getenv("N8N_BASE_URL", "http://127.0.0.1:5678").rstrip("/")
+    url = f"{base}/webhook/market-radar"
+
+    payload = {
+        "symbols": symbols,
+        "interval": interval,
+        "period": period,
+    }
+
+    try:
+        resp = requests.post(url, json=payload, timeout=60)
+        resp.raise_for_status()
+    except Exception as e:
+        st.error(f"Erreur appel n8n Market Radar : {e}")
+        return None
+
+    # n8n peut renvoyer soit un dict, soit une liste de dicts
+    try:
+        data = resp.json()
+    except json.JSONDecodeError:
+        st.error("Réponse n8n non valide (JSON).")
+        return None
+
+    # Normalisation en liste
+    if isinstance(data, dict):
+        items = [data]
+    elif isinstance(data, list):
+        items = data
+    else:
+        st.error(f"Format de réponse inattendu depuis n8n : {type(data)}")
+        return None
+
+    cleaned = []
+    for it in items:
+        # si un jour tu repasses en {{ $items() }}, gère aussi { "json": {...} }
+        row = it.get("json", it)
+
+        error = row.get("error")
+        if isinstance(error, dict):
+            error_message = error.get("message")
+            error_status = error.get("status")
+        else:
+            error_message = None
+            error_status = None
+
+        cleaned.append(
+            {
+                "symbol": row.get("symbol"),
+                "nb_candles": row.get("nb_candles", 0),
+                "source": row.get("source", "backend"),
+                "interval": row.get("interval"),
+                "period": row.get("period"),
+                "error_message": error_message,
+                "error_status": error_status,
+                "fetched_at": row.get("fetched_at"),
+            }
+        )
+
+    if not cleaned:
+        st.warning("Aucun résultat reçu depuis n8n.")
+        return None
+
+    return pd.DataFrame(cleaned)
 
 
 def render() -> None:
@@ -853,14 +925,17 @@ def render() -> None:
     # ------------------------------------------------------------------
     # Sous-onglets : graphes & analyses
     # ------------------------------------------------------------------
-    tab_price, tab_mom, tab_diag, tab_bt, tab_data,tab_report = st.tabs(
+    tab_price, tab_mom, tab_diag, tab_bt, tab_data,tab_report,tab_n8n = st.tabs(
         [
             "📊 Prix & moyennes mobiles",
             "📈 Momentum & oscillateurs",
             "🧪 Diagnostics ML",
             "📈 Backtest SMA & RL",
             "📄 Données brutes",
-             "📰 Daily Report",
+            "📰 Daily Report",
+            "🤝 n8n Market Radar",
+
+             
         ]
     )
 
@@ -1973,3 +2048,288 @@ def render() -> None:
                         "avec zones techniques et scénarios de cibles. "
                         "Il ne constitue pas un conseil d’investissement mais un support pédagogique de lecture du marché."
                     )
+                        # ===== TAB n8n : Market Radar via workflow externe =====
+    # ===== TAB n8n : Market Radar via workflow externe =====
+    # ===== TAB n8n : Market Radar via workflow externe =====
+    with tab_n8n:
+        st.markdown("### 🌐 Market Radar (via n8n)")
+        st.caption(
+            "Test du workflow n8n « Market Radar - IT-STORM » via le webhook `/webhook/market-radar`."
+        )
+
+        col1, col2, col3 = st.columns([3, 1, 1])
+        with col1:
+            symbols_input = st.text_input(
+                "Universe (tickers séparés par des virgules)",
+                "^FCHI, BNP.PA, AIR.PA, MC.PA, OR.PA, ORA.PA",
+                key="n8n_symbols",
+            )
+        with col2:
+            interval_input = st.selectbox(
+                "Intervalle",
+                ["1d", "1h"],
+                index=0,
+                key="n8n_interval",
+            )
+        with col3:
+            period_input = st.selectbox(
+                "Période",
+                ["6mo", "1y", "2y"],
+                index=1,
+                key="n8n_period",
+            )
+
+        if st.button("🚀 Lancer Market Radar (n8n)", key="btn_n8n_market_radar"):
+            df_radar = call_n8n_market_radar(
+                symbols=symbols_input,
+                interval=interval_input,
+                period=period_input,
+            )
+
+            if df_radar is None or df_radar.empty:
+                st.error("Impossible de récupérer les données de marché.")
+            else:
+                st.success("Réponse n8n reçue ✅")
+
+                # ------------------ 🧊 Cartes de synthèse (HTML) ------------------
+                n_ok = int(df_radar["error_message"].isna().sum())
+                n_err = int(len(df_radar) - n_ok)
+
+                col_a, col_b, col_c = st.columns(3)
+                with col_a:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background: linear-gradient(135deg,#0d6efd,#4dabf7);
+                            padding: 18px;
+                            border-radius: 18px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 10px 30px rgba(13,110,253,0.30);
+                        ">
+                            <div style="font-size:0.9rem;opacity:0.9;">🌍 Actifs total</div>
+                            <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{len(df_radar)}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with col_b:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background: linear-gradient(135deg,#198754,#51cf66);
+                            padding: 18px;
+                            border-radius: 18px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 10px 30px rgba(25,135,84,0.30);
+                        ">
+                            <div style="font-size:0.9rem;opacity:0.9;">✅ OK (avec données)</div>
+                            <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{n_ok}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                with col_c:
+                    st.markdown(
+                        f"""
+                        <div style="
+                            background: linear-gradient(135deg,#842029,#dc3545);
+                            padding: 18px;
+                            border-radius: 18px;
+                            color: white;
+                            text-align: center;
+                            box-shadow: 0 10px 30px rgba(220,53,69,0.30);
+                        ">
+                            <div style="font-size:0.9rem;opacity:0.9;">⚠️ En erreur / sans données</div>
+                            <div style="font-size:2.2rem;font-weight:700;margin-top:4px;">{n_err}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown("#### 📊 Détail brut par symbole (réponse n8n)")
+                df_raw = df_radar.copy()
+                df_raw.index = np.arange(1, len(df_raw) + 1)
+                st.dataframe(df_raw, use_container_width=True)
+
+                if n_err > 0:
+                    st.markdown("#### ⚠️ Symboles sans données OHLCV")
+                    st.write(
+                        df_radar[df_radar["error_message"].notna()][
+                            ["symbol", "error_status", "error_message"]
+                        ].set_index("symbol")
+                    )
+
+                # ------------------ 🧠 Lecture IA rapide : enrichissement local ------------------
+                ok_syms = (
+                    df_radar[df_radar["error_message"].isna()]["symbol"]
+                    .dropna()
+                    .tolist()
+                )
+
+                enriched: list[dict] = []
+
+                if ok_syms:
+                    st.markdown("#### 🧠 Lecture IA rapide sur les actifs OK")
+                    with st.spinner("Calcul des signaux techniques (indicateurs + tendance + vol)…"):
+                        for sym in ok_syms:
+                            data_sym = api_get(
+                                f"/v1/ohlcv/{sym}",
+                                interval=interval_input,
+                                period=period_input,
+                            )
+                            if not data_sym or "candles" not in data_sym:
+                                continue
+
+                            df_sym = pd.DataFrame(data_sym["candles"])
+                            df_sym = _compute_indicators(df_sym, interval=interval_input)
+                            if df_sym.empty or "close" not in df_sym.columns:
+                                continue
+
+                            last = df_sym.iloc[-1]
+                            price = float(last["close"])
+
+                            rsi = (
+                                float(last["rsi14"])
+                                if "rsi14" in df_sym.columns and not pd.isna(last.get("rsi14", np.nan))
+                                else None
+                            )
+                            vol = (
+                                float(last["vol20"])
+                                if "vol20" in df_sym.columns and not pd.isna(last.get("vol20", np.nan))
+                                else None
+                            )
+
+                            reco = _score_and_reco(df_sym)
+                            trend = _trend_slope_and_projection(df_sym, horizon=60)
+                            slope_pct = trend[4] if trend else 0.0  # pente annualisée en %
+
+                            # Libellés lisibles
+                            if slope_pct > 5:
+                                trend_label = "Haussière"
+                            elif slope_pct < -5:
+                                trend_label = "Baissière"
+                            else:
+                                trend_label = "Neutre"
+
+                            if vol is None:
+                                vol_label = "N/A"
+                            elif vol < 0.15:
+                                vol_label = "Calme"
+                            elif vol < 0.30:
+                                vol_label = "Normal"
+                            else:
+                                vol_label = "Tendue"
+
+                            comment = (
+                                f"{reco['label']} • tendance {trend_label.lower()} "
+                                f"• volatilité {vol_label.lower()}"
+                            )
+
+                            enriched.append(
+                                {
+                                    "symbol": sym,
+                                    "prix": round(price, 2),
+                                    "signal": reco["label"],
+                                    "score": round(float(reco["score"]), 2),
+                                    "tendance_annuelle_%": round(float(slope_pct), 1),
+                                    "vol20_annuelle_%": round(vol * 100.0, 1) if vol is not None else None,
+                                    "RSI14": round(rsi, 1) if rsi is not None else None,
+                                    "lecture": comment,
+                                }
+                            )
+
+                if enriched:
+                    df_enriched = pd.DataFrame(enriched)
+                    df_enriched.index = np.arange(1, len(df_enriched) + 1)
+
+                    # -------- Résumé global du marché --------
+                    bullish = int((df_enriched["signal"] == "ACHAT").sum())
+                    bearish = int((df_enriched["signal"] == "VENTE").sum())
+                    neutral = int((df_enriched["signal"] == "NEUTRE").sum())
+
+                    mean_trend = df_enriched["tendance_annuelle_%"].mean()
+                    mean_vol = df_enriched["vol20_annuelle_%"].mean()
+
+                    bias = "plutôt haussière" if bullish > bearish else (
+                        "plutôt baissière" if bearish > bullish else "équilibrée"
+                    )
+
+                    st.markdown("#### 🧬 Synthèse IA globale")
+                    st.markdown(
+                        f"""
+                        - 🟢 **{bullish}** actifs en signal **ACHAT**  
+                        - 🔴 **{bearish}** actifs en signal **VENTE**  
+                        - ⚪ **{neutral}** actifs en signal **NEUTRE**  
+
+                        Le marché apparaît **{bias}**, avec une tendance moyenne de 
+                        **{mean_trend:.1f} %** par an et une volatilité moyenne autour de 
+                        **{mean_vol:.1f} %**.
+                        """
+                    )
+
+                    # -------- Heatmap (score + tendance) --------
+                    def _heat_color(val):
+                        if pd.isna(val):
+                            return ""
+                        if val > 5:
+                            return "color:#0a7d05;font-weight:600;"
+                        if val < -5:
+                            return "color:#b00000;font-weight:600;"
+                        return "color:#b8860b;"
+
+                    st.markdown("#### 🧾 Détail IA par symbole")
+                    styled = df_enriched.style.applymap(
+                        _heat_color, subset=["tendance_annuelle_%", "score"]
+                    )
+                    st.dataframe(styled, use_container_width=True)
+
+                    # -------- Radar Plot pour un symbole --------
+                    if not df_enriched.empty:
+                        st.markdown("#### 📡 Profil technique (radar)")
+                        selected = st.selectbox(
+                            "Choisir un symbole pour la vue radar",
+                            df_enriched["symbol"].tolist(),
+                            key="radar_symbol",
+                        )
+                        row = df_enriched[df_enriched["symbol"] == selected].iloc[0]
+
+                        r = [
+                            float(row["score"]),
+                            float(row["tendance_annuelle_%"]),
+                            float(row["vol20_annuelle_%"] or 0.0),
+                            float(row["RSI14"] or 50.0),
+                        ]
+                        theta = ["Score", "Tendance%", "Volatilité%", "RSI14"]
+
+                        fig_radar = go.Figure()
+                        fig_radar.add_trace(
+                            go.Scatterpolar(
+                                r=r,
+                                theta=theta,
+                                fill="toself",
+                                name=selected,
+                            )
+                        )
+                        fig_radar.update_layout(
+                            showlegend=False,
+                            margin=dict(l=20, r=20, t=40, b=20),
+                            polar=dict(
+                                radialaxis=dict(
+                                    visible=True,
+                                )
+                            ),
+                        )
+                        st.plotly_chart(fig_radar, use_container_width=True)
+
+                    st.caption(
+                        "Ces signaux sont calculés localement par StormCopilot à partir des chandeliers renvoyés "
+                        "par ton API (indépendamment de n8n) : ils donnent une lecture synthétique du biais, de la "
+                        "tendance, de la volatilité et du RSI."
+                    )
+                else:
+                    st.info(
+                        "Aucune donnée exploitable pour enrichir les signaux (pas de chandeliers ou indicateurs manquants)."
+                    )
+
