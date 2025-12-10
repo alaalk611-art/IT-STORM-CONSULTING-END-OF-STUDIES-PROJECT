@@ -1077,6 +1077,8 @@ def summarize_text_keypoints(
         "flags": flags,
     }
 
+#####===========================================================
+# Résumé de fichiers uploadés (.txt / .pdf)
 
 def summarize_file(file_bytes: bytes, filename: str, models: List[str], timeout: float = 90.0) -> Dict[str, Any]:
     """

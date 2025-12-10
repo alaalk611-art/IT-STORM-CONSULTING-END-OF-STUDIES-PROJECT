@@ -154,11 +154,18 @@ def _legend_metrics() -> None:
 # ============================================================
 # Slider Top-K dans la sidebar (avec helper “?”)
 # ============================================================
+import io
+import os
+
+logo_path = r"C:\Users\ALA BEN LAKHAL\Desktop\intelligent_copilot IT-STORM\src\ui\assets\itstorm_logo.png"
+logo_exists = os.path.exists(logo_path)
+
+
 def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     """
-    Crée un fichier DOCX IT-STORM avec :
-      - Page de garde (cover page) : logo + titre + sous-titre
-      - Deuxième page : résumé détaillé avec header/footer corporate
+    Crée un DOCX "consulting" IT-STORM avec :
+      - Page de garde : logo + titre dynamique + intro + coordonnées IT-STORM
+      - Deuxième page : "Résumé détaillé" avec header/footer corporate
     """
     from docx import Document
     from docx.shared import Pt, Inches, RGBColor
@@ -194,23 +201,25 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     p_logo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     run_logo = p_logo.add_run()
     try:
-        # Adapte ce chemin à ton projet
-        run_logo.add_picture("assets/itstorm_logo.png", width=Inches(1.5))
+        if logo_exists:
+            run_logo.add_picture(logo_path, width=Inches(1.6))
     except Exception:
+        # en cas de problème de chemin, on continue sans logo
         pass
 
     # Espace après logo
     doc.add_paragraph("")
 
-    # Titre principal
+    # Titre principal (dynamique, avec fallback propre)
+    main_title = title.strip() if title and title.strip() else "Résumé - Best Version"
     p_title = doc.add_paragraph()
     p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r_title = p_title.add_run(title or "Résumé de document")
+    r_title = p_title.add_run(main_title)
     r_title.bold = True
     r_title.font.size = Pt(28)
     r_title.font.color.rgb = BLUE
 
-    # Sous-titre (intro)
+    # Sous-titre (intro : document / modèle, etc.)
     if intro:
         p_intro = doc.add_paragraph()
         p_intro.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -226,27 +235,46 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     r_line = p_line.add_run("────────────────────────────────────────────")
     r_line.font.color.rgb = BLUE
 
-    # Baseline IT-STORM en bas de la cover
+    # Coordonnées IT-STORM (bloc contact)
     doc.add_paragraph("")
-    p_sub = doc.add_paragraph()
-    p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    r_sub = p_sub.add_run("IT-STORM · Intelligent Consulting Copilot")
-    r_sub.font.size = Pt(11)
-    r_sub.font.color.rgb = LIGHT
+    p_contact = doc.add_paragraph()
+    p_contact.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_c1 = p_contact.add_run("IT-STORM · Innovation & Consulting\n")
+    r_c1.font.size = Pt(11)
+    r_c1.font.color.rgb = DARK
+    r_c1.bold = True
+
+    r_c2 = p_contact.add_run("www.it-storm.fr  ·  contact@it-storm.fr")
+    r_c2.font.size = Pt(10)
+    r_c2.font.color.rgb = LIGHT
 
     # Petite marge verticale
     doc.add_paragraph("")
 
-    # Page suivante (section 2)
-    main_section = doc.add_section(WD_SECTION_START.NEW_PAGE)
-    main_section.top_margin = Inches(0.8)
-    main_section.bottom_margin = Inches(0.8)
-    main_section.left_margin = Inches(0.9)
-    main_section.right_margin = Inches(0.9)
+    # Pied de page de la cover (optionnel, discret)
+    cover_footer = cover_section.footer
+    if cover_footer.paragraphs:
+        cf = cover_footer.paragraphs[0]
+        for run in cf.runs:
+            run.text = ""
+    else:
+        cf = cover_footer.add_paragraph()
+    cf.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    cf_run = cf.add_run("Document de synthèse généré automatiquement par StormCopilot – IT-STORM.")
+    cf_run.font.size = Pt(8)
+    cf_run.font.color.rgb = LIGHT
+    cf_run.italic = True
 
     # ==============================
-    # SECTION 2 : HEADER & FOOTER
+    # SECTION 2 : MAIN (Résumé détaillé)
     # ==============================
+    main_section = doc.add_section(WD_SECTION_START.NEW_PAGE)
+    main_section.top_margin = Inches(0.9)
+    main_section.bottom_margin = Inches(0.9)
+    main_section.left_margin = Inches(1.0)
+    main_section.right_margin = Inches(1.0)
+
+    # HEADER
     header = main_section.header
     if header.paragraphs:
         h = header.paragraphs[0]
@@ -258,7 +286,8 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     h.alignment = WD_ALIGN_PARAGRAPH.LEFT
     h_run_logo = h.add_run()
     try:
-        h_run_logo.add_picture("assets/itstorm_logo.png", width=Inches(0.9))
+        if logo_exists:
+            h_run_logo.add_picture(logo_path, width=Inches(0.8))
     except Exception:
         pass
 
@@ -272,7 +301,7 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     h_sub.font.size = Pt(9)
     h_sub.font.color.rgb = DARK
 
-    # Footer
+    # FOOTER
     footer = main_section.footer
     if footer.paragraphs:
         f = footer.paragraphs[0]
@@ -282,17 +311,16 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
         f = footer.add_paragraph()
 
     f.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    rf = f.add_run("IT-STORM · Intelligent Consulting Copilot · Document de résumé généré automatiquement.")
+    rf = f.add_run("IT-STORM · Innovation & Consulting · www.it-storm.fr · contact@it-storm.fr")
     rf.italic = True
     rf.font.size = Pt(8)
     rf.font.color.rgb = LIGHT
 
     # ==============================
-    # SECTION 2 : CONTENU "RÉSUMÉ DÉTAILLÉ"
-    # (tout ce qui suit est automatiquement dans la nouvelle section)
+    # CONTENU "RÉSUMÉ DÉTAILLÉ"
     # ==============================
 
-    # Petite ligne bleu clair en haut de la page 2
+    # Petite ligne grise en haut
     p_top_line = doc.add_paragraph()
     r_top = p_top_line.add_run("────────────────────────────────────────────")
     r_top.font.color.rgb = BORDER
@@ -314,7 +342,7 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
 
     doc.add_paragraph("")
 
-    # Corps du résumé : un paragraphe par bloc
+    # Corps du résumé (par blocs séparés par double saut de ligne)
     for block in (body or "").split("\n\n"):
         block = block.strip()
         if not block:
@@ -323,7 +351,8 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
         p.style = doc.styles["Normal"]
         p_format = p.paragraph_format
         p_format.space_after = Pt(8)
-        p_format.line_spacing = 1.35
+        p_format.line_spacing = 1.3
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
     # ==============================
     # EXPORT
@@ -1123,7 +1152,7 @@ def _render_summary_quality(report: Dict[str, Any]):
 def render():
     st.header("🧠 Generate Docs (RAG zéro-hallucination)")
 
-    # Récupérer l'état du dernier résumé (si déjà généré)
+    # État résumé conservé entre les runs
     sum_state = st.session_state.get("sum_state")
 
     mode = st.radio(
@@ -1132,18 +1161,14 @@ def render():
         horizontal=True,
     )
 
-    # Ces variables doivent exister en dehors du form pour le bloc résumé
-    up = None
-    pasted_text = ""
+    # =====================================================
+    # MODE 1 : QUESTION / RAG
+    # =====================================================
+    if mode == "Répondre à une question":
+        with st.form("qa_form"):
+            models = _pick_models()
+            topk_context = _sidebar_topk_slider(default=6)
 
-    with st.form("gen_form"):
-        models = _pick_models()
-        topk_context = _sidebar_topk_slider(default=6)
-
-        # =====================================================
-        # MODE 1 : QUESTION / RAG
-        # =====================================================
-        if mode == "Répondre à une question":
             q = st.text_area(
                 "Question",
                 placeholder="Ex: C'est quoi IT-STORM ?",
@@ -1154,53 +1179,8 @@ def render():
                 do_gen = st.form_submit_button("Générer (séquentiel)")
             with c2:
                 do_cmp = st.form_submit_button("Comparer (jury)")
-            do_sum = False
-            up = None
-            pasted_text = ""
-            st.session_state.setdefault("sum_use_template", True)
-            st.session_state.setdefault("sum_source_kind", "Choisir…")
+            do_sum = False  # pour ne pas confondre avec le mode résumé
 
-        # =====================================================
-        # MODE 2 : RÉSUMÉ (DOC OU TEXTE COLLÉ)
-        # =====================================================
-        else:
-            st.session_state.setdefault("sum_use_template", True)
-            st.toggle(
-                "🧩 Reformuler avec gabarit analytique (global)",
-                value=st.session_state["sum_use_template"],
-                key="sum_use_template",
-                help="Transforme le résumé en un paragraphe fluide (sans inventer), dans un style plus lisible.",
-            )
-
-            # 🔥 Rien n’apparaît tant qu’on n’a pas choisi la source
-            source_kind = st.radio(
-                "Source du contenu à résumer",
-                ["Choisir…", "Fichier PDF/TXT", "Texte collé"],
-                index=0,
-                horizontal=True,
-            )
-            st.session_state["sum_source_kind"] = source_kind
-
-            if source_kind == "Fichier PDF/TXT":
-                up = st.file_uploader(
-                    "Importer un document (.pdf ou .txt)",
-                    type=["pdf", "txt"],
-                )
-            elif source_kind == "Texte collé":
-                pasted_text = st.text_area(
-                    "Texte à résumer",
-                    placeholder="Colle ici un ou plusieurs paragraphes (mail, article, texte brut…)",
-                    height=220,
-                )
-
-            do_sum = st.form_submit_button("Résumer")
-            do_gen = do_cmp = False
-            q = ""
-
-    # =========================================================
-    # TRAITEMENT MODE 1 : QUESTION / RAG
-    # =========================================================
-    if mode == "Répondre à une question":
         if not (do_gen or do_cmp):
             return
 
@@ -1249,9 +1229,54 @@ def render():
 
         return  # fin du mode question
 
-    # =========================================================
-    # TRAITEMENT MODE 2 : RÉSUMÉ (DOC / TEXTE COLLÉ)
-    # =========================================================
+    # =====================================================
+    # MODE 2 : RÉSUMÉ (DOC / TEXTE COLLÉ)
+    # =====================================================
+
+    # 1) BLOC MODÈLES EN PREMIER
+    models = _pick_models()
+    _sidebar_topk_slider(default=6)  # juste pour cohérence UI, non utilisé dans le résumé
+
+    # 2) TOGGLE REFORMULATION
+    st.session_state.setdefault("sum_use_template", True)
+
+    st.toggle(
+        "🧩 Reformuler avec gabarit analytique (global)",
+        key="sum_use_template",
+    )
+
+
+    # 3) CHOIX DE LA SOURCE + CHAMP ASSOCIÉ
+    st.session_state.setdefault("sum_source_kind", "Choisir…")
+    source_kind = st.radio(
+        "Source du contenu à résumer",
+        ["Choisir…", "Fichier PDF/TXT", "Texte collé"],
+        index=["Choisir…", "Fichier PDF/TXT", "Texte collé"].index(
+            st.session_state.get("sum_source_kind", "Choisir…")
+        ),
+        horizontal=True,
+    )
+    st.session_state["sum_source_kind"] = source_kind
+
+    up = None
+    pasted_text = ""
+
+    if source_kind == "Fichier PDF/TXT":
+        up = st.file_uploader(
+            "Importer un document (.pdf ou .txt)",
+            type=["pdf", "txt"],
+        )
+    elif source_kind == "Texte collé":
+        pasted_text = st.text_area(
+            "Texte à résumer",
+            placeholder="Colle ici un ou plusieurs paragraphes (mail, article, texte brut…)",
+            height=220,
+        )
+
+    # 4) BOUTON "RÉSUMER" TOUT EN BAS
+    do_sum = st.button("Résumer")
+
+    # 5) MOTEUR DE RÉSUMÉ (rag_sum)
     if _summarize_text_three_cli is None or read_any_text is None:
         st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
         return
@@ -1261,7 +1286,6 @@ def render():
 
     if do_sum:
         # ----- Nouveau calcul de résumé -----
-        # 1) Récupération du texte selon la source choisie
         if source_kind == "Fichier PDF/TXT":
             if up is None:
                 st.error("Importe un fichier .pdf ou .txt à résumer.")
@@ -1321,7 +1345,7 @@ def render():
             )
             ultimate_text = best_export_text
 
-        # Stockage en session
+        # Stockage
         st.session_state["sum_state"] = {
             "filename": filename,
             "ext": ext,
@@ -1337,12 +1361,11 @@ def render():
         sum_state = st.session_state["sum_state"]
 
     else:
-        # Aucun nouveau "Résumer" cliqué : on réutilise ce qui est déjà en mémoire
         if not sum_state:
             st.info("Choisis la source (fichier ou texte collé), puis clique sur « Résumer » pour générer un résumé.")
             return
 
-    # ----- Affichage à partir de sum_state -----
+    # ----- Affichage depuis sum_state -----
     filename = sum_state.get("filename", "document")
     ext = sum_state.get("ext", "")
     text_len = sum_state.get("text_len")
@@ -1356,23 +1379,17 @@ def render():
     if text_len:
         st.info(f"Longueur texte : {text_len} caractères")
 
-    # ----- Résumé principal -----
     st.subheader("📝 Résumé — meilleure proposition")
     st.markdown(f"**Source :** {filename} ({ext}) · **Modèle sélectionné :** {best_model_name}")
     st.write(best_export_text)
 
-    # ----- Qualité du résumé -----
     if best_report:
         _render_summary_quality(best_report)
 
-    # ----- Ultimate Version -----
     if ultimate_text and ultimate_text != best_export_text:
         st.subheader("✨ Version fusionnée (Ultimate)")
         st.write(ultimate_text)
 
-    # =====================================================
-    # Export DOCX : Best Version & Ultimate Version
-    # =====================================================
     col_best, col_ultimate = st.columns(2)
     with col_best:
         if best_export_text:
@@ -1405,7 +1422,6 @@ def render():
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
 
-    # ----- Tous les résumés par modèle -----
     if summaries:
         st.subheader("📑 Résumés par modèle")
         for i, r in enumerate(sorted(summaries, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
@@ -1422,6 +1438,6 @@ def render():
         st.rerun()
 
 
-# Compat app.py
 def render_generate_docs_tab():
     render()
+
