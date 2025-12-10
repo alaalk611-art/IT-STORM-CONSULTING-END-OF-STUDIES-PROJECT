@@ -1593,16 +1593,14 @@ render_brand_header(api_ok=None, llm_ok=True)
 # --------------------------------------------------------------------------------------
 # AUTH GATE GLOBAL — page de login avant l'accès aux onglets
 # --------------------------------------------------------------------------------------
-#st.markdown("## 🔐 Authentification StormCopilot")
 
-#auth_ok = auth.render_auth_gate()
-#if not auth_ok:
+
+auth_ok = auth.render_auth_gate()
+if not auth_ok:
     # Tant que l'utilisateur n'a pas passé les 3 vérifications,
     # on ne montre PAS les onglets.
-    #st.stop()
+    st.stop()
 
-# Petit message après succès (optionnel)
-#st.success("✅ Authentification réussie. Vous pouvez maintenant utiliser StormCopilot.")
 
 
 # =====================================================================

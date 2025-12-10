@@ -1017,6 +1017,67 @@ def summarize_text(text: str, models: List[str], timeout: float = 90.0) -> Dict[
 # Résumé (fichier uploadé)
 # =========================
 
+def summarize_text_keypoints(
+    text: str,
+    models: List[str],
+    timeout: float = 90.0,
+    max_points: int = 8,
+) -> Dict[str, Any]:
+    """
+    Variante de summarize_text(...) pensée pour des paragraphes collés.
+
+    - Utilise d'abord summarize_text(...) pour produire un résumé classique.
+    - Puis condense ce résumé en une liste de points clés (puces courtes).
+    - Retourne une structure compatible avec summarize_text (best/results/report/...).
+
+    Args:
+        text: texte source (brut, collé depuis une page web, un mail, etc.)
+        models: liste de modèles Ollama à utiliser.
+        timeout: timeout global (propage au moteur interne).
+        max_points: nombre maximal de puces à renvoyer.
+
+    Returns:
+        dict avec clés:
+          - best.answer : string contenant les puces "- …"
+          - results     : résultats bruts du jury interne
+          - report      : rapport qualité du meilleur résumé de base
+          - used        : "llm" / "rag" / "rule" + suffixe "+keypoints"
+          - flags       : liste de drapeaux ("post_keypoints", etc.)
+    """
+    # 1) On appelle la pipeline standard (jury / RAG / fallback règles)
+    base = summarize_text(text, models=models, timeout=timeout)
+
+    best = dict(base.get("best", {}) or {})
+    summary = (best.get("answer") or "").strip()
+
+    # 2) On essaie d'extraire des puces courtes à partir du résumé
+    bullets = _extract_short_bullets(summary, max_items=max_points)
+
+    # Si jamais le résumé est vide ou peu exploitable, on tente directement sur le texte source
+    if not bullets:
+        bullets = _extract_short_bullets(text, max_items=max_points)
+
+    # Si on n'a toujours rien, on garde le résumé brut
+    if bullets:
+        bullets_txt = "\n".join(f"- {b}" for b in bullets)
+    else:
+        bullets_txt = summary
+
+    best["answer"] = bullets_txt
+
+    # 3) On propage le reste des infos (report, results, etc.)
+    flags = list(dict.fromkeys((base.get("flags") or []) + ["post_keypoints"]))
+    used = (base.get("used") or "rule") + "+keypoints"
+
+    return {
+        "best": best,
+        "results": base.get("results") or [],
+        "report": base.get("report") or {},
+        "used": used,
+        "flags": flags,
+    }
+
+
 def summarize_file(file_bytes: bytes, filename: str, models: List[str], timeout: float = 90.0) -> Dict[str, Any]:
     """
     Lit le fichier (.txt/.pdf), applique automatiquement la meilleure stratégie :

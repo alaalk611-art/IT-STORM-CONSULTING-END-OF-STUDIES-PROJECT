@@ -1,0 +1,335 @@
+{
+  "name": "StormCopilot - Daily Tech & Market Radar",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "daily-full",
+        "responseMode": "lastNode",
+        "responseData": "allEntries",
+        "options": {}
+      },
+      "id": "bd7d2b8b-d03e-4129-a035-68de7477fcf8",
+      "name": "Webhook Daily Full",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "daily-full-itstorm-uuid"
+    },
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 3,
+              "minute": 1
+            }
+          ]
+        }
+      },
+      "id": "45b1d771-d691-44d2-a2b1-b84b220ccc0e",
+      "name": "Cron Daily Full",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        0,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const body = $json || {};\n\nreturn [\n  {\n    json: {\n      tech_limit: body.tech_limit ?? 36,\n\n      // Market\n      symbols: body.symbols ?? \"^FCHI,BNP.PA,AIR.PA,MC.PA,OR.PA,ORA.PA\",\n      interval: body.interval ?? \"1d\",\n      period: body.period ?? \"1y\",\n    },\n  },\n];\n"
+      },
+      "id": "fee4fd5a-76e8-4d49-855a-094045e6822c",
+      "name": "Prepare Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        272,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8001/tech/watch/latest",
+        "options": {
+          "timeout": 160000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "limit",
+              "value": "={{$json[\"tech_limit\"] || 36}}"
+            }
+          ]
+        }
+      },
+      "id": "f2bcc6e3-30c6-4999-98ce-362e10bada3d",
+      "name": "Fetch Tech Latest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        784,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "// Réponse brute de l'API backend /tech/watch/latest\nconst resp = $json || {};\n\nconst status = resp.status || \"unknown\";\nconst count = resp.count ?? 0;\nconst items = Array.isArray(resp.items) ? resp.items : [];\n\n// Comptage Hot / Trending / Fresh\nlet hot = 0;\nlet trending = 0;\nlet fresh = 0;\n\nfor (const it of items) {\n  const rl = String(it.rank_label || \"\");\n  if (rl.startsWith(\"🔥\")) hot++;\n  else if (rl.startsWith(\"⭐\")) trending++;\n  else fresh++;\n}\n\n// Métriques pour le radar\nconst sourcesTotal = count;\nconst sourcesOk = count;\nconst sourcesError = 0;\nconst nbOk = count;\nconst nbErr = 0;\nconst duration = resp.duration || null;\nconst truncated = false;\n\n// Niveau de qualité global\nlet quality = \"Inconnu\";\nif (status === \"ok\" && sourcesTotal > 0) {\n  quality = \"✅ Complet\";\n} else if (status === \"ok\" && sourcesTotal === 0) {\n  quality = \"⚠️ Vide\";\n} else if (status === \"error\") {\n  quality = \"❌ Échec\";\n}\n\n// Headline lisible\nlet headline = \"État de la veille inconnu.\";\nif (sourcesTotal > 0) {\n  headline = `Veille chargée : ${sourcesOk}/${sourcesTotal} sources actives.`;\n  if (hot > 0 || trending > 0) {\n    headline += ` ${hot} Hot · ${trending} Trending.`;\n  }\n}\n\n// ---- NOUVEAU : on construit une liste \"top_items\" compacte ----\n\n// On trie les items par score_24h (plus récent / plus chaud)\nconst sorted = [...items].sort((a, b) => {\n  const sA = a.score_24h ?? 0;\n  const sB = b.score_24h ?? 0;\n  return sB - sA;\n});\n\n// On garde seulement les 15 premières sources\nconst TOP_N = 15;\nconst topItems = sorted.slice(0, TOP_N).map(it => ({\n  block: it.block,\n  block_label: it.block_label,\n  source_name: it.source_name,\n  url: it.url,\n  lang: it.lang,\n  created_at: it.created_at,\n  rank_label: it.rank_label,\n  score_24h: it.score_24h,\n  freshness: it.freshness,\n  favicon_url: it.favicon_url,\n}));\n\nreturn [\n  {\n    json: {\n      type: \"tech_radar\",\n      status,\n      quality,\n      headline,\n      metrics: {\n        nb_ok: nbOk,\n        nb_err: nbErr,\n        sources_total: sourcesTotal,\n        sources_ok: sourcesOk,\n        sources_error: sourcesError,\n        duration_sec: duration,\n        truncated,\n        hot,\n        trending,\n        fresh,\n      },\n      fetched_at: new Date().toISOString(),\n\n      // 👇 au lieu de \"raw\" énorme, on expose seulement ce qui est utile\n      top_items: topItems,\n    },\n  },\n];\n"
+      },
+      "id": "02d3564c-cd4a-476a-ac10-ca096f8b1d87",
+      "name": "Build Tech Radar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const { symbols, interval, period } = $json;\n\nconst list = (symbols || \"\")\n  .split(\",\")\n  .map(s => s.trim())\n  .filter(s => s.length > 0);\n\nreturn list.map(sym => ({\n  json: {\n    symbol: sym,\n    interval: interval || \"1d\",\n    period: period || \"6mo\",\n  },\n}));\n"
+      },
+      "id": "6d1f4869-fe23-4050-a7de-2a94ea30aecb",
+      "name": "Split Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        528,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://host.docker.internal:8001/v1/ohlcv/' + $json[\"symbol\"] }}",
+        "options": {
+          "timeout": 120000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "interval",
+              "value": "={{$json[\"interval\"]}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json[\"period\"]}}"
+            }
+          ]
+        }
+      },
+      "id": "8e1fdc3b-b7a6-4e24-8733-9e3fda780e8e",
+      "name": "HTTP OHLCV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        784,
+        288
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "// On récupère tout ce qui arrive depuis HTTP OHLCV\nconst ohlcvItems = $input.all();\n\n// On transforme chaque item pour garder un objet propre par actif\nconst assets = ohlcvItems.map(i => {\n  const j = i.json || {};\n\n  const candles = j.candles || [];\n  const nbCandles = Array.isArray(candles) ? candles.length : 0;\n  const lastCandle = nbCandles > 0 ? candles[nbCandles - 1] : null;\n  const lastClose = lastCandle ? lastCandle.close : null;\n\n  return {\n    symbol: j.symbol,\n    interval: j.interval,\n    period: j.period,\n    source: j.source || \"yfinance\",\n    warning: j.warning || null,\n    nb_candles: nbCandles,\n    last_close: lastClose,\n  };\n});\n\n// On renvoie UN SEUL item, avec un champ json = { ... }\nreturn [\n  {\n    json: {\n      status: \"ok\",\n      nb_assets: assets.length,\n      assets,\n    },\n  },\n];\n"
+      },
+      "id": "541c288e-68fc-4a4d-92b3-fed105c9d04d",
+      "name": "Build Market Radar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const mergedItems = $input.all();\nconst merged = mergedItems.length > 0 ? mergedItems[0].json : null;\n\nlet tech = null;\nlet market = [];\n\nif (merged) {\n  tech = {\n    type: merged.type,\n    status: merged.status,\n    quality: merged.quality,\n    headline: merged.headline,\n    metrics: merged.metrics,\n    fetched_at: merged.fetched_at,\n    raw: merged.raw,\n  };\n\n  market = [\n    {\n      status: \"ok\",\n      nb_assets: merged.nb_assets || 0,\n      assets: merged.assets || [],\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      workflow: \"StormCopilot Daily Full\",\n      generated_at: new Date().toISOString(),\n      tech_radar: tech,\n      market_radar: market,\n    },\n  },\n];\n"
+      },
+      "id": "ef5e45c4-10da-4269-a021-801a61f4e83e",
+      "name": "Assemble Full Daily",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1552,
+        176
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8001/v1/ohlcv/{{$json[\"symbol\"]}}",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "f1c0c648-0aa7-42b0-b142-8d1f303eed9b",
+      "name": "Refresh Tech Watch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        544,
+        16
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1376,
+        176
+      ],
+      "id": "152f3d05-05de-4fcb-95c0-38bd17390d44",
+      "name": "Merge"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Daily Full": {
+      "main": [
+        [
+          {
+            "node": "Prepare Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cron Daily Full": {
+      "main": [
+        [
+          {
+            "node": "Prepare Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Params": {
+      "main": [
+        [
+          {
+            "node": "Split Symbols",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Refresh Tech Watch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tech Latest": {
+      "main": [
+        [
+          {
+            "node": "Build Tech Radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Symbols": {
+      "main": [
+        [
+          {
+            "node": "HTTP OHLCV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP OHLCV": {
+      "main": [
+        [
+          {
+            "node": "Build Market Radar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Market Radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Tech Radar": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Market Radar": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Refresh Tech Watch": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tech Latest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Assemble Full Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Tunis",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "7dfdfd1b-512e-4804-a35a-dfd67a863789",
+  "meta": {
+    "instanceId": "1fb275a1143c08295349f5dc2018e6128d43180d882d8eb9ae4c4469b812ea9e"
+  },
+  "id": "lF04h48MaII6E8c3",
+  "tags": []
+}

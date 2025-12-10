@@ -1073,6 +1073,49 @@ def _table_results(results: List[Dict[str, Any]], title: str = "📊 Comparatif 
     html2.append("</tbody></table></div>")
     st.markdown("".join(html2), unsafe_allow_html=True)
 
+def _render_summary_quality(report: Dict[str, Any]):
+    """
+    Affiche les métriques qualité d'un résumé produit par rag_sum.
+    'report' contient : tokens_source, tokens_summary, compression, cosine,
+                        rouge1_f1, rouge2_f1, keyword_overlap,
+                        unsupported, complete_ratio.
+    """
+
+    st.subheader("📊 Qualité du résumé")
+
+    tokens_source = report.get("tokens_source", 0)
+    tokens_summary = report.get("tokens_summary", 0)
+    compression = report.get("compression", 0.0)
+    cosine = report.get("cosine", 0.0)
+    rouge1 = report.get("rouge1_f1", 0.0)
+    rouge2 = report.get("rouge2_f1", 0.0)
+    kw = report.get("keyword_overlap", 0.0)
+    unsupported = report.get("unsupported", [])
+    complete_ratio = report.get("complete_ratio", 0.0)
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("📘 Tokens source", tokens_source)
+        st.metric("✂️ Compression", f"{compression:.2f}")
+        st.metric("🔎 Cosine", f"{cosine:.3f}")
+
+    with col2:
+        st.metric("🔤 ROUGE-1 (F1)", f"{rouge1:.3f}")
+        st.metric("🔡 ROUGE-2 (F1)", f"{rouge2:.3f}")
+        st.metric("🔑 Mots-clés (overlap)", f"{kw:.3f}")
+
+    with col3:
+        st.metric("✔️ Phrases complètes", f"{complete_ratio:.2f}")
+        st.metric("⚠️ Phrases non ancrées", len(unsupported))
+
+    if unsupported:
+        st.warning(
+            "Certaines phrases semblent non ancrées dans le texte source :\n\n"
+            + "\n".join(f"- {u}" for u in unsupported)
+        )
+
+
 # ============================================================
 # Render principal
 # ============================================================
@@ -1089,10 +1132,17 @@ def render():
         horizontal=True,
     )
 
+    # Ces variables doivent exister en dehors du form pour le bloc résumé
+    up = None
+    pasted_text = ""
+
     with st.form("gen_form"):
         models = _pick_models()
         topk_context = _sidebar_topk_slider(default=6)
 
+        # =====================================================
+        # MODE 1 : QUESTION / RAG
+        # =====================================================
         if mode == "Répondre à une question":
             q = st.text_area(
                 "Question",
@@ -1106,11 +1156,14 @@ def render():
                 do_cmp = st.form_submit_button("Comparer (jury)")
             do_sum = False
             up = None
-            # ce toggle ne concerne que la partie résumé
+            pasted_text = ""
             st.session_state.setdefault("sum_use_template", True)
+            st.session_state.setdefault("sum_source_kind", "Choisir…")
 
+        # =====================================================
+        # MODE 2 : RÉSUMÉ (DOC OU TEXTE COLLÉ)
+        # =====================================================
         else:
-            # Mode Résumé
             st.session_state.setdefault("sum_use_template", True)
             st.toggle(
                 "🧩 Reformuler avec gabarit analytique (global)",
@@ -1118,18 +1171,36 @@ def render():
                 key="sum_use_template",
                 help="Transforme le résumé en un paragraphe fluide (sans inventer), dans un style plus lisible.",
             )
-            up = st.file_uploader(
-                "Importer un document (.pdf ou .txt)", type=["pdf", "txt"]
+
+            # 🔥 Rien n’apparaît tant qu’on n’a pas choisi la source
+            source_kind = st.radio(
+                "Source du contenu à résumer",
+                ["Choisir…", "Fichier PDF/TXT", "Texte collé"],
+                index=0,
+                horizontal=True,
             )
+            st.session_state["sum_source_kind"] = source_kind
+
+            if source_kind == "Fichier PDF/TXT":
+                up = st.file_uploader(
+                    "Importer un document (.pdf ou .txt)",
+                    type=["pdf", "txt"],
+                )
+            elif source_kind == "Texte collé":
+                pasted_text = st.text_area(
+                    "Texte à résumer",
+                    placeholder="Colle ici un ou plusieurs paragraphes (mail, article, texte brut…)",
+                    height=220,
+                )
+
             do_sum = st.form_submit_button("Résumer")
             do_gen = do_cmp = False
             q = ""
 
-    # =======================
-    # Branche QUESTION / RAG
-    # =======================
+    # =========================================================
+    # TRAITEMENT MODE 1 : QUESTION / RAG
+    # =========================================================
     if mode == "Répondre à une question":
-        # Aucun bouton cliqué → on ne fait rien mais on laisse les autres tabs vivre
         if not (do_gen or do_cmp):
             return
 
@@ -1176,30 +1247,45 @@ def render():
             _render_race(final_list)
             _table_results(final_list, title="📊 Comparatif des réponses")
 
-        # On a fini la branche question → on sort proprement
-        return
+        return  # fin du mode question
 
-    # =======================
-    # Branche RÉSUMÉ (PDF/TXT)
-    # =======================
+    # =========================================================
+    # TRAITEMENT MODE 2 : RÉSUMÉ (DOC / TEXTE COLLÉ)
+    # =========================================================
     if _summarize_text_three_cli is None or read_any_text is None:
         st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
         return
 
     use_template = bool(st.session_state.get("sum_use_template", True))
+    source_kind = st.session_state.get("sum_source_kind", "Choisir…")
 
     if do_sum:
         # ----- Nouveau calcul de résumé -----
-        if up is None:
-            st.error("Importe un fichier .pdf ou .txt à résumer.")
-            return
+        # 1) Récupération du texte selon la source choisie
+        if source_kind == "Fichier PDF/TXT":
+            if up is None:
+                st.error("Importe un fichier .pdf ou .txt à résumer.")
+                return
 
-        file_bytes = up.read()
-        filename = up.name or "document"
-        text, ext = read_any_text(file_bytes, filename)
+            file_bytes = up.read()
+            filename = up.name or "document"
+            text, ext = read_any_text(file_bytes, filename)
 
-        if not text or not text.strip():
-            st.error(f"Impossible de lire le contenu de « {filename} ».")
+            if not text or not text.strip():
+                st.error(f"Impossible de lire le contenu de « {filename} ».")
+                return
+
+        elif source_kind == "Texte collé":
+            raw = (pasted_text or "").strip()
+            if not raw:
+                st.error("Merci de coller un texte à résumer.")
+                return
+            text = raw
+            ext = "(texte)"
+            filename = "Texte collé"
+
+        else:
+            st.error("Merci de choisir la source du contenu à résumer.")
             return
 
         text_len = len(text or "")
@@ -1235,7 +1321,7 @@ def render():
             )
             ultimate_text = best_export_text
 
-        # Stocker tout dans la session pour les reruns (download, etc.)
+        # Stockage en session
         st.session_state["sum_state"] = {
             "filename": filename,
             "ext": ext,
@@ -1246,16 +1332,17 @@ def render():
             "use_template": use_template,
             "summaries": summaries,
             "ultimate_text": ultimate_text,
+            "source_kind": source_kind,
         }
         sum_state = st.session_state["sum_state"]
 
     else:
         # Aucun nouveau "Résumer" cliqué : on réutilise ce qui est déjà en mémoire
         if not sum_state:
-            st.info("Importe un document puis clique sur « Résumer » pour générer un résumé.")
+            st.info("Choisis la source (fichier ou texte collé), puis clique sur « Résumer » pour générer un résumé.")
             return
 
-    # À partir d'ici, on travaille UNIQUEMENT avec sum_state (nouveau ou ancien)
+    # ----- Affichage à partir de sum_state -----
     filename = sum_state.get("filename", "document")
     ext = sum_state.get("ext", "")
     text_len = sum_state.get("text_len")
@@ -1269,53 +1356,19 @@ def render():
     if text_len:
         st.info(f"Longueur texte : {text_len} caractères")
 
-    # ----- Affichage Best Version -----
+    # ----- Résumé principal -----
     st.subheader("📝 Résumé — meilleure proposition")
-    st.caption(f"Mode utilisé : **three-direct** · Source : {filename} ({ext})")
-    st.markdown(_decorate_model_label(best_model_name, rank=1), unsafe_allow_html=True)
+    st.markdown(f"**Source :** {filename} ({ext}) · **Modèle sélectionné :** {best_model_name}")
     st.write(best_export_text)
 
-    # ----- Métriques de qualité -----
-    rep = best_report
-    if rep:
-        c1, c2, c3, c4 = st.columns(4)
-        with c1:
-            st.metric("Compression", f"{rep.get('compression', 0.0) * 100:.0f}%")
-        with c2:
-            st.metric("Similarité (cosine)", f"{rep.get('cosine', 0.0):.2f}")
-        with c3:
-            st.metric("ROUGE-1 F1", f"{rep.get('rouge1_f1', 0.0):.2f}")
-        with c4:
-            st.metric("Mots-clés couverts", f"{rep.get('keyword_overlap', 0.0) * 100:.0f}%")
+    # ----- Qualité du résumé -----
+    if best_report:
+        _render_summary_quality(best_report)
 
-        with st.expander("🔎 Détails & vérifications"):
-            st.write(f"- ROUGE-2 F1 : **{rep.get('rouge2_f1', 0.0):.2f}**")
-            st.write(f"- Phrases complètes : **{rep.get('complete_ratio', 0.0) * 100:.0f}%**")
-            if rep.get("unsupported"):
-                st.warning("⚠️ Phrases possiblement non ancrées :")
-                for s_ in rep["unsupported"]:
-                    st.write(f"- {s_}")
-            else:
-                st.success("Aucune phrase douteuse détectée par l’heuristique.")
-
-    # Podium + course + tableau comparatif
-    if summaries:
-        _render_podium(summaries)
-        _render_race(summaries)
-        _table_results(summaries, title="📊 Comparatif des modèles (three-direct)")
-
-    # 🔀 Comparaison visuelle Best vs Ultimate
-    st.subheader("🔀 Comparaison Best vs Ultimate")
-    col_bv, col_uv = st.columns(2)
-    with col_bv:
-        st.markdown("**Best Version (meilleur modèle)**")
-        st.write(best_export_text)
-    with col_uv:
-        if ultimate_text:
-            st.markdown("**Ultimate Version (fusion multi-modèles)**")
-            st.write(ultimate_text)
-        else:
-            st.info("Ultimate Version non disponible, utilisation de la meilleure version uniquement.")
+    # ----- Ultimate Version -----
+    if ultimate_text and ultimate_text != best_export_text:
+        st.subheader("✨ Version fusionnée (Ultimate)")
+        st.write(ultimate_text)
 
     # =====================================================
     # Export DOCX : Best Version & Ultimate Version
@@ -1352,7 +1405,7 @@ def render():
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             )
 
-    # Tous les résumés par modèle
+    # ----- Tous les résumés par modèle -----
     if summaries:
         st.subheader("📑 Résumés par modèle")
         for i, r in enumerate(sorted(summaries, key=lambda x: x.get("score", 0.0), reverse=True), start=1):
@@ -1368,7 +1421,7 @@ def render():
         st.session_state["sum_state"] = None
         st.rerun()
 
+
 # Compat app.py
 def render_generate_docs_tab():
     render()
-####

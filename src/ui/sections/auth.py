@@ -12,6 +12,7 @@
 #   - "captcha_text": chaîne de lettres
 #   - "email_otp": code email
 #   - "email_otp_expires_at": timestamp
+#   - "auth_just_logged_in": bool (bannière succès temporaire)
 # ============================================================
 
 from __future__ import annotations
@@ -45,6 +46,11 @@ except Exception:
     ImageDraw = None  # type: ignore
     ImageFont = None  # type: ignore
 
+
+from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
+
+
 # =========================
 # I18N local (FR / EN)
 # =========================
@@ -59,7 +65,6 @@ _LANG_AUTH = {
         "auth_submit_totp": "Confirm Google Authenticator code",
         "auth_submit_code": "Confirm email code",
         "auth_resend_code": "Resend code",
-        "auth_success": "Authentication successful. You now have access to the features.",
         "auth_error_login": "Invalid username or password.",
         "auth_error_code": "Invalid verification code.",
         "auth_error_code_expired": "The verification code has expired. Please request a new one.",
@@ -90,7 +95,6 @@ _LANG_AUTH = {
         "auth_submit_totp": "Valider le code Google Authenticator",
         "auth_submit_code": "Valider le code email",
         "auth_resend_code": "Renvoyer un code",
-        "auth_success": "Authentification réussie. Vous avez maintenant accès aux fonctionnalités.",
         "auth_error_login": "Identifiant ou mot de passe incorrect.",
         "auth_error_code": "Code de vérification invalide.",
         "auth_error_code_expired": "Le code de vérification a expiré. Merci d'en demander un nouveau.",
@@ -114,6 +118,7 @@ _LANG_AUTH = {
     },
 }
 
+
 def _t_auth(key: str) -> str:
     """Mini i18n locale: se base sur st.session_state['lang'] si présent."""
     lang = st.session_state.get("lang", "fr")
@@ -128,6 +133,7 @@ def init_auth_state() -> None:
     """Initialise les clés d'authentification dans la session."""
     st.session_state.setdefault("is_authenticated", False)
     st.session_state.setdefault("auth_step", 1)
+    st.session_state.setdefault("auth_just_logged_in", False)
 
 
 def _check_login_credentials(username: str, password: str) -> bool:
@@ -213,6 +219,7 @@ def _generate_captcha_image(text: str) -> bytes | None:
     buf.seek(0)
     return buf.getvalue()
 
+
 def _check_captcha(user_input: str) -> bool:
     """Vérifie que la réponse utilisateur correspond au texte du captcha."""
     text = st.session_state.get("captcha_text")
@@ -268,16 +275,14 @@ def _render_totp_qr_forced() -> None:
         qr_img.save(buf, format="PNG")
         buf.seek(0)
         img_bytes = buf.getvalue()
-        # Centrage du QR code
         col_left, col_center, col_right = st.columns([1, 2, 1])
         with col_center:
+            st.markdown("<div class='qr-box'>", unsafe_allow_html=True)
             st.image(img_bytes, caption=f"{issuer} · {account}", width=250)
+            st.markdown("</div>", unsafe_allow_html=True)
     except Exception as e:
         st.warning(f"{_t_auth('auth_qr_error_generic')} {e}")
 
-# Ancien affichage du secret → supprimé
-# st.markdown(_t_auth("auth_totp_uri"))
-# st.code(secret, language="text")
 
 def _check_totp_code(otp: str) -> bool:
     """Vérifie le code TOTP (Google Authenticator)."""
@@ -288,7 +293,6 @@ def _check_totp_code(otp: str) -> bool:
         return False
     try:
         totp = pyotp.TOTP(secret)  # type: ignore
-        # fenêtre de tolérance d'un pas (30s)
         return bool(totp.verify(otp.strip(), valid_window=1))
     except Exception:
         return False
@@ -305,7 +309,7 @@ def _generate_email_code(length: int = 6) -> str:
 
 def _send_email_code(code: str) -> bool:
     """
-    Envoie le code par email en utilisant les variables d'environnement :
+    Envoie le code par email avec un template HTML + logo IT STORM.
 
       SC_EMAIL_SMTP_HOST
       SC_EMAIL_SMTP_PORT
@@ -325,21 +329,91 @@ def _send_email_code(code: str) -> bool:
     if not smtp_host or not smtp_user or not smtp_pwd or not mail_to:
         return False
 
-    subject = os.getenv("SC_EMAIL_SUBJECT", "Votre code de vérification")
+    subject = os.getenv("SC_EMAIL_SUBJECT", "Code de vérification StormCopilot")
 
-    body = (
-        f"Bonjour,\n\n"
+    # ---------- corps texte (fallback) ----------
+    text_body = (
+        "Bonjour,\n\n"
         f"Voici votre code de connexion à StormCopilot : {code}\n\n"
-        f"Ce code est valable 5 minutes.\n\n"
-        f"Cordialement,\n"
-        f"L'assistant StormCopilot"
+        "Ce code est valable 5 minutes.\n\n"
+        "Cordialement,\n"
+        "L'assistant StormCopilot"
     )
 
-    msg = MIMEText(body, _charset="utf-8")
+    # ---------- chemin du logo ----------
+    # Tu peux garder ton chemin absolu si tu préfères, mais voici une version relative :
+    base_dir = os.path.dirname(__file__)
+    logo_path = r"C:\Users\ALA BEN LAKHAL\Desktop\intelligent_copilot IT-STORM\src\ui\assets\itstorm_logo.png"
+    logo_exists = os.path.exists(logo_path)
+
+
+    # ---------- corps HTML ----------
+    html_body = f"""
+    <html>
+      <body style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background-color:#f4f5f7; padding:24px;">
+        <div style="max-width:520px;margin:0 auto;background-color:#ffffff;border-radius:12px;padding:24px 28px;box-shadow:0 8px 24px rgba(15,23,42,0.12);">
+          
+          <div style="text-align:center;margin-bottom:18px;">
+            {"<img src='cid:itstorm_logo' alt='IT-STORM' style='height:52px;margin-bottom:10px;border-radius:12px;' />" if logo_exists else ""}
+            <div style="font-size:22px;font-weight:700;color:#111827;margin-bottom:4px;">
+              StormCopilot · Code de vérification
+            </div>
+            <div style="font-size:13px;color:#6b7280;">
+              Vérification de votre identité pour l’accès sécurisé à StormCopilot.
+            </div>
+          </div>
+
+          <div style="margin:20px 0;padding:18px;border-radius:10px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);color:#ffffff;text-align:center;">
+            <div style="font-size:13px;opacity:0.9;margin-bottom:6px;">Votre code de connexion</div>
+            <div style="font-size:26px;font-weight:700;letter-spacing:0.28em;">
+              {code}
+            </div>
+          </div>
+
+          <p style="font-size:13px;color:#374151;line-height:1.5;margin:0 0 10px 0;">
+            Ce code est valable <strong>5 minutes</strong>. Pour votre sécurité, ne le partagez avec personne.
+          </p>
+          <p style="font-size:13px;color:#6b7280;line-height:1.5;margin:0 0 18px 0;">
+            Si vous n’êtes pas à l’origine de cette demande, vous pouvez ignorer cet email.
+          </p>
+
+          <hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0;" />
+
+          <p style="font-size:11px;color:#9ca3af;line-height:1.5;margin:0;text-align:center;">
+            StormCopilot · IT-STORM Consulting<br/>
+            Email généré automatiquement, merci de ne pas répondre.
+          </p>
+        </div>
+      </body>
+    </html>
+    """
+
+    # ---------- Construction du message multipart ----------
+    msg = MIMEMultipart("related")
     msg["Subject"] = subject
     msg["From"] = mail_from
     msg["To"] = mail_to
 
+    alt = MIMEMultipart("alternative")
+    msg.attach(alt)
+
+    # Partie texte (fallback) + HTML
+    alt.attach(MIMEText(text_body, "plain", _charset="utf-8"))
+    alt.attach(MIMEText(html_body, "html", _charset="utf-8"))
+
+    # ---------- Logo inline ----------
+    if logo_exists:
+        try:
+            with open(logo_path, "rb") as f:
+                img = MIMEImage(f.read())
+            img.add_header("Content-ID", "<itstorm_logo>")
+            img.add_header("Content-Disposition", "inline", filename="itstorm_logo.png")
+            msg.attach(img)
+        except Exception as e:
+            # On ne bloque pas l'envoi si le logo plante
+            st.warning(f"Impossible de joindre le logo IT-STORM: {e}")
+
+    # ---------- Envoi SMTP ----------
     try:
         with smtplib.SMTP(smtp_host, smtp_port) as server:
             server.starttls()
@@ -350,7 +424,6 @@ def _send_email_code(code: str) -> bool:
         st.error(f"Email error: {e}")
         return False
 
-
 def _start_email_otp_flow() -> None:
     """Génère un code email, l'envoie et passe à l'étape 3."""
     code = _generate_email_code()
@@ -360,8 +433,6 @@ def _start_email_otp_flow() -> None:
     ok = _send_email_code(code)
     if not ok:
         st.error(_t_auth("auth_email_error_send"))
-    else:
-        st.info(_t_auth("auth_email_sent"))
 
     st.session_state["auth_step"] = 3
 
@@ -390,6 +461,134 @@ def _check_email_code(user_input: str) -> str:
 
 
 # =========================
+# CSS / UI Helpers
+# =========================
+
+def _inject_auth_css() -> None:
+    """
+    Injection CSS :
+      - Style carte moderne
+      - Animation de transition entre étapes (slide + zoom)
+    """
+    if st.session_state.get("_auth_css_injected"):
+        return
+
+    st.markdown(
+        """
+        <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        @keyframes authCardStep {
+            from {
+                opacity: 0;
+                transform: translateY(28px) scale(0.93);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0px) scale(1.0);
+            }
+        }
+
+        .auth-card {
+            background: #ffffff;
+            padding: 35px 40px;
+            border-radius: 18px;
+            box-shadow: 0px 12px 28px rgba(15, 23, 42, 0.18);
+            width: 420px;
+            margin-left: auto;
+            margin-right: auto;
+            margin-top: 10px;
+            margin-bottom: 20px;
+            animation: authCardStep 0.4s cubic-bezier(0.22, 0.61, 0.36, 1);
+        }
+
+        .auth-title {
+            font-size: 26px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 6px;
+        }
+
+        .auth-subtitle {
+            font-size: 13px;
+            text-align: center;
+            color: #6b7280;
+            margin-bottom: 14px;
+        }
+
+        .auth-step {
+            text-align: center;
+            color: #6c757d;
+            margin-bottom: 22px;
+            font-size: 14px;
+        }
+
+        input[type="text"], input[type="password"] {
+            border-radius: 10px !important;
+            padding: 11px 12px !important;
+            border: 1px solid #D0D7E2 !important;
+            font-size: 15px !important;
+        }
+
+        input[type="text"]:focus, input[type="password"]:focus {
+            border-color: #2563eb !important;
+            box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.15) !important;
+        }
+
+        .stButton > button {
+            width: 100%;
+            border-radius: 12px;
+            padding: 11px 0;
+            background: linear-gradient(90deg, #2563eb, #3b82f6);
+            color: white;
+            font-size: 15px;
+            border: none;
+            font-weight: 600;
+            transition: 0.18s ease;
+        }
+
+        .stButton > button:hover {
+            background: linear-gradient(90deg, #1d4ed8, #2563eb);
+            transform: translateY(-1px);
+            box-shadow: 0 8px 16px rgba(37, 99, 235, 0.25);
+        }
+
+        .stButton > button:active {
+            transform: translateY(0px) scale(0.99);
+            box-shadow: none;
+        }
+
+        .resend-btn button {
+            background: #f1f5f9 !important;
+            color: #475569 !important;
+            border-radius: 10px !important;
+            border: 1px solid #e2e8f0 !important;
+            font-size: 13px !important;
+        }
+
+        .resend-btn button:hover {
+            background: #e2e8f0 !important;
+        }
+
+        .captcha-box, .qr-box {
+            background: #f8fafc;
+            padding: 16px;
+            border-radius: 14px;
+            text-align: center;
+            border: 1px solid #e2e8f0;
+            margin-top: 8px;
+            margin-bottom: 12px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.session_state["_auth_css_injected"] = True
+
+
+# =========================
 # UI Sidebar & Gate
 # =========================
 
@@ -406,6 +605,7 @@ def render_auth_sidebar() -> None:
         if st.sidebar.button(_t_auth("auth_logout"), key="btn_logout"):
             st.session_state["is_authenticated"] = False
             st.session_state["auth_step"] = 1
+            st.session_state["auth_just_logged_in"] = False
             st.session_state.pop("email_otp", None)
             st.session_state.pop("email_otp_expires_at", None)
             st.session_state.pop("captcha_text", None)
@@ -428,92 +628,118 @@ def render_auth_gate() -> bool:
     if st.session_state.get("is_authenticated"):
         return True
 
-    st.markdown(f"#### 🔐 {_t_auth('auth_title')}")
-
+    _inject_auth_css()
     step = st.session_state.get("auth_step", 1)
 
-    # =========================
-    # Étape 1 : login / mot de passe + captcha image
-    # =========================
+    # Étape 1 : login + captcha
     if step == 1:
-        st.markdown(f"**{_t_auth('auth_step1_title')}**")
+        st.markdown(
+            """
+            <div class="auth-card">
+              <div class="auth-title">🔐 Accès StormCopilot</div>
+              <div class="auth-subtitle">Connexion sécurisée avec authentification multi-facteurs</div>
+              <div class="auth-step">Étape 1 sur 3 — Connexion + captcha</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-        # Génère / charge captcha
         _ensure_captcha()
         captcha_text = st.session_state.get("captcha_text", "ERROR")
         img_bytes = _generate_captcha_image(captcha_text)
 
-        # ============================
-        #  FORMULAIRE LOGIN + CAPTCHA
-        # ============================
+        submitted = False
+        user = ""
+        pwd = ""
+        captcha_input = ""
+
         with st.form("login_form_step1"):
-            # Username / Password
-            user = st.text_input(_t_auth("auth_user"), key="auth_user")
-            pwd = st.text_input(_t_auth("auth_password"), type="password", key="auth_pwd")
+            user = st.text_input(_t_auth("auth_user"))
+            pwd = st.text_input(_t_auth("auth_password"), type="password")
 
-            # Image captcha JUSTE AVANT le champ input
             if img_bytes is not None:
-                st.image(img_bytes, caption="CAPTCHA", width=260)
+                st.markdown("<div class='captcha-box'>", unsafe_allow_html=True)
+                st.image(img_bytes, caption="Vérification anti-robot", width=260)
+                st.markdown("</div>", unsafe_allow_html=True)
 
-            # Champ texte du captcha
             captcha_label = _t_auth("auth_captcha_label")
-            captcha_input = st.text_input(captcha_label, key="auth_captcha")
+            captcha_input = st.text_input(captcha_label)
 
             submitted = st.form_submit_button(_t_auth("auth_submit_login"))
 
-        # ====================================
-        #  VALIDATION DU CAPTCHA + CREDENTIALS
-        # ====================================
         if submitted:
-            # Vérifier captcha en premier
-            if not _check_captcha(captcha_input):
-                st.error(_t_auth("auth_captcha_error"))
-                _reset_captcha()
-            else:
-                # Vérifier login/password
-                if _check_login_credentials(user, pwd):
-                    st.session_state["auth_step"] = 2  # Passage TOTP
-                    st.rerun()
-                else:
-                    st.error(_t_auth("auth_error_login"))
+            with st.spinner("⏳ Vérification en cours…"):
+                time.sleep(0.5)
+                if not _check_captcha(captcha_input):
+                    st.error(_t_auth("auth_captcha_error"))
                     _reset_captcha()
+                else:
+                    if _check_login_credentials(user, pwd):
+                        st.session_state["auth_step"] = 2
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        st.rerun()
+                        return False
+                    else:
+                        st.error(_t_auth("auth_error_login"))
+                        _reset_captcha()
 
+        st.markdown("</div>", unsafe_allow_html=True)
         return False
 
-    # =========================
-    # Étape 2 : TOTP (Google Authenticator)
-    # =========================
+    # Étape 2 : TOTP
     if step == 2:
-        st.markdown(f"**{_t_auth('auth_step2_title')}**")
+        st.markdown(
+            """
+            <div class="auth-card">
+              <div class="auth-title">🔐 Accès StormCopilot</div>
+              <div class="auth-subtitle">Protection par code temporel</div>
+              <div class="auth-step">Étape 2 sur 3 — Google Authenticator</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         if not _is_totp_enabled():
-            st.warning("TOTP non configuré (SC_TOTP_SECRET manquant ou pyotp absent). Passage direct à l'étape email.")
-            _start_email_otp_flow()
+            with st.spinner("⏳ Vérification en cours…"):
+                time.sleep(0.4)
+                _start_email_otp_flow()
+            st.markdown("</div>", unsafe_allow_html=True)
             st.rerun()
             return False
 
         _render_totp_qr_forced()
         st.caption(_t_auth("auth_totp_info"))
 
+        submitted_totp = False
+        totp_input = ""
+
         with st.form("login_form_step2_totp"):
-            totp_input = st.text_input("Code Google Authenticator", key="auth_totp")
+            totp_input = st.text_input("Code Google Authenticator")
             submitted_totp = st.form_submit_button(_t_auth("auth_submit_totp"))
 
         if submitted_totp:
-            if _check_totp_code(totp_input):
-                # Code TOTP OK → lancer le flux email (étape 3)
-                _start_email_otp_flow()
-                st.rerun()
-            else:
-                st.error(_t_auth("auth_error_totp"))
+            with st.spinner("⏳ Vérification en cours…"):
+                time.sleep(0.5)
+                if _check_totp_code(totp_input):
+                    _start_email_otp_flow()
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.rerun()
+                    return False
+                else:
+                    st.error(_t_auth("auth_error_totp"))
 
+        st.markdown("</div>", unsafe_allow_html=True)
         return False
 
-    # =========================
     # Étape 3 : code email
-    # =========================
     if step == 3:
-        st.markdown(f"**{_t_auth('auth_step3_title')}**")
+        st.markdown(
+            """
+            <div class="auth-card">
+              <div class="auth-title">🔐 Accès StormCopilot</div>
+              <div class="auth-subtitle">Dernière vérification avant l'accès complet</div>
+              <div class="auth-step">Étape 3 sur 3 — Vérification email</div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         mail_to = os.getenv("SC_EMAIL_TO", "")
         if mail_to:
@@ -523,33 +749,49 @@ def render_auth_gate() -> bool:
 
         col1, col2 = st.columns([2, 1])
 
+        submitted_code = False
+        code_input = ""
+
         with col1:
             with st.form("login_form_step3_email"):
-                code_input = st.text_input(_t_auth("auth_email_code"), key="auth_email_code")
+                code_input = st.text_input(_t_auth("auth_email_code"))
                 submitted_code = st.form_submit_button(_t_auth("auth_submit_code"))
 
         with col2:
+            st.markdown("<div class='resend-btn'>", unsafe_allow_html=True)
             if st.button(_t_auth("auth_resend_code"), key="btn_resend_code"):
-                _start_email_otp_flow()
+                with st.spinner("⏳ Envoi d'un nouveau code…"):
+                    time.sleep(0.4)
+                    _start_email_otp_flow()
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.markdown("</div>", unsafe_allow_html=True)
                 st.rerun()
+                return False
+            st.markdown("</div>", unsafe_allow_html=True)
 
         if submitted_code:
-            status = _check_email_code(code_input)
+            with st.spinner("⏳ Vérification en cours…"):
+                time.sleep(0.5)
+                status = _check_email_code(code_input)
 
-            if status == "ok":
-                st.session_state["is_authenticated"] = True
-                st.session_state.pop("email_otp", None)
-                st.session_state.pop("email_otp_expires_at", None)
-                st.success(_t_auth("auth_success"))
-                st.rerun()
-            elif status == "expired":
-                st.error(_t_auth("auth_error_code_expired"))
-            else:
-                st.error(_t_auth("auth_error_code"))
+                if status == "ok":
+                    st.session_state["is_authenticated"] = True
+                    st.session_state["auth_step"] = 1
+                    st.session_state["auth_just_logged_in"] = True
+                    st.session_state.pop("email_otp", None)
+                    st.session_state.pop("email_otp_expires_at", None)
+                    st.markdown("</div>", unsafe_allow_html=True)
+                    st.rerun()
+                    return False
+                elif status == "expired":
+                    st.error(_t_auth("auth_error_code_expired"))
+                else:
+                    st.error(_t_auth("auth_error_code"))
 
+        st.markdown("</div>", unsafe_allow_html=True)
         return False
 
-    # Fallback : step incohérent → reset
     st.session_state["auth_step"] = 1
     return False
+
 # End of src/ui/sections/auth.py
