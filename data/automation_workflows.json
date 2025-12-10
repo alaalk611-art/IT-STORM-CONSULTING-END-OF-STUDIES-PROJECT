@@ -1,36 +1,70 @@
 [
   {
-    "name": "n8n",
+    "name": "Backend · Tech + Market",
     "trigger": "manual",
     "steps": [
       {
-        "type": "n8n_webhook",
+        "type": "refresh_tech_watch",
         "params": {
-          "url": "http://localhost:5678/webhook/test-stormcopilot",
-          "payload": {
-            "trigger": "stormcopilot",
-            "scope": "market_only",
-            "user": "ala"
-          },
+          "timeout": 120
+        }
+      },
+      {
+        "type": "refresh_market",
+        "params": {
+          "symbols": "^FCHI,BNP.PA,AIR.PA,MC.PA,OR.PA,ORA.PA",
+          "interval": "1d",
+          "period": "6mo",
           "timeout": 30
         }
       }
     ]
   },
   {
-    "name": "HOPE",
+    "name": "Tech Radar (n8n)",
     "trigger": "manual",
     "steps": [
       {
         "type": "n8n_webhook",
         "params": {
-          "url": "http://localhost:5678/webhook/test-stormcopilot",
+          "url": "http://127.0.0.1:5678/webhook/tech-radar",
+          "timeout": 120,
           "payload": {
-            "trigger": "stormcopilot",
-            "scope": "market_only",
-            "user": "ala"
-          },
-          "timeout": 30
+            "scope": "tech_only",
+            "timeout": 90
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "Market Radar (n8n)",
+    "trigger": "manual",
+    "steps": [
+      {
+        "type": "n8n_webhook",
+        "params": {
+          "url": "http://127.0.0.1:5678/webhook/market-radar",
+          "timeout": 120,
+          "payload": {
+            "symbols": "^FCHI,BNP.PA,AIR.PA,MC.PA,OR.PA,ORA.PA",
+            "interval": "1d",
+            "period": "6mo"
+          }
+        }
+      }
+    ]
+  },
+  {
+    "name": "Daily Full · Tech + Market (via n8n)",
+    "trigger": "manual",
+    "steps": [
+      {
+        "type": "n8n_webhook",
+        "params": {
+          "url": "http://127.0.0.1:5678/webhook/daily-full",
+          "timeout": 120,
+          "payload": {}
         }
       }
     ]

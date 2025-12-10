@@ -16,16 +16,13 @@ from src.automation.logs import append_log
 # CONFIG BACKEND
 # ============================================================
 
-# On essaie d'abord une variable générique BACKEND_API_BASE_URL,
-# puis un éventuel alias MARKET_API_BASE_URL, sinon on retombe
-# sur le backend local par défaut.
 BACKEND_BASE = (
     os.getenv("BACKEND_API_BASE_URL")
     or os.getenv("MARKET_API_BASE_URL")
     or "http://127.0.0.1:8001"
 ).rstrip("/")
 
-# Quelques symboles par défaut pour les tests Market.
+# Symboles default pour Market (cohérent avec n8n / Streamlit)
 DEFAULT_MARKET_SYMBOLS = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
 
 
@@ -77,9 +74,9 @@ def action_refresh_market(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     symbols = params.get("symbols") or DEFAULT_MARKET_SYMBOLS
     if isinstance(symbols, str):
-        # Permet de passer un string séparé par des virgules
         symbols = [s.strip() for s in symbols.split(",") if s.strip()]
 
+    # Aligné avec n8n + Streamlit : interval=1d, period=1y
     interval = params.get("interval", "1d")
     period = params.get("period", "1y")
     timeout = int(params.get("timeout", 30))
@@ -144,9 +141,7 @@ def action_refresh_market(params: Dict[str, Any]) -> Dict[str, Any]:
 
 def action_generate_rag_summary(params: Dict[str, Any]) -> Dict[str, Any]:
     """
-    Générer un résumé RAG (placeholder pour l’instant).
-    Cette action est surtout là pour montrer comment brancher
-    une future action plus avancée.
+    Placeholder RAG – pour brancher une action RAG plus tard.
     """
     target = params.get("target", "generic")
     return {
@@ -159,7 +154,7 @@ def action_generate_rag_summary(params: Dict[str, Any]) -> Dict[str, Any]:
 def action_n8n_webhook(params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Appeler un workflow n8n via un webhook HTTP.
-    Permet par exemple de lancer un scénario 'Market Radar' côté n8n.
+    Utilisé par les workflows 'Tech Radar (n8n)', 'Market Radar (n8n)', 'Daily Full'.
     """
     url = params.get("url")
     payload = params.get("payload", {})
@@ -245,12 +240,10 @@ def run_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
 
     for idx, step in enumerate(steps):
         try:
-            # exécute une step (refresh_tech_watch, refresh_market, n8n_webhook, etc.)
             step_log = run_step(step)
             step_log["index"] = idx
             logs.append(step_log)
         except Exception as e:
-            # on capture l’erreur dans les logs, mais on continue le workflow
             logs.append(
                 {
                     "index": idx,
@@ -260,16 +253,13 @@ def run_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
                 }
             )
 
-    # objet global d’exécution
     execution_result: Dict[str, Any] = {
         "workflow_name": name,
         "executed_at": datetime.utcnow().isoformat() + "Z",
         "logs": logs,
     }
 
-    # 🔴 partie CRITIQUE : on pousse ça dans automation_logs.jsonl
     append_log(execution_result)
-
     return execution_result
 
 
@@ -278,14 +268,8 @@ def run_workflow(workflow: Dict[str, Any]) -> Dict[str, Any]:
 # ============================================================
 
 def get_all_workflows() -> List[Dict[str, Any]]:
-    """
-    Raccourci pour le module storage.
-    """
     return load_workflows()
 
 
 def save_all_workflows(workflows: List[Dict[str, Any]]) -> None:
-    """
-    Raccourci pour sauvegarder la liste des workflows.
-    """
     save_workflows(workflows)

@@ -33,12 +33,7 @@ try:
     from rank_bm25 import BM25Okapi
 except Exception:
     BM25Okapi = None  # BM25 optionnel (late fusion plus robuste si présent)
-try:
-    import chromadb
-    from chromadb.config import Settings
-    from chromadb.utils import embedding_functions
-except Exception as e:
-    raise RuntimeError(f"[RAG] ChromaDB manquant: {e}")
+
 from sentence_transformers import CrossEncoder
 
 
@@ -50,7 +45,13 @@ def _build_embedding_fn(model_name: str):
     # 1) FastEmbed si demandé
     if EMBED_BACKEND == "fastembed":
         try:
-            return embedding_functions.FastEmbedEmbeddingFunction(model_name=model_name)
+            # Selon les versions de chromadb, la classe peut ne pas exister
+            if hasattr(embedding_functions, "FastEmbedEmbeddingFunction"):
+                return embedding_functions.FastEmbedEmbeddingFunction(model_name=model_name)
+            else:
+                # Tentative d'import direct (chromadb[fastembed] récent)
+                from chromadb.utils.embedding_functions import FastEmbedEmbeddingFunction
+                return FastEmbedEmbeddingFunction(model_name=model_name)
         except Exception as e:
             print(f"[RAG] FastEmbedEmbeddingFunction KO ({e}), fallback SentenceTransformer.", flush=True)
 
@@ -60,7 +61,7 @@ def _build_embedding_fn(model_name: str):
     except Exception as e:
         raise RuntimeError(f"[RAG] Échec chargement embeddings '{model_name}': {e}")
 
-# ===== ENV / Paramètres =====
+
 # ===== ENV / Paramètres =====
 # DB path : on accepte VECTOR_DB_PATH ou CHROMA_DB_DIR
 DEFAULT_DB_PATH = (
@@ -85,10 +86,6 @@ TOP_K_DENSE = int(os.getenv("RAG_TOP_K_DENSE", "48"))
 TOP_K_BALANCED = int(os.getenv("RAG_TOP_K_BALANCED", "8"))
 MAX_QUOTES = int(os.getenv("RAG_MAX_QUOTES", "6"))
 
-TOP_K_DENSE = int(os.getenv("RAG_TOP_K_DENSE", "48"))
-TOP_K_BALANCED = int(os.getenv("RAG_TOP_K_BALANCED", "8"))
-MAX_QUOTES = int(os.getenv("RAG_MAX_QUOTES", "6"))
-
 # Confiance minimale pour construire autre chose qu'un fallback
 CONF_MIN = float(os.getenv("RAG_CONF_MIN", "0.65"))
 
@@ -103,8 +100,7 @@ MMR_LAMBDA = float(os.getenv("RAG_MMR_LAMBDA", "0.6"))
 MIN_QUOTES_OK = int(os.getenv("RAG_MIN_QUOTES_OK", "2"))
 
 # Limiter la domination du fichier QA dans les citations
-QA_MAX_QUOTE_SHARE = float(os.getenv("RAG_QA_MAX_QUOTE_SHARE", "0.6")  # ex: 60% max des citations
-)
+QA_MAX_QUOTE_SHARE = float(os.getenv("RAG_QA_MAX_QUOTE_SHARE", "0.6"))  # ex: 60% max des citations
 MAX_QUOTES_PER_SOURCE = int(os.getenv("RAG_MAX_QUOTES_PER_SOURCE", "3"))
 
 # Extensions bloquées (bruit) -> exclus dur
@@ -294,6 +290,8 @@ def is_narrative_sentence(text: str) -> bool:
         return False
     low = f" {text.strip().lower()} "
     return not any(tok in low for tok in NARRATIVE_FORBIDDEN_PRONOUNS)
+
+
 # ===== Construction de la réponse =====
 # --- Mode "paragraphe unique" (non utilisé mais conservé)
 SINGLE_PARAGRAPH = os.getenv("RAG_SINGLE_PARAGRAPH", "0") == "1"
@@ -457,9 +455,6 @@ BAD_DEF_PATTERNS = [
 ]
 
 
-
-import re
-
 def has_bad_def_pattern(text: str) -> bool:
     """
     Retourne True si le texte match au moins un pattern regex dans BAD_DEF_PATTERNS.
@@ -570,18 +565,16 @@ class SmartRAG:
             raise RuntimeError(f"[RAG] Échec accès collection '{collection_name}': {e}")
 
         # ----------------------------------------------------------------------
-        # ✅ AJOUTER ICI : initialisation Cross Encoder (rerank neural)
+        # ✅ Cross Encoder (rerank neural) optionnel
         # ----------------------------------------------------------------------
+        self.cross: Optional[CrossEncoder] = None
         if os.getenv("ENABLE_CROSS_ENCODER", "1") == "1":
             model_name = os.getenv("CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
             try:
-                from sentence_transformers import CrossEncoder
                 self.cross = CrossEncoder(model_name)
             except Exception as e:
-                print(f"[RAG] CrossEncoder KO ({e}), désactivé.")
+                print(f"[RAG] CrossEncoder KO ({e}), désactivé.", flush=True)
                 self.cross = None
-        else:
-            self.cross = None
 
     # Dense retrieve
     def retrieve_dense(self, query: str, k: int) -> List[RetrievedChunk]:
@@ -694,12 +687,25 @@ class SmartRAG:
 
         selected.sort(key=lambda z: z.score_final, reverse=True)
         return selected
-    def rerank_cross(self, query, chunks):
-        pairs = [[query, c.text] for c in chunks]
-        scores = self.cross.predict(pairs)
-        for i, c in enumerate(chunks):
-            c.score_final = 0.65 * c.score_final + 0.35 * float(scores[i])
-        return sorted(chunks, key=lambda x: x.score_final, reverse=True)
+
+    def rerank_cross(self, query: str, chunks: List[RetrievedChunk]) -> List[RetrievedChunk]:
+        """
+        Rerank neural avec CrossEncoder si dispo.
+        Si self.cross est None ou qu'il y a une erreur, on renvoie les chunks inchangés.
+        """
+        if not chunks or getattr(self, "cross", None) is None:
+            return chunks
+
+        try:
+            pairs = [[query, c.text] for c in chunks]
+            scores = self.cross.predict(pairs)
+            for i, c in enumerate(chunks):
+                c.score_final = 0.65 * c.score_final + 0.35 * float(scores[i])
+            return sorted(chunks, key=lambda x: x.score_final, reverse=True)
+        except Exception as e:
+            print(f"[RAG] CrossEncoder rerank KO ({e}), désactivé.")
+            self.cross = None
+            return chunks
 
     # Citations (extraits complets), interleave QA + non-QA, limites par source
     def make_quotes(self, chunks: List[RetrievedChunk], max_quotes: int = MAX_QUOTES) -> List[Dict[str, str]]:
@@ -808,7 +814,7 @@ class SmartRAG:
             i += 1
 
         return out
-    
+
     def _build_clean_anchored_paragraph(self, quotes: List[Dict[str, str]]) -> str:
         """
         Construit une définition propre, neutre et ancrée à partir des citations.
@@ -969,6 +975,7 @@ class SmartRAG:
         return humanize_fr("\n".join(out)), sorted(set(q["source"] for q in quotes)), quotes
 
     # API principale
+    # API principale
     def ask(self, question: str) -> SmartRAGResult:
         # 0) Normalisation de la question
         q0 = (question or "").strip()
@@ -980,7 +987,12 @@ class SmartRAG:
         fused = self.late_fusion(dense, q0)
 
         # 3) Rerank + balance (intention unique 'default')
-        ranked = self.rerank_cross(q0, ranked)
+        ranked = self.rerank_balance(fused, intent="default")
+
+        # 3bis) Rerank neural (CrossEncoder) si dispo
+        if getattr(self, "cross", None) is not None:
+            ranked = self.rerank_cross(q0, ranked)
+
         # 4) Confiance
         conf = self.estimate_confidence(ranked)
 
@@ -1034,40 +1046,10 @@ class SmartRAG:
                             # Filet de sécurité : phrase très générique
                             para = "IT STORM est une entreprise spécialisée. " + para
 
-                ans = para
-                srcs = sorted(set(q["source"] for q in quotes))
-                qts = quotes
-
-            # Citations RAG
-            quotes = self.make_quotes(ranked, MAX_QUOTES)
-
-            if not quotes or len(quotes) < MIN_QUOTES_OK:
-                # Pas assez de matière fiable → fallback
-                ans, srcs, qts = self.build_fallback(ranked)
-
-            else:
-                # Assemble un paragraphe fluide à partir des quotes (3–5 phrases)
-                para = assemble_human_paragraph(quotes, max_sentences=5)
-
-                # Forcer un début propre si la question parle explicitement d'IT STORM
-                ql = q0.lower()
-                if "it storm" in ql or "itstorm" in ql or "it-storm" in ql:
-                    if not para.lower().startswith("it storm"):
-                        # On cherche une citation commençant par "IT STORM"
-                        prefix_set = False
-                        for q in quotes:
-                            txt = (q.get("quote") or "").strip()
-                            if txt.lower().startswith("it storm"):
-                                para = txt + " " + para
-                                prefix_set = True
-                                break
-                        if not prefix_set:
-                            # Filet de sécurité : phrase très générique
-                            para = "IT STORM est une entreprise spécialisée. " + para
-
                 ans = humanize_fr(para)
                 srcs = sorted(set(q["source"] for q in quotes))
                 qts = quotes
+
         # Scores de qualité & debug
         quality = self.quality_scores(ans, qts, ranked)
         dbg = {
@@ -1085,6 +1067,10 @@ class SmartRAG:
             quality=quality,
             dbg=dbg,
         )
+
+# === Jury Ollama (optionnel) =================================================
+# (... le reste de ton fichier ask_multi_ollama, get_engine, smart_rag_answer,
+#  debug_list_sources, reindex_txt_file, ensure_qa_indexed reste identique ...)
 
 # === Jury Ollama (optionnel) =================================================
 def ask_multi_ollama(
