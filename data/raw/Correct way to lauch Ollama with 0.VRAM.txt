@@ -1,0 +1,37 @@
+# 1) Arrêter toute instance
+taskkill /IM ollama.exe /F 2>$null
+
+# 2) Neutraliser TOUTE détection GPU pour ce processus
+$env:OLLAMA_NO_GPU="1"
+$env:CUDA_VISIBLE_DEVICES="-1"
+$env:GPU_DEVICE_ORDINAL="-1"
+$env:ROCR_VISIBLE_DEVICES="-1"
+$env:HIP_VISIBLE_DEVICES="-1"
+$env:GGML_VK_VISIBLE_DEVICES="-1"
+$env:HSA_OVERRIDE_GFX_VERSION=""
+$env:OLLAMA_LLM_LIBRARY="cpu"
+
+# 3) Garde-fous utiles
+$env:OLLAMA_NUM_PARALLEL="1"
+$env:OLLAMA_KEEP_ALIVE="0"
+$env:OLLAMA_HOST="127.0.0.1:11434"
+$env:OLLAMA_DEBUG="1"
+
+# 4) Lancer au premier plan (doit dire "no GPU" et NE PAS afficher "entering low vram mode")
+ollama serve
+
+
+ollama pull mistral:7b-instruct
+ollama pull llama3.2:3b
+ollama pull qwen2.5:7b
+ollama pull tinyllama:latest   # optionnel, modèle léger pour test
+
+
+ollama list
+
+
+ollama run tinyllama "Bonjour"
+ollama run mistral:7b-instruct "Décris IT-STORM en une phrase"
+
+
+

@@ -26,7 +26,7 @@ langchain-chroma>=0.1
 chromadb>=0.5
 sentence-transformers>=3.0
 transformers>=4.44
-torch==2.3.1+cpu
+torch==2.9.1
 accelerate>=0.34
 huggingface-hub>=0.24
 
@@ -70,7 +70,7 @@ transformers>=4.44
 huggingface-hub>=0.24
 
 # Torch CPU ONLY for Docker (avoid CUDA install)
-torch==2.3.1+cpu
+
 accelerate>=0.34
 
 # --- Documents ---
@@ -83,9 +83,12 @@ PyPDF2>=3.0
 # --- ML ---
 scikit-learn>=1.5
 
-faster-whisper==0.10.0
+# --- Audio ---
 pydub==0.25.1
 gTTS==2.5.1
-ffmpeg-python==0.2.0
-ffmpeg>=4.4
 audio-recorder-streamlit==0.0.8
+
+pypdf>=3.0.0
+streamlit-javascript
+python-pptx
+

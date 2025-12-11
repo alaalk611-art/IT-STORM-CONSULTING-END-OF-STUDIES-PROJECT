@@ -925,14 +925,14 @@ def render() -> None:
     # ------------------------------------------------------------------
     # Sous-onglets : graphes & analyses
     # ------------------------------------------------------------------
-    tab_price, tab_mom, tab_diag, tab_bt, tab_data,tab_report,tab_n8n = st.tabs(
+    tab_report,tab_price, tab_mom, tab_diag, tab_bt, tab_data,tab_n8n = st.tabs(
         [
+            "📰 Daily Report",
             "📊 Prix & moyennes mobiles",
             "📈 Momentum & oscillateurs",
             "🧪 Diagnostics ML",
             "📈 Backtest SMA & RL",
             "📄 Données brutes",
-            "📰 Daily Report",
             "🤝 n8n Market Radar",
 
              

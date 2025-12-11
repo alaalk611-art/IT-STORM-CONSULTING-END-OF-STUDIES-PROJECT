@@ -1,81 +1,93 @@
+version: "3.9"
+
 services:
-  ollama:
-    image: ollama/ollama:latest
-    container_name: ollama
-    ports: ["11434:11434"]
-    environment:
-      - OLLAMA_KEEP_ALIVE=0
-    volumes:
-      - ollama:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:11434/api/tags"]
-      interval: 15s
-      timeout: 5s
-      retries: 10
-
-  chroma:
-    image: chromadb/chroma:latest
-    container_name: chroma
-    command: ["chroma", "run", "--path", "/chroma/data", "--host", "0.0.0.0", "--port", "8000"]
-    ports: ["8000:8000"]
-    volumes:
-      - chroma:/chroma/data
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/heartbeat"]
-      interval: 15s
-      timeout: 5s
-      retries: 20
-
+  # =========================
+  # 1. Backend FastAPI
+  # =========================
   backend:
     build:
       context: .
       dockerfile: docker/Dockerfile.backend
-    container_name: stormcopilot-backend
-    env_file:
-      - .env.docker
-    depends_on:
-      ollama:
-        condition: service_healthy
-      chroma:
-        condition: service_healthy
+    container_name: storm_backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
     environment:
-      - DATA_DIR=/app/data
-      - VECTOR_DB_DIR=/app/vectors
+      BACKEND_ENV: "prod"
+      # URLs internes (dans le réseau Docker)
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      N8N_BASE_URL: "http://n8n:5678"
+      CHROMA_DB_DIR: "/app/data/chroma"
+      LOGS_DIR: "/app/data/logs"
     volumes:
-      # Monte tes données et tes vecteurs dans les chemins attendus par l'app
-      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/data:/app/data:ro"
-      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/vectors:/app/vectors"
-      # (optionnel) hot-reload du code :
-      # - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM:/app"
-    ports: ["8001:8001"]
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8001/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 20
+      - ./data/chroma:/app/data/chroma
+      - ./data/logs:/app/data/logs
+    depends_on:
+      - ollama
+      - n8n
+    networks:
+      - stormnet
 
+  # =========================
+  # 2. UI Streamlit
+  # =========================
   ui:
     build:
       context: .
       dockerfile: docker/Dockerfile.ui
-    container_name: stormcopilot-ui
-    env_file:
-      - .env.docker
-    depends_on:
-      backend:
-        condition: service_healthy
+    container_name: storm_ui
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
     environment:
-      - API_BASE_URL=http://backend:8001
-      - DATA_DIR=/app/data
-    volumes:
-      - "C:/Users/ALA BEN LAKHAL/Desktop/intelligent_copilot IT-STORM/data:/app/data:ro"
-    ports: ["8501:8501"]
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8501/_stcore/health"]
-      interval: 15s
-      timeout: 5s
-      retries: 20
+      BACKEND_API_BASE_URL: "http://backend:8001"
+      N8N_BASE_URL: "http://n8n:5678"
+      DEFAULT_LANG: "fr"
+    depends_on:
+      - backend
+      - n8n
+    networks:
+      - stormnet
 
-volumes:
+  # =========================
+  # 3. Ollama (LLM local)
+  # =========================
   ollama:
-  chroma:
+    image: ollama/ollama:latest
+    container_name: storm_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    environment:
+      OLLAMA_NUM_PARALLEL: "1"
+      OLLAMA_HOST: "0.0.0.0"
+    volumes:
+      - ./ollama:/root/.ollama
+    networks:
+      - stormnet
+
+  # =========================
+  # 4. n8n (Automation Studio)
+  # =========================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: storm_n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      N8N_HOST: "n8n"
+      N8N_PORT: 5678
+      WEBHOOK_URL: "http://n8n:5678/"
+      GENERIC_TIMEZONE: "Europe/Paris"
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+    networks:
+      - stormnet
+
+# =========================
+# Réseau commun
+# =========================
+networks:
+  stormnet:
+    driver: bridge

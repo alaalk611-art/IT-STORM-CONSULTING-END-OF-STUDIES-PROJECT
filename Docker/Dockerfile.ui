@@ -1,14 +1,17 @@
 FROM python:3.11-slim
+
 WORKDIR /app
 
-ENV PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+# Même requirements que le backend pour l’instant
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Tu peux réutiliser requirements.txt si l'UI a besoin des mêmes libs
-COPY requirements.txt /app/requirements.txt
-RUN pip install -r /app/requirements.txt
+COPY . .
 
-COPY src /app/src
 EXPOSE 8501
-CMD ["streamlit", "run", "src/ui/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--browser.gatherUsageStats=false"]
+
+# Même commande que toi, mais en 0.0.0.0
+CMD ["streamlit", "run", "src/ui/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
