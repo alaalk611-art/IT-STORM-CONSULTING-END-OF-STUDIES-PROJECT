@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from src.api import speech_stt, speech_tts
 from src.api import tech_watch
 
-
+app = FastAPI()
 
 # ---------------------------------------------------------------------
 # Import backend CLI
@@ -350,6 +350,12 @@ def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"ohlcv error: {e}")
+
+from src.api.routes import mlops_market
+app.include_router(mlops_market.router)
+
+from src.api.routes import pdf
+app.include_router(pdf.router)
 
 app.include_router(v1)
 app.include_router(tech_watch.router)

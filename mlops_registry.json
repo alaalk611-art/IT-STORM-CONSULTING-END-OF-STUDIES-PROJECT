@@ -1,0 +1,56 @@
+{
+  "^FCHI": {
+    "run_id": "63408ce153d34ab7bbda4effa3516b61",
+    "metrics": {
+      "silhouette": 0.6400621207633653,
+      "ae_reconstruction": 0.7172379493713379,
+      "autoencoder_msg": null
+    },
+    "score": -0.07717582860797256
+  },
+  "BNP.PA": {
+    "run_id": "339c5678f1ed4fb48b559a3c959e5f41",
+    "metrics": {
+      "silhouette": 0.3210038054624519,
+      "ae_reconstruction": 0.5807128548622131,
+      "autoencoder_msg": null
+    },
+    "score": -0.25970904939976125
+  },
+  "MC.PA": {
+    "run_id": "05ade5c49ab0424093061e1b84069cfc",
+    "metrics": {
+      "silhouette": 0.3464842252602684,
+      "ae_reconstruction": 0.5669459700584412,
+      "autoencoder_msg": null
+    },
+    "score": -0.22046174479817277
+  },
+  "AIR.PA": {
+    "run_id": "5298ad7e6ab9450382990c204c78a708",
+    "metrics": {
+      "silhouette": 0.38617647906165387,
+      "ae_reconstruction": 0.4442601501941681,
+      "autoencoder_msg": null
+    },
+    "score": -0.058083671132514225
+  },
+  "OR.PA": {
+    "run_id": "2799c154cd18452588f5518c326b4a2b",
+    "metrics": {
+      "silhouette": 0.3936687082863156,
+      "ae_reconstruction": 0.6547216773033142,
+      "autoencoder_msg": null
+    },
+    "score": -0.2610529690169986
+  },
+  "ORA.PA": {
+    "run_id": "f16a02b4f8274a14bd39583432b8683f",
+    "metrics": {
+      "silhouette": 0.36465483226745526,
+      "ae_reconstruction": 0.6367303133010864,
+      "autoencoder_msg": null
+    },
+    "score": -0.27207548103363116
+  }
+}

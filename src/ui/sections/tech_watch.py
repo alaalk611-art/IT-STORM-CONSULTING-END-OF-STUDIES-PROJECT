@@ -2,6 +2,7 @@
 # ============================================================
 # Path: src/ui/sections/tech_watch.py
 # Onglet Streamlit : Veille technologique IT-STORM
+# Style : Dashboard Enterprise / Power BI (ADN MLOps & Automation)
 # ============================================================
 
 from __future__ import annotations
@@ -22,6 +23,122 @@ from urllib.parse import urljoin
 # ------------------------------------------------------------
 API_BASE = os.getenv("BACKEND_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/")
 N8N_BASE = os.getenv("N8N_BASE_URL", "http://127.0.0.1:5678").rstrip("/")
+
+
+# ------------------------------------------------------------
+# CSS – Style Dashboard Enterprise / Power BI (header + tabs + KPI)
+# ------------------------------------------------------------
+_DASHBOARD_CSS = """
+<style>
+/* Header style "rapport exécutif" (aligné sur MLOps) */
+.tw-header {
+    padding: 18px 22px;
+    border-radius: 20px;
+    background: radial-gradient(circle at top left, #4c6fff11, #0f172a05);
+    border: 1px solid rgba(148,163,184,0.35);
+    box-shadow: 0 18px 40px rgba(15,23,42,0.12);
+    margin-bottom: 1.4rem;
+}
+.tw-header-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+.tw-header-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(59,130,246,0.08);
+    color: #1d4ed8;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.tw-header-sub {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 0.35rem;
+}
+
+/* Sous-tabs centrés (même ADN que MLOps) */
+.stTabs [data-baseweb="tab-list"] {
+    justify-content: center;
+    gap: 0.5rem;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 999px !important;
+    padding: 0.35rem 1.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    background-color: #f8fafc;
+    color: #64748b;
+    border: 1px solid transparent;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    border-color: rgba(148,163,184,0.6);
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, #4c6fff, #c471f5) !important;
+    color: white !important;
+    box-shadow: 0 10px 30px rgba(59,130,246,0.35);
+}
+
+/* KPI cards (alignées sur mlops-kpi-card) */
+.tw-kpi-card {
+    border-radius: 18px;
+    padding: 0.9rem 1.1rem;
+    background: rgba(255,255,255,0.96);
+    box-shadow: 0 14px 35px rgba(15,23,42,0.08);
+    border: 1px solid rgba(148,163,184,0.3);
+    position: relative;
+    overflow: hidden;
+}
+.tw-kpi-card::after {
+    content: "";
+    position: absolute;
+    inset: -40%;
+    opacity: 0.08;
+    background: radial-gradient(circle at top right, #4c6fff, transparent 55%);
+    pointer-events: none;
+}
+.tw-kpi-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+.tw-kpi-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+.tw-kpi-sub {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+.tw-kpi-icon {
+    position: absolute;
+    right: 12px;
+    top: 10px;
+    font-size: 1.2rem;
+    opacity: 0.35;
+}
+
+/* Boutons actions (pillules) */
+.stButton>button {
+    border-radius: 999px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1.4rem !important;
+}
+</style>
+"""
 
 
 # ------------------------------------------------------------
@@ -879,16 +996,32 @@ def _render_tech_radar_panel() -> None:
 
 
 # ------------------------------------------------------------
-# RENDER TAB
+# RENDER TAB (Dashboard Power BI harmonisé)
 # ------------------------------------------------------------
 def render() -> None:
-    st.title("🔎 Veille technologique IT-STORM")
-    st.caption("Cloud • Data • IA • DevOps • Portage salarial & freelancing")
-
+    # CSS global dashboard (header + tabs + KPI) + CSS spécifique feed/filters
+    st.markdown(_DASHBOARD_CSS, unsafe_allow_html=True)
     st.markdown(_TW_CSS, unsafe_allow_html=True)
     st.markdown(_FILTERS_CSS, unsafe_allow_html=True)
 
-    # Sous-tabs : vue locale + vue n8n (comme Market.py)
+    # Header harmonisé avec MLOps / Automation
+    st.markdown(
+        """
+        <div class="tw-header">
+          <div class="tw-header-title">
+            <span>🔎 Veille technologique IT-STORM</span>
+            <span class="tw-header-pill">Cloud · Data · IA · DevOps · Portage salarial</span>
+          </div>
+          <div class="tw-header-sub">
+            Radar des tendances techniques et du marché du portage salarial pour les consultants IT-STORM,
+            avec agrégation automatique des sources, scoring et n8n pour l’orchestration.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # Sous-tabs : vue locale + vue n8n (style pillule Power BI)
     tab_local, tab_n8n = st.tabs(
         [
             "📡 TrendRadar & Feed",
@@ -900,14 +1033,15 @@ def render() -> None:
     # TAB 1 : TrendRadar & Feed
     # =========================
     with tab_local:
+        # Ligne d'action + explication
         col1, col2 = st.columns([1, 2])
         with col1:
             if st.button("🔄 Rafraîchir la veille maintenant"):
                 with st.spinner("Collecte des sources et génération des résumés."):
-                    res = _api_post("/tech/watch/refresh")
+                    res_refresh = _api_post("/tech/watch/refresh")
 
-                if res.get("status") == "ok":
-                    nb_ok = int(res.get("nb_ok", 0) or 0)
+                if res_refresh.get("status") == "ok":
+                    nb_ok = int(res_refresh.get("nb_ok", 0) or 0)
                     plural_ok = "source" if nb_ok == 1 else "sources"
                     st.success(f"✅ {nb_ok} {plural_ok} à jour")
                 else:
@@ -919,7 +1053,7 @@ def render() -> None:
                 "et les informations sur le marché du portage salarial pour les consultants IT-STORM."
             )
 
-        # Données détaillées pour TrendRadar et feed
+        # Données détaillées pour TrendRadar, KPI et feed
         res = _api_get("/tech/watch/latest", params={"limit": 120})
         if res.get("status") != "ok":
             st.error("Impossible de charger la veille. Vérifie l'API backend.")
@@ -930,7 +1064,85 @@ def render() -> None:
             st.warning("Aucun résultat disponible. Lance un rafraîchissement pour initialiser la veille.")
             return
 
-        # TrendRadar global
+        # ----------- KPI Dashboard (Power BI style) -----------
+        # Calcul des indicateurs globaux sur la veille
+        distinct_sources = {
+            (it.get("source_name") or it.get("url") or "").strip()
+            for it in items
+            if (it.get("source_name") or it.get("url"))
+        }
+        total_sources = len(distinct_sources)
+        total_items = len(items)
+
+        hot_count = sum(
+            1 for it in items
+            if str(it.get("rank_label", "")).startswith("🔥")
+        )
+        trending_count = sum(
+            1 for it in items
+            if str(it.get("rank_label", "")).startswith("⭐")
+        )
+        fresh_count = sum(
+            1 for it in items
+            if "Fresh" in str(it.get("rank_label", "🆕 Fresh"))
+        )
+
+        generated_at = res.get("generated_at") or res.get("fetched_at") or ""
+
+        k1, k2, k3 = st.columns([1.1, 1.1, 1])
+        with k1:
+            st.markdown(
+                f"""
+                <div class="tw-kpi-card">
+                  <div class="tw-kpi-icon">🌐</div>
+                  <div class="tw-kpi-label">Sources distinctes</div>
+                  <div class="tw-kpi-value">{total_sources}</div>
+                  <div class="tw-kpi-sub">Sur {total_items} contenus agrégés</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with k2:
+            st.markdown(
+                f"""
+                <div class="tw-kpi-card">
+                  <div class="tw-kpi-icon">🔥</div>
+                  <div class="tw-kpi-label">Hot & Trending</div>
+                  <div class="tw-kpi-value">{hot_count} Hot · {trending_count} Trend</div>
+                  <div class="tw-kpi-sub">Contenus les plus prioritaires (24–48h)</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            # ------- KPI 3 : Articles récents 24h --------
+
+            # Calcul du nombre d’items publiés dans les 24 dernières heures
+            now = datetime.now(timezone.utc)
+            recent_24h = sum(
+                1
+                for it in items
+                if (dt := _parse_dt(it.get("published_at") or it.get("created_at")))
+                and (now - dt).total_seconds() <= 24*3600
+            )
+
+            with k3:
+                st.markdown(
+                    f"""
+                    <div class="tw-kpi-card">
+                    <div class="tw-kpi-icon">🕒</div>
+                    <div class="tw-kpi-label">Articles récents (24h)</div>
+                    <div class="tw-kpi-value">{recent_24h}</div>
+                    <div class="tw-kpi-sub">Nouveautés techniques détectées</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        st.markdown("")
+
+        # TrendRadar global (radar/heatmap/corrélation)
         _render_trend_radar(items)
 
         # Logos Trending 24h

@@ -11,6 +11,8 @@ from src.ui.sections import tech_watch
 from src.ui.sections import home
 from src.ui.sections import automation
 from src.ui.sections import upload
+from src.ui.sections import mlops
+
 import os
 os.environ["CHROMA_TELEMETRY_ENABLED"] = "false"
 
@@ -1617,6 +1619,7 @@ ROUTES = {
     "voice": "🎤 Voice Copilot",
     "tech": "🔎 Veille Techno",
     "automation": "⚙️ Automation Studio",
+    "mlops": "🧠 MLOps Market", 
 }
 
 tab_names = list(ROUTES.values())
@@ -1681,3 +1684,6 @@ elif selected == "🔎 Veille Techno":
 
 elif selected == "⚙️ Automation Studio":
     automation.render_automation_tab()
+
+elif selected == "🧠 MLOps Market":
+    mlops.render_mlops_tab()
