@@ -11,6 +11,9 @@ from src.ui.sections import tech_watch
 from src.ui.sections import home
 from src.ui.sections import automation
 from src.ui.sections import upload
+import os
+os.environ["CHROMA_TELEMETRY_ENABLED"] = "false"
+
 
 
 # ⚠️ IMPORTANT : ne le faire qu'une seule fois par session
