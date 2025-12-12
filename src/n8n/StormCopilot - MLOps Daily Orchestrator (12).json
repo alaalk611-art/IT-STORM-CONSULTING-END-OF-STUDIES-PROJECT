@@ -1,0 +1,773 @@
+{
+  "name": "StormCopilot - MLOps Daily Orchestrator",
+  "nodes": [
+    {
+      "parameters": {
+        "triggerTimes": {
+          "item": [
+            {
+              "hour": 7,
+              "minute": 30
+            }
+          ]
+        }
+      },
+      "id": "01dd61f4-22c0-423f-9785-c03c6a92f648",
+      "name": "CRON - Daily 07:30",
+      "type": "n8n-nodes-base.cron",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        368
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mlops-daily-full",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "f9f2ee46-4c74-4345-ba60-54d40b78767b",
+      "name": "Webhook mlops-daily-full",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -816,
+        576
+      ],
+      "webhookId": "2176ddf8-acfc-4972-a6e0-8085f0926e31"
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://host.docker.internal:8001/mlops/train/market",
+        "options": {
+          "timeout": 900000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "quick",
+              "value": "true"
+            }
+          ]
+        }
+      },
+      "id": "1fe210b0-8180-45a8-95c9-e4993d70803f",
+      "name": "QuickTrain /mlops/train/market",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        -112,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://host.docker.internal:8001/mlops/metrics/daily",
+        "options": {
+          "timeout": 600000
+        }
+      },
+      "id": "c5fb01d9-7d71-4878-aef8-9fe265bae155",
+      "name": "Metrics /mlops/metrics/daily",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        160,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8001/mlops/champions",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "id": "70599c7c-8c35-4a06-b2a2-c71e8188c207",
+      "name": "Get /mlops/champions",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        448,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [],
+          "number": []
+        },
+        "options": {
+          "dotNotation": true
+        }
+      },
+      "id": "bc0f5f37-32fd-4d5e-8c55-236c06bef429",
+      "name": "Build Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        880,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "daily-full",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "07d1a103-56ed-4122-a38e-0ab248b81af6",
+      "name": "Webhook Daily Full",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -832,
+        80
+      ],
+      "webhookId": "daily-full-itstorm-uuid"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "// Prepare Params\nconst interval = $json.interval || \"1d\";\nconst period = $json.period || \"1y\";\n\nreturn [{\n  json: {\n    interval,\n    period,\n  }\n}];\n"
+      },
+      "id": "e5da39de-04cd-4c87-8e2d-879a60acd44e",
+      "name": "Prepare Params",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=http://host.docker.internal:8001/tech/watch/latest",
+        "options": {
+          "timeout": 160000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "limit",
+              "value": "={{$json[\"tech_limit\"] || 36}}"
+            }
+          ]
+        }
+      },
+      "id": "7b820963-a448-40ec-9d2d-f8796a9ebc0f",
+      "name": "Fetch Tech Latest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "const symbols = [\"^FCHI\",\"BNP.PA\",\"AIR.PA\",\"MC.PA\",\"OR.PA\",\"ORA.PA\"];\n\nreturn symbols.map(symbol => ({\n  json: {\n    symbol,\n    interval: $json.interval,\n    period: $json.period,\n  }\n}));\n"
+      },
+      "id": "636295d3-4473-44de-b5f0-face07cfe198",
+      "name": "Split Symbols",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://host.docker.internal:8001/v1/ohlcv/' + $json[\"symbol\"] }}",
+        "options": {
+          "timeout": 120000
+        },
+        "queryParametersUi": {
+          "parameter": [
+            {
+              "name": "interval",
+              "value": "={{$json[\"interval\"]}}"
+            },
+            {
+              "name": "period",
+              "value": "={{$json[\"period\"]}}"
+            }
+          ]
+        }
+      },
+      "id": "daa4e2e2-4d14-423e-8ed3-f0aa73a43c46",
+      "name": "HTTP OHLCV",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        272
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }\n\nfunction rsi14(closes) {\n  const n = 14;\n  if (!Array.isArray(closes) || closes.length < n + 1) return null;\n\n  let gains = 0, losses = 0;\n  const start = closes.length - (n + 1);\n\n  for (let i = start + 1; i < start + 1 + n; i++) {\n    const diff = closes[i] - closes[i - 1];\n    if (diff >= 0) gains += diff;\n    else losses += -diff;\n  }\n  gains /= n; losses /= n;\n\n  for (let i = start + 1 + n; i < closes.length; i++) {\n    const diff = closes[i] - closes[i - 1];\n    const gain = diff > 0 ? diff : 0;\n    const loss = diff < 0 ? -diff : 0;\n    gains = (gains * (n - 1) + gain) / n;\n    losses = (losses * (n - 1) + loss) / n;\n  }\n\n  if (losses === 0) return 100;\n  const rs = gains / losses;\n  return 100 - (100 / (1 + rs));\n}\n\nfunction annualTrendPct(firstClose, lastClose) {\n  if (!Number.isFinite(firstClose) || !Number.isFinite(lastClose) || firstClose === 0) return null;\n  return ((lastClose / firstClose) - 1) * 100;\n}\n\nfunction vol20AnnualPct(closes) {\n  if (!Array.isArray(closes) || closes.length < 21) return null;\n\n  const tail = closes.slice(-21);\n  const rets = [];\n  for (let i = 1; i < tail.length; i++) {\n    const a = tail[i - 1], b = tail[i];\n    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) continue;\n    rets.push(Math.log(b / a));\n  }\n  if (rets.length < 10) return null;\n\n  const mean = rets.reduce((s, x) => s + x, 0) / rets.length;\n  const varr = rets.reduce((s, x) => s + (x - mean) ** 2, 0) / (rets.length - 1);\n  const dailyStd = Math.sqrt(varr);\n  const annStd = dailyStd * Math.sqrt(252);\n  return annStd * 100;\n}\n\nfunction signalFrom(trendPct, rsi) {\n  if (!Number.isFinite(trendPct) || !Number.isFinite(rsi)) return \"NEUTRE\";\n  if (trendPct > 2 && rsi < 70) return \"ACHAT\";\n  if (trendPct < -2 && rsi > 30) return \"VENTE\";\n  return \"NEUTRE\";\n}\n\nfunction scoreFrom(trendPct, rsi, volPct) {\n  if (!Number.isFinite(trendPct) || !Number.isFinite(rsi) || !Number.isFinite(volPct)) return 0;\n  const t = clamp(trendPct / 10, -3, 3);\n  const r = clamp((50 - rsi) / 12.5, -2, 2) * -1;\n  const v = clamp((20 - volPct) / 20, -1, 1) * 0.8;\n  return clamp(t + r + v, -5, 5);\n}\n\nfunction lectureText(signal, trendPct, volPct) {\n  const t =\n    !Number.isFinite(trendPct) ? \"tendance inconnue\"\n    : trendPct > 3 ? \"tendance haussière\"\n    : trendPct < -3 ? \"tendance baissière\"\n    : \"tendance neutre\";\n\n  const v =\n    !Number.isFinite(volPct) ? \"volatilité inconnue\"\n    : volPct < 15 ? \"volatilité calme\"\n    : volPct < 25 ? \"volatilité normale\"\n    : \"volatilité élevée\";\n\n  return `${signal} • ${t} • ${v}`;\n}\n\n// ---------------------------------------------\n\nconst rows = [];\nconst assets = [];\nlet achat = 0, vente = 0, neutre = 0;\n\nfor (const it of items) {\n  const j = it.json || {};\n  const symbol = j.symbol || \"UNKNOWN\";\n\n  if (j.error) {\n    assets.push({\n      symbol,\n      status: \"error\",\n      warning: j.error,\n      nb_candles: j.meta?.nb_candles ?? null,\n      source: j.meta?.source ?? null,\n      interval: j.meta?.interval ?? null,\n      period: j.meta?.period ?? null,\n    });\n    continue;\n  }\n\n  const lastClose = j.last_close;\n  const firstClose = j.first_close;\n  const closes60 = j.closes_60 || [];\n\n  const rsi = rsi14(closes60);\n  const trendPct = annualTrendPct(firstClose, lastClose);\n  const volPct = vol20AnnualPct(closes60);\n\n  const signal = signalFrom(trendPct, rsi);\n  const score = scoreFrom(trendPct, rsi, volPct);\n  const lecture = lectureText(signal, trendPct, volPct);\n\n  if (signal === \"ACHAT\") achat++;\n  else if (signal === \"VENTE\") vente++;\n  else neutre++;\n\n  rows.push({\n    symbol,\n    prix: Number.isFinite(lastClose) ? +lastClose.toFixed(6) : null,\n    signal,\n    score: +score.toFixed(6),\n    tendance_annuelle_pct: Number.isFinite(trendPct) ? +trendPct.toFixed(6) : null,\n    vol20_annuelle_pct: Number.isFinite(volPct) ? +volPct.toFixed(6) : null,\n    rsi14: Number.isFinite(rsi) ? +rsi.toFixed(6) : null,\n    lecture\n  });\n\n  assets.push({\n    symbol,\n    status: \"ok\",\n    nb_candles: j.meta?.nb_candles ?? null,\n    source: j.meta?.source ?? null,\n    interval: j.meta?.interval ?? null,\n    period: j.meta?.period ?? null,\n    warning: null\n  });\n}\n\nrows.sort((a, b) => (b.score ?? -999) - (a.score ?? -999));\n\nconst validTrend = rows.map(r => r.tendance_annuelle_pct).filter(Number.isFinite);\nconst validVol = rows.map(r => r.vol20_annuelle_pct).filter(Number.isFinite);\n\nconst avgTrend = validTrend.length ? validTrend.reduce((s,x)=>s+x,0)/validTrend.length : null;\nconst avgVol = validVol.length ? validVol.reduce((s,x)=>s+x,0)/validVol.length : null;\n\nconst summary = {\n  nb_assets: rows.length,\n  achat,\n  vente,\n  neutre,\n  tendance_moyenne_pct: Number.isFinite(avgTrend) ? +avgTrend.toFixed(1) : null,\n  volatilite_moyenne_pct: Number.isFinite(avgVol) ? +avgVol.toFixed(1) : null,\n  text: (() => {\n    const t = Number.isFinite(avgTrend) ? `${avgTrend.toFixed(1)} %` : \"N/A\";\n    const v = Number.isFinite(avgVol) ? `${avgVol.toFixed(1)} %` : \"N/A\";\n    return `Le marché apparaît équilibré, avec une tendance moyenne de ${t} par an et une volatilité moyenne autour de ${v}.`;\n  })(),\n  generated_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    market_ai_summary: summary,\n    market_ai_rows: rows,\n    market_radar_assets: assets\n  }\n}];\n"
+      },
+      "id": "9ae89be8-0b25-44b4-acfe-5343f15db991",
+      "name": "Build Market Radar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        656,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javascript",
+        "jsCode": "// n8n Function node: \"Assemble Full Daily\"  ✅ (version robuste)\n\n// --- helpers ---\nfunction isObj(v) {\n  return v && typeof v === \"object\" && !Array.isArray(v);\n}\n\nfunction deepMerge(target, src) {\n  if (!isObj(src)) return target;\n\n  for (const [k, v] of Object.entries(src)) {\n    if (v === undefined || v === null) continue;\n\n    if (Array.isArray(v)) {\n      // garde le tableau le plus \"riche\"\n      const cur = target[k];\n      if (!Array.isArray(cur) || v.length >= cur.length) target[k] = v;\n      continue;\n    }\n\n    if (isObj(v)) {\n      if (!isObj(target[k])) target[k] = {};\n      deepMerge(target[k], v);\n      continue;\n    }\n\n    target[k] = v;\n  }\n  return target;\n}\n\nfunction pickFirst(obj, keys, fallback = null) {\n  for (const k of keys) {\n    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];\n  }\n  return fallback;\n}\n\nfunction normalize(out) {\n  // Normalise les variantes potentielles (si merge/set a créé des copies)\n  out.tech_radar = pickFirst(out, [\"tech_radar\", \"techRadar\", \"tech\"]);\n  out.market_ai_summary = pickFirst(out, [\"market_ai_summary\", \"market_summary\", \"marketAiSummary\"]);\n  out.market_ai_rows = pickFirst(out, [\"market_ai_rows\", \"marketAiRows\"], []);\n  out.market_radar_assets = pickFirst(out, [\"market_radar_assets\", \"market_assets\", \"assets\"], []);\n\n  // important: le node \"Build Market Rows\" sort souvent un champ comme ça\n  out.market_rows_md = pickFirst(out, [\"market_rows_md\", \"marketRowsMd\", \"market_rows_markdown\"], out.market_rows_md);\n\n  // Champs standards\n  out.workflow = out.workflow || \"StormCopilot Daily Full\";\n  out.generated_at = out.generated_at || new Date().toISOString();\n\n  // Sécu types\n  if (!Array.isArray(out.market_ai_rows)) out.market_ai_rows = [];\n  if (!Array.isArray(out.market_radar_assets)) out.market_radar_assets = [];\n\n  // Nettoyage (optionnel)\n  const toDrop = [\n    \"techRadar\", \"tech\",\n    \"market_summary\", \"marketAiSummary\",\n    \"market_assets\", \"assets\",\n    \"marketAiRows\",\n  ];\n  for (const k of toDrop) if (k in out) delete out[k];\n\n  return out;\n}\n\n// --- FUSION de tous les items entrants ---\nlet merged = {};\nfor (const it of items) {\n  if (it?.json) deepMerge(merged, it.json);\n}\n\nconst out = normalize(merged);\nreturn [{ json: out }];\n"
+      },
+      "id": "47bbfc2a-f626-469f-b431-1ca3b29cf706",
+      "name": "Assemble Full Daily",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "requestMethod": "POST",
+        "url": "http://host.docker.internal:8001/tech/watch/refresh",
+        "options": {
+          "timeout": 180000
+        }
+      },
+      "id": "560aa70f-a442-4a93-833a-b8a4e2df6ff6",
+      "name": "Refresh Tech Watch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -256,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1056,
+        160
+      ],
+      "id": "2f30fbae-ca80-453e-9cee-4515911bf52e",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = items[0].json || {};\nconst entries = Object.entries(raw || {}).filter(([k, v]) => typeof v === \"object\");\n\n// Tri par score décroissant\nentries.sort(([, a], [, b]) => {\n  const sa = a?.score ?? 0;\n  const sb = b?.score ?? 0;\n  return sb - sa;\n});\n\n// Construction Markdown\nlet md = \"\";\nmd += `## 🧠 StormCopilot – MLOps Champions\\n\\n`;\nmd += `Nombre d’actifs analysés : **${entries.length}**\\n\\n`;\n\nmd += `| Symbole | Score | Silhouette | AE Recons. | run_id |\\n`;\nmd += `|---------|-------|------------|------------|--------|\\n`;\n\nfor (const [symbol, payload] of entries) {\n  const metrics = payload.metrics || {};\n  const score = payload.score;\n  const sil = metrics.silhouette;\n  const ae = metrics.ae_reconstruction;\n  const runId = payload.run_id || \"\";\n\n  md += `| ${symbol} | ${score != null ? score.toFixed(3) : \"-\"} | ${sil != null ? sil.toFixed(3) : \"-\"} | ${ae != null ? ae.toFixed(3) : \"-\"} | ${runId} |\\n`;\n}\n\nmd += `\\n> Le score combine la qualité du clustering (silhouette) et l’erreur de reconstruction de l’autoencodeur.\\n`;\n\n// Sortie finale\nreturn [\n  {\n    json: {\n      raw_champions: raw,\n      summary_text: md,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        592
+      ],
+      "id": "be742d80-57aa-4d7a-b8ce-c4571e6eae69",
+      "name": "Format MLOps Champions"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node: \"Format Daily Summary\"\n\nconst d = items[0]?.json || {};\n\nconst generatedAt = d.generated_at || new Date().toISOString();\n\n// --- Tech Radar ---\nconst tech = d.tech_radar || {};\nconst techMetrics = tech.metrics || d.metrics || {};\nconst techQuality = tech.quality || (tech.status === \"ok\" ? \"✅ Complet\" : \"⚠️ Incomplet\");\nconst techHeadline = tech.headline || \"\";\nconst techFetched = tech.fetched_at || \"\";\n\n// --- Market ---\nconst msum = d.market_ai_summary || {};\nconst nbAssets = msum.nb_assets ?? (Array.isArray(d.market_radar_assets) ? d.market_radar_assets.length : 0);\nconst achat = msum.achat ?? 0;\nconst vente = msum.vente ?? 0;\nconst neutre = msum.neutre ?? 0;\nconst trend = msum.tendance_moyenne_pct ?? null;\nconst vol = msum.volatilite_moyenne_pct ?? null;\nconst synth = msum.text || \"\";\n\nconst interval = d.market_radar_assets?.[0]?.interval || \"\";\nconst period = d.market_radar_assets?.[0]?.period || \"\";\n\n// Tables (venant du node Build Market Rows)\nconst marketRowsMd = d.market_rows_md || \"_Aucune ligne IA._\";\n\n// Assets table\nlet assetsMd = \"\";\nconst assets = Array.isArray(d.market_radar_assets) ? d.market_radar_assets : [];\nif (assets.length) {\n  assetsMd += `| Symbole | Nb. bougies | Source | Intervalle | Période |\\n`;\n  assetsMd += `|---|---:|---|---|---|\\n`;\n  for (const a of assets) {\n    assetsMd += `| ${a.symbol || \"\"} | ${a.nb_candles ?? \"\"} | ${a.source || \"\"} | ${a.interval || \"\"} | ${a.period || \"\"} |\\n`;\n  }\n} else {\n  assetsMd = \"_Aucun asset market_radar_assets._\";\n}\n\nconst sourcesOk = techMetrics.sources_ok ?? techMetrics.nb_ok ?? 0;\nconst sourcesTotal = techMetrics.sources_total ?? 0;\nconst hot = techMetrics.hot ?? 0;\nconst trending = techMetrics.trending ?? 0;\nconst fresh = techMetrics.fresh ?? 0;\n\nconst md =\n`# 📊 StormCopilot – Rapport quotidien\n\nGénéré automatiquement par **StormCopilot** (n8n + FastAPI).\n\n## 📡 Tech Radar – Veille technologique\n\n${techHeadline ? `> ${techHeadline}\\n` : \"\"}\n\n| Indicateur | Valeur |\n|---|---|\n| Qualité globale | ${techQuality} |\n| Sources actives | ${sourcesOk} / ${sourcesTotal} |\n| Hot | ${hot} |\n| Trending | ${trending} |\n| Fresh | ${fresh} |\n\n${techFetched ? `Dernière collecte : ${techFetched}\\n` : \"\"}\n\n## 📈 Market Radar – Analyse des actifs (IA)\n\n| Indicateur | Valeur |\n|---|---|\n| Actifs analysés | ${nbAssets} |\n| ACHAT | ${achat} |\n| VENTE | ${vente} |\n| NEUTRE | ${neutre} |\n| Tendance moyenne | ${trend !== null ? `${trend}%` : \"\"} |\n| Volatilité moyenne | ${vol !== null ? `${vol}%` : \"\"} |\n| Intervalle | ${interval} |\n| Période | ${period} |\n\n${synth ? `> ${synth}\\n` : \"\"}\n\n### Détail IA par symbole\n\n${marketRowsMd}\n\n### Données marché (assets)\n\n${assetsMd}\n\n---\n\nDernière exécution : ${generatedAt}\n`;\n\nreturn [{ json: { ...d, summary_text: md } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1376,
+        384
+      ],
+      "id": "ccca60b1-2ad3-4ea8-98c6-bf7b5b220ef6",
+      "name": "Format Daily Summary"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1840,
+        592
+      ],
+      "id": "aef6497a-1fb0-49a0-b0db-e11591297c36",
+      "name": "Webhook mlops-daily-full1"
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        2048,
+        208
+      ],
+      "id": "833e4f03-9d7c-4a80-b73b-133c9c11bccb",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = items[0].json || {};\nconst champs = data.raw_champions || {};\n\nconst entries = Object.entries(champs);\n\n// Tri par score décroissant\nentries.sort(([, a], [, b]) => {\n  const sa = a?.score ?? 0;\n  const sb = b?.score ?? 0;\n  return sb - sa;\n});\n\nlet out = \"=== StormCopilot – Résumé MLOps ===\\n\\n\";\nout += `Nombre d'actifs avec champion : ${entries.length}\\n\\n`;\n\nfor (const [symbol, payload] of entries) {\n  const m = payload.metrics || {};\n  const score = payload.score != null ? payload.score.toFixed(3) : \"-\";\n  const sil = m.silhouette != null ? m.silhouette.toFixed(3) : \"-\";\n  const ae  = m.ae_reconstruction != null ? m.ae_reconstruction.toFixed(3) : \"-\";\n\n  out += `- ${symbol} → score ${score}, silhouette ${sil}, AE ${ae}\\n`;\n}\n\nreturn [\n  {\n    json: {\n      ...data,\n      human_text: out,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1392,
+        592
+      ],
+      "id": "5f240f0b-225e-4c10-89b6-0bca00d14045",
+      "name": "Build Human Text MLOps"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node: \"Build Market Rows\"\n\nconst data = items[0]?.json || {};\nconst rows = Array.isArray(data.market_ai_rows) ? data.market_ai_rows : [];\n\nfunction n(x, d = 0) {\n  const v = Number(x);\n  return Number.isFinite(v) ? v : d;\n}\nfunction f(x, digits = 2) {\n  return n(x).toFixed(digits);\n}\n\nconst tableRows = rows.map(r => ({\n  symbol: String(r.symbol || \"\"),\n  prix: n(r.prix),\n  signal: String(r.signal || \"\"),\n  score: n(r.score),\n  tendance_annuelle_pct: n(r.tendance_annuelle_pct),\n  vol20_annuelle_pct: n(r.vol20_annuelle_pct),\n  rsi14: n(r.rsi14),\n  lecture: String(r.lecture || \"\")\n}));\n\n// Markdown table\nlet md = \"\";\nif (tableRows.length > 0) {\n  md += `| Symbole | Prix | Signal | Score | Tendance % | Vol20 % | RSI14 | Lecture |\\n`;\n  md += `|---|---:|---|---:|---:|---:|---:|---|\\n`;\n  for (const r of tableRows) {\n    md += `| ${r.symbol} | ${f(r.prix, 3)} | ${r.signal} | ${f(r.score, 2)} | ${f(r.tendance_annuelle_pct, 1)} | ${f(r.vol20_annuelle_pct, 1)} | ${f(r.rsi14, 1)} | ${r.lecture} |\\n`;\n  }\n} else {\n  md = \"_Aucune ligne IA (market_ai_rows vide)._\";\n}\n\nreturn [{\n  json: {\n    ...data,\n    market_rows_table: tableRows,\n    market_rows_md: md\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1488,
+        64
+      ],
+      "id": "5d861465-0469-48d6-8344-b664763e1032",
+      "name": "Build Market Rows"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node: \"Build Human Text Daily\"\n\nconst d = items[0]?.json || {};\n\nfunction cleanHumanText(s) {\n  if (!s) return s;\n\n  // supprime les lignes PowerShell / curl\n  s = s.replace(/^.*\\bcurl\\.exe\\b.*$/gmi, \"\");\n  s = s.replace(/^.*\\(\\.venv\\)\\s+PS\\s+.*$/gmi, \"\");\n\n  // compact espaces\n  s = s.replace(/\\n{3,}/g, \"\\n\\n\").trim();\n  return s;\n}\n\nconst gen = d.generated_at || new Date().toISOString();\n\n// Tech\nconst tech = d.tech_radar || {};\nconst met = tech.metrics || d.metrics || {};\nconst quality = tech.quality || (tech.status === \"ok\" ? \"✅ Complet\" : \"⚠️ Incomplet\");\nconst headline = tech.headline || \"\";\nconst srcOk = met.sources_ok ?? met.nb_ok ?? 0;\nconst srcTotal = met.sources_total ?? 0;\nconst hot = met.hot ?? 0;\nconst trending = met.trending ?? 0;\nconst fresh = met.fresh ?? 0;\nconst fetched = tech.fetched_at || \"\";\n\n// Market\nconst m = d.market_ai_summary || {};\nconst nb = m.nb_assets ?? (Array.isArray(d.market_radar_assets) ? d.market_radar_assets.length : 0);\nconst achat = m.achat ?? 0;\nconst vente = m.vente ?? 0;\nconst neutre = m.neutre ?? 0;\nconst trend = m.tendance_moyenne_pct ?? null;\nconst vol = m.volatilite_moyenne_pct ?? null;\nconst synth = m.text || \"\";\n\n// Rows\nconst rows = Array.isArray(d.market_ai_rows) ? d.market_ai_rows : [];\n\nlet txt = `=== StormCopilot — Daily Full (Résumé lisible) ===\nGénéré: ${gen}\n\n📡 TECH RADAR\n- Qualité: ${quality}\n${headline ? `- Headline: ${headline}\\n` : \"\"}- Sources: ${srcOk}/${srcTotal} | Hot: ${hot} | Trending: ${trending} | Fresh: ${fresh}\n${fetched ? `- Fetched: ${fetched}\\n` : \"\"}\n\n📈 MARKET (IA)\n- Actifs: ${nb}\n- Signaux: ACHAT ${achat} | VENTE ${vente} | NEUTRE ${neutre}\n- Moyennes: tendance ${trend !== null ? trend + \"%\" : \"\"} | volatilité ${vol !== null ? vol + \"%\" : \"\"}\n${synth ? `- Synthèse: ${synth}\\n` : \"\"}\n\nDétail par symbole:\n`;\n\nif (!rows.length) {\n  txt += \"- (Aucun détail IA)\\n\";\n} else {\n  for (const r of rows) {\n    txt += `- ${r.symbol}: ${r.signal} | score ${Number(r.score ?? 0).toFixed(2)} | prix ${Number(r.prix ?? 0).toFixed(3)} | RSI ${Number(r.rsi14 ?? 0).toFixed(1)} | trend ${Number(r.tendance_annuelle_pct ?? 0).toFixed(1)}% | vol20 ${Number(r.vol20_annuelle_pct ?? 0).toFixed(1)}% | ${r.lecture || \"\"}\\n`;\n  }\n}\n\ntxt += `\\n✅ Fin du résumé.\\n`;\n\ntxt = cleanHumanText(txt);\n\nreturn [{ json: { ...d, human_text: txt } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        384
+      ],
+      "id": "95809d77-d888-4139-9f04-496209c11dd5",
+      "name": "Build Human Text Daily"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/pdf/daily-report",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "summary_text",
+              "value": "={{ $json[\"summary_text\"] }}"
+            },
+            {
+              "name": "human_text",
+              "value": "={{ $json[\"human_text\"] }}"
+            },
+            {
+              "name": "generated_at",
+              "value": "={{ $json[\"generated_at\"] }}"
+            },
+            {
+              "name": "market_ai_summary",
+              "value": "={{ $json[\"market_ai_summary\"] }}"
+            },
+            {
+              "name": "market_ai_rows",
+              "value": "={{ $json[\"market_ai_rows\"]}}"
+            },
+            {
+              "name": "tech_radar",
+              "value": "={{ $json[\"tech_radar\"] }}"
+            },
+            {
+              "name": "generated_at",
+              "value": "={{ $json[\"generated_at\"] }}"
+            },
+            {
+              "name": "tech_hot",
+              "value": "={{ $json.tech_radar.metrics.hot }}"
+            },
+            {
+              "name": "tech_trending",
+              "value": "={{ $json.tech_radar.metrics.trending }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2048,
+        384
+      ],
+      "id": "9a47cfe5-3330-4e67-bbe6-2f0db4ec2b78",
+      "name": "Generate Daily PDF"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        464,
+        272
+      ],
+      "id": "e1807a63-47e6-4542-9b39-8f5422ab8744",
+      "name": "Merge1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: Compress OHLCV → Features (multi-items safe)\n// Input: each item = { symbol, interval, period, bars: [...] } or similar\n// Output: 1 item per symbol with minimal closes_60\n\nfunction pickClose(c) {\n  if (!c) return null;\n  if (typeof c.close === 'number') return c.close;\n  if (typeof c.c === 'number') return c.c;\n  if (typeof c.adjClose === 'number') return c.adjClose;\n  if (typeof c.adj_close === 'number') return c.adj_close;\n  return null;\n}\n\nfunction findBars(j) {\n  return (\n    j.bars ||\n    j.candles ||\n    j.data ||\n    j.ohlcv ||\n    j.prices ||\n    []\n  );\n}\n\nreturn items.map((it) => {\n  const j = it.json || {};\n  const symbol = j.symbol || j.ticker || j.sym || j.asset || 'UNKNOWN';\n\n  const bars = findBars(j);\n  const nbBars = Array.isArray(bars) ? bars.length : (j.nb_candles ?? null);\n\n  if (!Array.isArray(bars) || bars.length < 20) {\n    return {\n      json: {\n        symbol,\n        error: `Not enough bars (got ${Array.isArray(bars) ? bars.length : 'N/A'})`,\n        meta: {\n          nb_candles: nbBars,\n          interval: j.interval ?? null,\n          period: j.period ?? null,\n          source: j.source ?? null,\n        }\n      }\n    };\n  }\n\n  const closesAll = bars\n    .map(pickClose)\n    .filter(v => typeof v === 'number' && Number.isFinite(v));\n\n  if (closesAll.length < 20) {\n    return {\n      json: {\n        symbol,\n        error: `Not enough valid closes (got ${closesAll.length})`,\n        meta: {\n          nb_candles: nbBars,\n          interval: j.interval ?? null,\n          period: j.period ?? null,\n          source: j.source ?? null,\n        }\n      }\n    };\n  }\n\n  const N = 60;\n  const closes_60 = closesAll.slice(-N);\n  const lastClose = closesAll[closesAll.length - 1];\n  const firstClose = closesAll[0];\n\n  return {\n    json: {\n      symbol,\n      last_close: lastClose,\n      first_close: firstClose,\n      closes_60,\n      meta: {\n        nb_candles: nbBars ?? bars.length,\n        interval: j.interval ?? null,\n        period: j.period ?? null,\n        source: j.source ?? null,\n        generated_at: new Date().toISOString(),\n      }\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        272
+      ],
+      "id": "7f2ff96c-32be-4c91-9aff-a073e77adce9",
+      "name": "compress OHCLV1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize Tech Metrics (fix: handle {status,count,items} from /tech/watch/latest)\n// Mode: Run Once for All Items\n\nfunction pick(obj, paths, fallback = undefined) {\n  for (const p of paths) {\n    const v = p.split(\".\").reduce((a, k) => (a && a[k] !== undefined ? a[k] : undefined), obj);\n    if (v !== undefined && v !== null) return v;\n  }\n  return fallback;\n}\n\nconst in0 = items[0]?.json || {};\n\n// Si l'input est déjà enveloppé (rare)\nconst raw = in0._raw ? in0._raw : (in0.type === \"tech_radar\" ? in0 : in0);\n\n// Cas standard backend: { status, count, items: [...] }\nconst list = Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data?.items) ? raw.data.items : []);\nconst sources_total = Number(pick(raw, [\"count\", \"metrics.sources_total\", \"metrics.nb_ok\"], list.length)) || list.length;\n\n// sources_ok : si backend ne fournit pas nb_ok, on considère ok = total si status ok\nlet sources_ok = Number(pick(raw, [\"nb_ok\", \"metrics.sources_ok\", \"metrics.nb_ok\"], NaN));\nif (!Number.isFinite(sources_ok)) sources_ok = (raw.status === \"ok\" ? sources_total : 0);\n\n// Compute Hot/Trending/Fresh depuis rank_label\nconst hot = list.filter(x => String(x.rank_label || \"\").includes(\"Hot\")).length;\nconst trending = list.filter(x => String(x.rank_label || \"\").includes(\"Trending\")).length;\nconst fresh = list.filter(x => String(x.rank_label || \"\").includes(\"Fresh\")).length;\n\n// Headline : si pas fourni, on le fabrique depuis le top item\nlet headline = pick(raw, [\"headline\", \"title\"], \"\");\nif (!headline || headline.trim().length < 3) {\n  const top = list[0];\n  if (top) {\n    const src = top.source_name || \"Source\";\n    const txt = (top.short_summary || top.tw_summary_2_sent || top.summary || \"\").replace(/\\s+/g, \" \").trim();\n    headline = txt ? `${src} : ${txt.slice(0, 120)}${txt.length > 120 ? \"…\" : \"\"}` : (top.url || \"Aucun titre disponible\");\n  } else {\n    headline = \"Aucun titre disponible\";\n  }\n}\n\nconst quality = (sources_total > 0 && sources_ok === sources_total) ? \"✅ Complet\" : \"🟡 Partiel\";\nconst fetched_at = pick(raw, [\"fetched_at\", \"generated_at\"], new Date().toISOString());\n\nreturn [{\n  json: {\n    type: \"tech_radar\",\n    status: raw.status || \"ok\",\n    quality,\n    headline,\n    fetched_at,\n    metrics: { sources_ok, sources_total, hot, trending, fresh },\n    _raw: raw, // debug\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ],
+      "id": "e8e5d854-1ce8-40ee-a9a4-403737171596",
+      "name": "Normalize Tech Metrics"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook mlops-daily-full": {
+      "main": [
+        [
+          {
+            "node": "QuickTrain /mlops/train/market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "QuickTrain /mlops/train/market": {
+      "main": [
+        [
+          {
+            "node": "Metrics /mlops/metrics/daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Metrics /mlops/metrics/daily": {
+      "main": [
+        [
+          {
+            "node": "Get /mlops/champions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get /mlops/champions": {
+      "main": [
+        [
+          {
+            "node": "Build Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Daily Full": {
+      "main": [
+        [
+          {
+            "node": "Prepare Params",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Params": {
+      "main": [
+        [
+          {
+            "node": "Split Symbols",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Refresh Tech Watch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Tech Latest": {
+      "main": [
+        [
+          {
+            "node": "Normalize Tech Metrics",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Symbols": {
+      "main": [
+        [
+          {
+            "node": "HTTP OHLCV",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP OHLCV": {
+      "main": [
+        [
+          {
+            "node": "compress OHCLV1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "compress OHCLV1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Market Radar": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Refresh Tech Watch": {
+      "main": [
+        [
+          {
+            "node": "Fetch Tech Latest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Assemble Full Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRON - Daily 07:30": {
+      "main": [
+        [
+          {
+            "node": "Prepare Params",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "QuickTrain /mlops/train/market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assemble Full Daily": {
+      "main": [
+        [
+          {
+            "node": "Format Daily Summary",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Build Market Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Summary": {
+      "main": [
+        [
+          {
+            "node": "Format MLOps Champions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Daily Summary": {
+      "main": [
+        [
+          {
+            "node": "Build Human Text Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format MLOps Champions": {
+      "main": [
+        [
+          {
+            "node": "Build Human Text MLOps",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook mlops-daily-full1": {
+      "main": [
+        []
+      ]
+    },
+    "Respond to Webhook": {
+      "main": [
+        []
+      ]
+    },
+    "Build Human Text MLOps": {
+      "main": [
+        [
+          {
+            "node": "Webhook mlops-daily-full1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Market Rows": {
+      "main": [
+        []
+      ]
+    },
+    "Build Human Text Daily": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily PDF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Daily PDF": {
+      "main": [
+        []
+      ]
+    },
+    "Merge1": {
+      "main": [
+        [
+          {
+            "node": "Build Market Radar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "compress OHCLV1": {
+      "main": [
+        [
+          {
+            "node": "Merge1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Tech Metrics": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "7fae3c58-79f7-4255-990f-906d2d441656",
+  "meta": {
+    "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"
+  },
+  "id": "2v08DOl1p5Cod8hA",
+  "tags": []
+}
