@@ -44,6 +44,11 @@ class DailyPdfRequest(BaseModel):
     market_radar_assets: list[dict] | None = None
     mlops_summary: dict | None = None
 
+    # ✅ AJOUT (pour rendu complet MLOps)
+    mlops_kpis: dict | None = None
+    mlops_decision: dict | None = None
+    mlops_champions_rows: list[dict] | None = None
+
     ohlcv_by_symbol: dict[str, list[dict]] | None = None
 
 
@@ -706,6 +711,110 @@ def _add_market_assets_table(story, styles, assets: list[dict] | None):
     story.append(Spacer(1, 0.35 * cm))
 
 
+
+# --------------------------------------------------------------------
+# ✅ MLOps (STRUCTURÉ)
+# --------------------------------------------------------------------
+def _add_mlops_section(story, styles, payload: DailyPdfRequest):
+    story.append(Paragraph("🧠 MLOps", styles["section"]))
+
+    ms = payload.mlops_summary or {}
+    k = payload.mlops_kpis or {}
+    d = payload.mlops_decision or {}
+    rows = payload.mlops_champions_rows or []
+
+    # fallback : si n8n envoie raw_champions dans mlops_summary
+    if not rows:
+        rc = ms.get("raw_champions") if isinstance(ms, dict) else None
+        if isinstance(rc, dict):
+            built = []
+            for sym, obj in rc.items():
+                if not isinstance(obj, dict):
+                    continue
+                met = obj.get("metrics") or {}
+                built.append({
+                    "symbol": sym,
+                    "silhouette": met.get("silhouette"),
+                    "ae_reconstruction": met.get("ae_reconstruction"),
+                    "score": obj.get("score"),
+                    "run_id": obj.get("run_id"),
+                })
+            rows = built
+
+    # --- KPIs principaux ---
+    pipeline_status = _safe(ms.get("pipeline_status") or k.get("pipeline_status") or "")
+    nb_ok = ms.get("nb_symbols_ok", k.get("nb_symbols_ok", "-"))
+    nb_req = ms.get("nb_symbols_requested", k.get("nb_symbols_requested", "-"))
+    nb_champ = ms.get("nb_champions", k.get("nb_champions", "-"))
+    drift_avg = ms.get("drift_avg", d.get("drift_avg", None))
+    drift_max = ms.get("drift_max", d.get("drift_max", None))
+
+    retrain = d.get("retrain_recommended", ms.get("retrain_recommended", False))
+    retrain_txt = "✅ Non" if retrain is False else "⚠ Oui"
+
+    row1 = Table([[
+        _kpi_card("✅ Pipeline", pipeline_status or "OK", "Statut MLOps", "#16A34A" if (pipeline_status or "OK").strip().upper() in ("OK","SUCCESS","DONE") else "#F59E0B"),
+        _kpi_card("🎯 Symboles OK", str(nb_ok), f"Demandés : {nb_req}", "#111827"),
+        _kpi_card("🏆 Champions", str(nb_champ), "Nb champions", "#0F172A"),
+    ]], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
+    row1.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(row1)
+    story.append(Spacer(1, 0.25 * cm))
+
+    row2 = Table([[
+        _kpi_card("📉 Drift moyen", _fmt_num(drift_avg, 3), "Qualité data", styles["blue_dark"]),
+        _kpi_card("📈 Drift max", _fmt_num(drift_max, 3), "Pic observé", "#111827"),
+        _kpi_card("🔁 Retrain", retrain_txt, "Recommandation", "#334155"),
+    ]], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
+    row2.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(row2)
+
+    explanation = _safe(d.get("explanation") or ms.get("decision_explanation"))
+    if explanation:
+        story.append(Spacer(1, 0.15 * cm))
+        story.append(Paragraph(f"💬 {explanation}", styles["normal"]))
+
+    story.append(Spacer(1, 0.25 * cm))
+    story.append(Paragraph("🏆 Détail des champions", styles["h3"]))
+
+    if not rows:
+        story.append(Paragraph("Aucune donnée champions fournie.", styles["normal"]))
+        story.append(Spacer(1, 0.35 * cm))
+        return
+
+    header = ["Symbol", "Silhouette", "Reconstruction AE", "Score global", "run_id"]
+    data = [header]
+
+    # tri : score meilleur en haut (moins négatif)
+    try:
+        rows = sorted(rows, key=lambda r: float(r.get("score", -999)), reverse=True)
+    except Exception:
+        pass
+
+    for r in rows:
+        data.append([
+            _safe(r.get("symbol")),
+            _fmt_num(r.get("silhouette"), 3),
+            _fmt_num(r.get("ae_reconstruction"), 3),
+            _fmt_num(r.get("score"), 3),
+            _safe(r.get("run_id")) or "-",
+        ])
+
+    tbl = Table(data, colWidths=[2.0*cm, 2.4*cm, 3.4*cm, 2.4*cm, 5.9*cm])
+    _style_table_default(tbl)
+
+    # coloration score
+    amber = colors.HexColor("#F59E0B")
+    tbl.setStyle(TableStyle([
+        ("ALIGN", (0, 1), (0, -1), "CENTER"),
+        ("ALIGN", (1, 1), (3, -1), "RIGHT"),
+        ("TEXTCOLOR", (3, 1), (3, -1), amber),
+    ]))
+
+    story.append(tbl)
+    story.append(Spacer(1, 0.35 * cm))
+
+
 # --------------------------------------------------------------------
 # ✅ OHLCV (optionnel)
 # --------------------------------------------------------------------
@@ -778,6 +887,9 @@ def generate_daily_report(payload: DailyPdfRequest):
     _add_tech_section(story, styles, payload.tech_radar)
     _add_market_ai_table(story, styles, payload.market_ai_rows, payload.market_ai_summary)
     _add_market_assets_table(story, styles, payload.market_radar_assets)
+
+    # ✅ AJOUT
+    _add_mlops_section(story, styles, payload)
     _add_ohlcv_section(story, styles, payload.ohlcv_by_symbol, max_rows=7)
 
     story.append(Spacer(1, 0.35 * cm))
