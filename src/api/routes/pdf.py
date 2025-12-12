@@ -9,7 +9,7 @@ from typing import Any
 from fastapi import APIRouter
 from fastapi.responses import Response
 from pydantic import BaseModel
-
+from reportlab.platypus import ListFlowable, ListItem
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -280,14 +280,26 @@ def _badge(text: str, bg: colors.Color) -> Table:
 
 
 def _style_table_default(table: Table):
+    """Style 'dashboard' : bordure externe plus marquée + grille interne légère."""
     table.setStyle(TableStyle([
+        # Header
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0B1220")),
         ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
         ("FONT", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 9.6),
         ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+
+        # Body
+        ("FONTSIZE", (0, 1), (-1, -1), 9.2),
         ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#CBD5E1")),
         ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+
+        # Borders / grid
+        ("BOX", (0, 0), (-1, -1), 0.9, colors.HexColor("#0B1220")),     # bordure externe (plus premium)
+        ("INNERGRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#CBD5E1")),  # grille interne légère
+        ("LINEBELOW", (0, 0), (-1, 0), 1.1, colors.HexColor("#38BDF8")),    # ligne accent sous header
+
+        # Padding
         ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
         ("TOPPADDING", (0, 0), (-1, -1), 7),
         ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -521,7 +533,7 @@ def _add_market_ai_table(story, styles, rows: list[dict] | None, market_ai_summa
             ["⚪ NEUTRE", str(ms.get("neutre", "-"))],
             ["🧭 Tendance moyenne", _fmt_pct(ms.get("tendance_moyenne_pct"), 1)],
             ["🌪 Volatilité moyenne", _fmt_pct(ms.get("volatilite_moyenne_pct"), 1)],
-        ], colWidths=[6.2*cm, 9.4*cm])
+        ], colWidths=[6.2 * cm, 9.4 * cm])
         _style_table_default(mini)
         story.append(mini)
 
@@ -538,19 +550,28 @@ def _add_market_ai_table(story, styles, rows: list[dict] | None, market_ai_summa
         story.append(Spacer(1, 0.25 * cm))
         return
 
-    header = ["Symbole", "Prix", "Signal", "Score", "Tendance (ann.)", "Vol 20j (ann.)", "RSI14", "Lecture"]
+    # --- TABLE PRINCIPALE (SANS LECTURE) ---
+    header = ["Symbole", "Prix", "Signal", "Score", "Tendance (ann.)", "Vol 20j (ann.)", "RSI14"]
     data = [header]
 
+    # On stocke Lecture à part
+    lectures = []  # list[tuple(symbole, lecture_str)]
     for r in rows:
         sym = _safe(r.get("symbol"))
         prix = _fmt_num(r.get("prix"), 3)
+
         sig_raw = _safe(r.get("signal")).upper()
         sig_txt, _ = _badge_for_signal(sig_raw)
+
         score = _fmt_num(r.get("score"), 2)
 
         trend = r.get("tendance_annuelle_pct", r.get("tendance_annuelle_%"))
         vol = r.get("vol20_annuelle_pct", r.get("vol20_annuelle_%"))
         rsi = r.get("rsi14", r.get("RSI14"))
+
+        lec = _safe(r.get("lecture")).strip()
+        if lec:
+            lectures.append((sym, lec))
 
         data.append([
             sym,
@@ -560,12 +581,19 @@ def _add_market_ai_table(story, styles, rows: list[dict] | None, market_ai_summa
             _fmt_pct(trend, 1),
             _fmt_pct(vol, 1),
             _fmt_num(rsi, 1),
-            _safe(r.get("lecture")),
         ])
 
-    col_widths = [2.0*cm, 2.1*cm, 2.6*cm, 1.6*cm, 2.7*cm, 2.7*cm, 1.6*cm, 5.2*cm]
+    col_widths = [2.0 * cm, 2.1 * cm, 2.6 * cm, 1.6 * cm, 2.7 * cm, 2.7 * cm, 1.6 * cm]
     tbl = Table(data, colWidths=col_widths)
     _style_table_default(tbl)
+
+    tbl.setStyle(TableStyle([
+        ("ALIGN", (0, 1), (0, -1), "CENTER"),   # symbole
+        ("ALIGN", (1, 1), (1, -1), "RIGHT"),    # prix
+        ("ALIGN", (2, 1), (2, -1), "CENTER"),   # signal
+        ("ALIGN", (3, 1), (3, -1), "RIGHT"),    # score
+        ("ALIGN", (4, 1), (6, -1), "RIGHT"),    # % + RSI
+    ]))
 
     green = colors.HexColor("#16A34A")
     red = colors.HexColor("#DC2626")
@@ -580,8 +608,76 @@ def _add_market_ai_table(story, styles, rows: list[dict] | None, market_ai_summa
             pass
 
     story.append(tbl)
-    story.append(Spacer(1, 0.35 * cm))
 
+    # --- LECTURE EN DESSOUS (LISTE PREMIUM, PLUS ORGANISÉE) ---
+    if lectures:
+        story.append(Spacer(1, 0.25 * cm))
+        story.append(Paragraph("🧾 Lecture par symbole", styles["h3"]))
+        story.append(Spacer(1, 0.10 * cm))
+
+        def _normalize_lecture(lec: str) -> str:
+            """
+            Transforme: 'NEUTRE • haussière • vol normale'
+            en:         'NEUTRE • tendance haussière • volatilité normale'
+            (si déjà ok, on garde)
+            """
+            s = (lec or "").strip()
+            if not s:
+                return ""
+
+            parts = [p.strip() for p in s.split("•") if p.strip()]
+            if not parts:
+                return s
+
+            # 0) signal
+            sig = parts[0]
+            parts[0] = sig
+
+            # 1) tendance
+            if len(parts) >= 2:
+                t = parts[1]
+                if not t.lower().startswith("tendance"):
+                    t = f"tendance {t}"
+                parts[1] = t
+
+            # 2) volatilité
+            if len(parts) >= 3:
+                v = parts[2]
+                v_low = v.lower()
+
+                if v_low.startswith("vol "):
+                    v = "volatilité " + v[4:].strip()
+                elif v_low.startswith("vol"):
+                    if not v_low.startswith("volatilité"):
+                        v = v.replace("vol", "volatilité", 1).strip()
+                elif not v_low.startswith("volatilité"):
+                    v = f"volatilité {v}"
+
+                parts[2] = v
+
+            return " • ".join(parts)
+
+        bullet_items = []
+        for sym, lec in lectures:
+            nice = _normalize_lecture(lec)
+
+            # rendu "pro" : symbole en gras + lecture sur ligne suivante
+            p = Paragraph(
+                f"<b>{_safe(sym)}</b><br/><font size='9'><b>{nice}</b></font>",
+                styles["normal"]
+            )
+            bullet_items.append(ListItem(p, leftIndent=16, spaceBefore=3, spaceAfter=3))
+
+        story.append(ListFlowable(
+            bullet_items,
+            bulletType="bullet",
+            bulletFontName="Helvetica",
+            bulletFontSize=9,
+            leftIndent=14,
+            bulletDedent=6,
+        ))
+
+    story.append(Spacer(1, 0.35 * cm))
 
 # --------------------------------------------------------------------
 # ✅ Market assets (STRUCTURÉ)
@@ -676,7 +772,8 @@ def generate_daily_report(payload: DailyPdfRequest):
     _add_header(story, styles, payload.generated_at)
 
     _add_dashboard_page(story, styles, payload)
-    _add_executive_summary(story, styles, payload.human_text)
+    # (désactivé) Résumé exécutif : on ne l'inclut plus dans le PDF
+    # _add_executive_summary(story, styles, payload.human_text)
 
     _add_tech_section(story, styles, payload.tech_radar)
     _add_market_ai_table(story, styles, payload.market_ai_rows, payload.market_ai_summary)
