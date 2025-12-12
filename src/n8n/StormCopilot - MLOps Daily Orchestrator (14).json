@@ -237,7 +237,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        1088,
+        1600,
         384
       ]
     },
@@ -261,14 +261,14 @@
     {
       "parameters": {
         "mode": "combine",
-        "combineBy": "combineByPosition",
+        "fieldsToMatchString": "join_key",
         "options": {}
       },
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1056,
-        160
+        1456,
+        80
       ],
       "id": "2f30fbae-ca80-453e-9cee-4515911bf52e",
       "name": "Merge"
@@ -293,7 +293,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1376,
+        1792,
         384
       ],
       "id": "ccca60b1-2ad3-4ea8-98c6-bf7b5b220ef6",
@@ -323,7 +323,7 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [
-        2048,
+        2464,
         208
       ],
       "id": "833e4f03-9d7c-4a80-b73b-133c9c11bccb",
@@ -349,7 +349,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1488,
+        1904,
         64
       ],
       "id": "5d861465-0469-48d6-8344-b664763e1032",
@@ -362,7 +362,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1600,
+        2016,
         384
       ],
       "id": "95809d77-d888-4139-9f04-496209c11dd5",
@@ -397,19 +397,35 @@
             },
             {
               "name": "tech_radar",
-              "value": "={{ $json[\"tech_radar\"] }}"
+              "value": "={{ $json }}"
             },
             {
-              "name": "generated_at",
-              "value": "={{ $json[\"generated_at\"] }}"
+              "name": "market_rows_md",
+              "value": "={{ $json.market_rows_md }}"
+            },
+            {
+              "name": "market_rows_table",
+              "value": "={{ $json.market_rows_table }}"
+            },
+            {
+              "name": "tech_trending",
+              "value": "={{ $json.tech_radar.metrics.trending }}"
+            },
+            {
+              "name": "tech_fresh",
+              "value": "={{ $json.tech_radar.metrics.fresh }}"
             },
             {
               "name": "tech_hot",
               "value": "={{ $json.tech_radar.metrics.hot }}"
             },
             {
-              "name": "tech_trending",
-              "value": "={{ $json.tech_radar.metrics.trending }}"
+              "name": "tech_sources_total",
+              "value": "={{ $json.tech_radar.metrics.sources_total }}"
+            },
+            {
+              "name": "tech_sources_ok",
+              "value": "={{ $json.tech_radar.metrics.sources_ok }}"
             }
           ]
         },
@@ -424,7 +440,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        2048,
+        2464,
         384
       ],
       "id": "9a47cfe5-3330-4e67-bbe6-2f0db4ec2b78",
@@ -466,6 +482,32 @@
       ],
       "id": "e8e5d854-1ce8-40ee-a9a4-403737171596",
       "name": "Normalize Tech Metrics"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node — Add join_key (Tech)\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    join_key: \"daily\"\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        0
+      ],
+      "id": "ee188d76-97c8-40d0-ac83-790b48cde2e9",
+      "name": "set tech"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node — Add join_key (Market)\nreturn items.map(item => ({\n  json: {\n    ...item.json,\n    join_key: \"daily\"\n  }\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        864,
+        272
+      ],
+      "id": "f62ef8e7-2a3f-44a8-94ab-e2755b0e698e",
+      "name": "set market"
     }
   ],
   "pinData": {},
@@ -585,9 +627,9 @@
       "main": [
         [
           {
-            "node": "Merge",
+            "node": "set market",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -607,7 +649,7 @@
       "main": [
         [
           {
-            "node": "Assemble Full Daily",
+            "node": "Build Market Rows",
             "type": "main",
             "index": 0
           }
@@ -635,11 +677,6 @@
         [
           {
             "node": "Format Daily Summary",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Build Market Rows",
             "type": "main",
             "index": 0
           }
@@ -702,7 +739,13 @@
     },
     "Build Market Rows": {
       "main": [
-        []
+        [
+          {
+            "node": "Assemble Full Daily",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Build Human Text Daily": {
@@ -752,9 +795,31 @@
       "main": [
         [
           {
+            "node": "set tech",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "set tech": {
+      "main": [
+        [
+          {
             "node": "Merge",
             "type": "main",
             "index": 0
+          }
+        ]
+      ]
+    },
+    "set market": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
           }
         ]
       ]
@@ -764,7 +829,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "7fae3c58-79f7-4255-990f-906d2d441656",
+  "versionId": "f0213b31-1e47-4fb1-9250-437c7bde3bbe",
   "meta": {
     "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"
   },
