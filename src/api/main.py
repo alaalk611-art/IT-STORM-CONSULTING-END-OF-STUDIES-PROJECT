@@ -28,8 +28,20 @@ from pydantic import BaseModel
 # ---------------------------------------------------------------------
 from src.api import speech_stt, speech_tts
 from src.api import tech_watch
+from fastapi import APIRouter
+from fastapi.responses import FileResponse
+import os
 
-app = FastAPI()
+router = APIRouter()
+#app = FastAPI()
+
+@router.get("/assets/itstorm-logo.png")
+def get_itstorm_logo():
+    # ✅ Mets ici le chemin réel côté MACHINE qui lance FastAPI (Windows)
+    logo_path = r"C:\Users\ALA BEN LAKHAL\Desktop\intelligent_copilot IT-STORM\src\ui\assets\itstorm_logo.png"
+    return FileResponse(logo_path, media_type="image/png", filename="itstorm_logo.png")
+
+
 
 # ---------------------------------------------------------------------
 # Import backend CLI
@@ -359,3 +371,5 @@ app.include_router(pdf.router)
 
 app.include_router(v1)
 app.include_router(tech_watch.router)
+app.include_router(router)
+# src/api
