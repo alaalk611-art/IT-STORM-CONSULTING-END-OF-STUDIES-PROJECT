@@ -86,9 +86,19 @@ scikit-learn>=1.5
 # --- Audio ---
 pydub==0.25.1
 gTTS==2.5.1
-audio-recorder-streamlit==0.0.8
+#audio-recorder-streamlit==0.0.8
 
 pypdf>=3.0.0
 streamlit-javascript
 python-pptx
+streamlit-webrtc
+webrtcvad-wheels
 
+streamlit
+requests
+
+fastapi
+uvicorn[standard]
+python-multipart
+
+faster-whisper

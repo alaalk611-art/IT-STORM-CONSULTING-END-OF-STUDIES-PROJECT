@@ -1677,7 +1677,7 @@ elif selected == "🌍 Market Watch":
     market.render()
 
 elif selected == "🎤 Voice Copilot":
-    speech_chat.render()
+    speech_chat.render_stt_only()
 
 elif selected == "🔎 Veille Techno":
     tech_watch.render()

@@ -1,141 +1,194 @@
 # -*- coding: utf-8 -*-
 # Path: src/api/speech_stt.py
-# Version 2025 — Whisper STT (faster-whisper) stable & robuste
-# - auto mimetype detection
-# - supports wav/mp3/m4a/ogg/webm
-# - micro streamlit (webm) compatible
+# STT API robuste — Micro webm/ogg/m4a -> ffmpeg -> wav 16k mono -> faster-whisper
+# Objectif : transcription stable (anti-hallucination) pour démo PFE
 
 from __future__ import annotations
 
 import os
-import mimetypes
-import warnings
-from tempfile import NamedTemporaryFile
+import re
+import tempfile
+import subprocess
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Query, HTTPException
+from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import JSONResponse
+from faster_whisper import WhisperModel
 
-warnings.filterwarnings("ignore", category=UserWarning)
-
-# Whisper STT model
-try:
-    from faster_whisper import WhisperModel
-except Exception:
-    WhisperModel = None
-
-# 🔹 Router utilisé dans main.py → OBLIGATOIRE
 router = APIRouter()
 
-# Taille modèle (tiny/base/small/medium/large-v2…)
-MODEL_SIZE = os.getenv("WHISPER_MODEL_SIZE", "small")
-
-# Lazy-load global
-_whisper_model: Optional[object] = None
+# Modèle (CPU stable)
+model = WhisperModel("small", device="cpu", compute_type="int8")
 
 
-def _get_whisper_model() -> object:
-    """Chargement lazy du modèle Whisper."""
-    global _whisper_model
+_BAD_PATTERNS = [
+    r"amara\.org",
+    r"sous-?titres.*amara",
+    r"subtitles.*amara",
+]
 
-    if WhisperModel is None:
-        raise RuntimeError("WhisperModel indisponible. Installe faster-whisper.")
+def _looks_like_hallucination(text: str) -> bool:
+    t = (text or "").strip().lower()
+    if not t:
+        return True
+    for p in _BAD_PATTERNS:
+        if re.search(p, t):
+            return True
+    # Trop court / trop générique
+    if len(t) < 3:
+        return True
+    return False
 
-    if _whisper_model is None:
-        _whisper_model = WhisperModel(
-            MODEL_SIZE,
-            device="cpu",
-            compute_type="int8",  # optimisé CPU local
-        )
 
-    return _whisper_model
-
-
-def _detect_ext(filename: str) -> str:
+def _ffmpeg_to_wav16k_mono(src_path: str) -> str:
     """
-    Détecte automatiquement l'extension.
-    Whisper s'attend à un fichier audio local.
+    Convertit n'importe quel audio en WAV mono 16 kHz.
+    Retourne le chemin du wav.
     """
-    ext = os.path.splitext(filename.lower())[1]
-    if ext in {".wav", ".mp3", ".m4a", ".ogg", ".webm"}:
-        return ext
-    return ".wav"  # fallback
+    wav_path = src_path + ".wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", src_path, "-ac", "1", "-ar", "16000", wav_path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=True,
+    )
+    return wav_path
+
+
+def _transcribe_whisper(wav_path: str, lang: Optional[str]) -> str:
+    """
+    Transcription robuste :
+    - 1) VAD soft (réduit bruit)
+    - 2) fallback sans VAD si sortie vide/hallucinée
+    """
+    # 1) tentative avec VAD "soft"
+    segments, info = model.transcribe(
+        wav_path,
+        language=lang if lang else None,
+        task="transcribe",
+        vad_filter=True,
+        vad_parameters={
+            "threshold": 0.3,
+            "min_silence_duration_ms": 250,
+        },
+        beam_size=5,
+        temperature=0.0,
+        condition_on_previous_text=False,
+    )
+    parts = [s.text.strip() for s in segments if getattr(s, "text", "").strip()]
+    text = " ".join(parts).strip()
+
+    if text and not _looks_like_hallucination(text):
+        return text
+
+    # 2) fallback : sans VAD (utile si VAD coupe la voix)
+    segments2, info2 = model.transcribe(
+        wav_path,
+        language=lang if lang else None,
+        task="transcribe",
+        vad_filter=False,
+        beam_size=5,
+        temperature=0.0,
+        condition_on_previous_text=False,
+    )
+    parts2 = [s.text.strip() for s in segments2 if getattr(s, "text", "").strip()]
+    text2 = " ".join(parts2).strip()
+
+    return text2
 
 
 @router.post("/transcribe")
-async def transcribe_audio(
+async def transcribe(
     file: UploadFile = File(...),
-    lang: str = Query("fr", max_length=5, description="Langue attendue (fr, en…)"),
+    lang: str = Query("fr"),
 ):
-    """
-    Transcription audio → texte.
-    Accepte wav/mp3/m4a/ogg/webm.
-    """
-    # Vérification modèle
-    try:
-        model = _get_whisper_model()
-    except RuntimeError as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    raw = await file.read()
+    mime = (file.content_type or "").lower()
+    name = (file.filename or "mic.webm").lower()
 
-    # Vérifier format fichier
-    filename = (file.filename or "").lower()
-    ext = _detect_ext(filename)
+    print("🧪 STT DEBUG:", {"bytes": len(raw), "mime": mime, "filename": name, "lang": lang})
 
-    if ext not in {".wav", ".mp3", ".m4a", ".ogg", ".webm"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Format non supporté. Utilise wav/mp3/m4a/ogg/webm.",
+    if len(raw) < 3000:
+        return JSONResponse(
+            status_code=422,
+            content={"text": "", "warning": "Audio trop court (parle 2–4 secondes)"},
         )
 
-    temp_path = None
-    try:
-        raw = await file.read()
-        if not raw:
-            raise HTTPException(status_code=400, detail="Fichier audio vide.")
+    # Extension adaptée (aide ffmpeg)
+    suffix = ".webm"
+    if name.endswith(".wav") or "wav" in mime:
+        suffix = ".wav"
+    elif name.endswith(".ogg") or "ogg" in mime:
+        suffix = ".ogg"
+    elif name.endswith(".mp3") or "mp3" in mime or "mpeg" in mime:
+        suffix = ".mp3"
+    elif name.endswith(".m4a") or "m4a" in mime or "mp4" in mime:
+        suffix = ".m4a"
 
-        # Créer un fichier temporaire dans le bon format
-        with NamedTemporaryFile(delete=False, suffix=ext) as tmp:
+    src_path = None
+    wav_path = None
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             tmp.write(raw)
-            tmp.flush()
-            temp_path = tmp.name
+            src_path = tmp.name
 
-        # Transcription
-        segments, info = model.transcribe(
-            temp_path,
-            language=lang,
-            beam_size=5,
-        )
+        print("🧪 STT DEBUG: src_path =", src_path)
 
-        text = " ".join(
-            s.text.strip()
-            for s in segments
-            if getattr(s, "text", "").strip()
-        ).strip()
+        # Conversion WAV 16k mono (le plus important)
+        try:
+            wav_path = _ffmpeg_to_wav16k_mono(src_path)
+        except Exception as e:
+            print("❌ FFmpeg convert error:", repr(e))
+            return JSONResponse(
+                status_code=500,
+                content={
+                    "text": "",
+                    "error": "ffmpeg_convert_failed",
+                    "detail": str(e),
+                    "hint": "ffmpeg doit être installé et accessible (ffmpeg -version).",
+                },
+            )
 
-        if not text:
-            raise HTTPException(
+        print("🧪 STT DEBUG: wav_path =", wav_path)
+
+        # Transcription (robuste)
+        try:
+            text = _transcribe_whisper(wav_path, lang)
+        except Exception as e:
+            print("❌ STT transcribe error:", repr(e))
+            return JSONResponse(
+                status_code=500,
+                content={"text": "", "error": "whisper_transcribe_failed", "detail": str(e)},
+            )
+
+        text = (text or "").strip()
+        print("🧪 STT DEBUG: text_len =", len(text))
+
+        # Filtre hallucination / vide
+        if _looks_like_hallucination(text):
+            return JSONResponse(
                 status_code=422,
-                detail="Impossible d’extraire du texte (audio silencieux ou bruité).",
+                content={
+                    "text": "",
+                    "warning": "Aucun texte fiable détecté (bruit/silence ou voix trop faible).",
+                },
             )
 
         return JSONResponse(
-            {
+            status_code=200,
+            content={
                 "text": text,
                 "language": lang,
-                "duration": getattr(info, "duration", None),
-            }
+                "source_mime": mime,
+            },
         )
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Erreur interne STT: {e}",
-        )
     finally:
-        if temp_path and os.path.exists(temp_path):
-            try:
-                os.remove(temp_path)
-            except Exception:
-                pass
+        # Cleanup
+        for p in [wav_path, src_path]:
+            if p:
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
