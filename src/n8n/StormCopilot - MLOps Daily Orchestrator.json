@@ -6,19 +6,19 @@
         "triggerTimes": {
           "item": [
             {
-              "hour": 13,
+              "hour": 1,
               "minute": 25
             }
           ]
         }
       },
-      "id": "4abb08ce-1cae-4014-84dc-b61eddd443b7",
+      "id": "8af9b9cc-478b-4e5a-ab19-c4245636a01d",
       "name": "CRON - Daily 07:30",
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
       "position": [
-        -256,
-        0
+        -8400,
+        144
       ]
     },
     {
@@ -28,13 +28,13 @@
         "responseMode": "responseNode",
         "options": {}
       },
-      "id": "c90f18d0-22e2-4f12-a157-ab6045e9e70d",
+      "id": "4b49acd8-ed6c-4dad-bd68-fbb069b585b2",
       "name": "Webhook mlops-daily-full",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -80,
-        320
+        -8208,
+        -1296
       ],
       "webhookId": "2176ddf8-acfc-4972-a6e0-8085f0926e31"
     },
@@ -54,13 +54,13 @@
           ]
         }
       },
-      "id": "105a1e56-b7dd-4a65-b643-4ea5003d421e",
+      "id": "91fcbcb9-e694-49c3-a40d-7c47e5f590e4",
       "name": "QuickTrain /mlops/train/market",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        688,
-        464
+        -6928,
+        -1312
       ]
     },
     {
@@ -71,13 +71,13 @@
           "timeout": 600000
         }
       },
-      "id": "a5afce05-4278-4790-b437-06bef5ea95e0",
+      "id": "914e8f9d-fdb8-4178-90da-b2304c567de7",
       "name": "Metrics /mlops/metrics/daily",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        960,
-        464
+        -6720,
+        -1312
       ]
     },
     {
@@ -87,13 +87,13 @@
           "timeout": 300000
         }
       },
-      "id": "77341ed1-c97d-4c45-a97d-bdcb521c323b",
+      "id": "f8f669d8-b75d-492f-a9e3-c0d65ff8729a",
       "name": "Get /mlops/champions",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 2,
       "position": [
-        1248,
-        464
+        -6432,
+        -1312
       ]
     },
     {
@@ -103,13 +103,13 @@
         "responseMode": "lastNode",
         "options": {}
       },
-      "id": "ac4992d9-de0d-4059-a31a-46c23bf695c3",
+      "id": "73b59b9e-20ea-4b4e-ae48-47921471d0b9",
       "name": "Webhook Daily Full",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
       "position": [
-        -192,
-        -192
+        -8368,
+        -400
       ],
       "webhookId": "daily-full-itstorm-uuid"
     },
@@ -118,13 +118,13 @@
         "language": "javascript",
         "jsCode": "// Prepare Params\nconst interval = $json.interval || \"1d\";\nconst period = $json.period || \"1y\";\n\nreturn [{\n  json: {\n    interval,\n    period,\n  }\n}];\n"
       },
-      "id": "245baba7-93e8-4fc7-91db-afc8e5a7a190",
+      "id": "ced2350d-3bdb-4ce9-b61e-c449c743b56a",
       "name": "Prepare Params",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        288,
-        -16
+        -8096,
+        -128
       ]
     },
     {
@@ -142,13 +142,13 @@
           ]
         }
       },
-      "id": "4cfdfcbe-8ae8-4dfc-a155-e7e1c5271ae9",
+      "id": "7ac1e2bb-cdad-4d59-aab7-bbf34b5eaffe",
       "name": "Fetch Tech Latest",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        1040,
-        -128
+        -6976,
+        -96
       ]
     },
     {
@@ -156,13 +156,13 @@
         "language": "javascript",
         "jsCode": "const symbols = [\"^FCHI\",\"BNP.PA\",\"AIR.PA\",\"MC.PA\",\"OR.PA\",\"ORA.PA\"];\n\nreturn symbols.map(symbol => ({\n  json: {\n    symbol,\n    interval: $json.interval,\n    period: $json.period,\n  }\n}));\n"
       },
-      "id": "eaaaa221-e054-47c0-9e00-d3af974d359b",
+      "id": "df349285-2e69-4acc-8d10-d4d1208d48f9",
       "name": "Split Symbols",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        528,
-        144
+        -7408,
+        176
       ]
     },
     {
@@ -184,13 +184,13 @@
           ]
         }
       },
-      "id": "7f73bef8-0357-4567-9c7e-f420102de9fd",
+      "id": "9644da6e-1928-4287-af6b-17339c1e51c9",
       "name": "HTTP OHLCV",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        720,
-        144
+        -6880,
+        176
       ],
       "onError": "continueErrorOutput"
     },
@@ -199,13 +199,13 @@
         "language": "javascript",
         "jsCode": "function clamp(x, a, b) { return Math.max(a, Math.min(b, x)); }\n\nfunction rsi14(closes) {\n  const n = 14;\n  if (!Array.isArray(closes) || closes.length < n + 1) return null;\n\n  let gains = 0, losses = 0;\n  const start = closes.length - (n + 1);\n\n  for (let i = start + 1; i < start + 1 + n; i++) {\n    const diff = closes[i] - closes[i - 1];\n    if (diff >= 0) gains += diff;\n    else losses += -diff;\n  }\n  gains /= n; losses /= n;\n\n  for (let i = start + 1 + n; i < closes.length; i++) {\n    const diff = closes[i] - closes[i - 1];\n    const gain = diff > 0 ? diff : 0;\n    const loss = diff < 0 ? -diff : 0;\n    gains = (gains * (n - 1) + gain) / n;\n    losses = (losses * (n - 1) + loss) / n;\n  }\n\n  if (losses === 0) return 100;\n  const rs = gains / losses;\n  return 100 - (100 / (1 + rs));\n}\n\nfunction annualTrendPct(firstClose, lastClose) {\n  if (!Number.isFinite(firstClose) || !Number.isFinite(lastClose) || firstClose === 0) return null;\n  return ((lastClose / firstClose) - 1) * 100;\n}\n\nfunction vol20AnnualPct(closes) {\n  if (!Array.isArray(closes) || closes.length < 21) return null;\n\n  const tail = closes.slice(-21);\n  const rets = [];\n  for (let i = 1; i < tail.length; i++) {\n    const a = tail[i - 1], b = tail[i];\n    if (!Number.isFinite(a) || !Number.isFinite(b) || a <= 0 || b <= 0) continue;\n    rets.push(Math.log(b / a));\n  }\n  if (rets.length < 10) return null;\n\n  const mean = rets.reduce((s, x) => s + x, 0) / rets.length;\n  const varr = rets.reduce((s, x) => s + (x - mean) ** 2, 0) / (rets.length - 1);\n  const dailyStd = Math.sqrt(varr);\n  const annStd = dailyStd * Math.sqrt(252);\n  return annStd * 100;\n}\n\nfunction signalFrom(trendPct, rsi) {\n  if (!Number.isFinite(trendPct) || !Number.isFinite(rsi)) return \"NEUTRE\";\n  if (trendPct > 2 && rsi < 70) return \"ACHAT\";\n  if (trendPct < -2 && rsi > 30) return \"VENTE\";\n  return \"NEUTRE\";\n}\n\nfunction scoreFrom(trendPct, rsi, volPct) {\n  if (!Number.isFinite(trendPct) || !Number.isFinite(rsi) || !Number.isFinite(volPct)) return 0;\n  const t = clamp(trendPct / 10, -3, 3);\n  const r = clamp((50 - rsi) / 12.5, -2, 2) * -1;\n  const v = clamp((20 - volPct) / 20, -1, 1) * 0.8;\n  return clamp(t + r + v, -5, 5);\n}\n\nfunction lectureText(signal, trendPct, volPct) {\n  const t =\n    !Number.isFinite(trendPct) ? \"tendance inconnue\"\n    : trendPct > 3 ? \"tendance haussière\"\n    : trendPct < -3 ? \"tendance baissière\"\n    : \"tendance neutre\";\n\n  const v =\n    !Number.isFinite(volPct) ? \"volatilité inconnue\"\n    : volPct < 15 ? \"volatilité calme\"\n    : volPct < 25 ? \"volatilité normale\"\n    : \"volatilité élevée\";\n\n  return `${signal} • ${t} • ${v}`;\n}\n\n// ---------------------------------------------\n\nconst rows = [];\nconst assets = [];\nlet achat = 0, vente = 0, neutre = 0;\n\nfor (const it of items) {\n  const j = it.json || {};\n  const symbol = j.symbol || \"UNKNOWN\";\n\n  if (j.error) {\n    assets.push({\n      symbol,\n      status: \"error\",\n      warning: j.error,\n      nb_candles: j.meta?.nb_candles ?? null,\n      source: j.meta?.source ?? null,\n      interval: j.meta?.interval ?? null,\n      period: j.meta?.period ?? null,\n    });\n    continue;\n  }\n\n  const lastClose = j.last_close;\n  const firstClose = j.first_close;\n  const closes60 = j.closes_60 || [];\n\n  const rsi = rsi14(closes60);\n  const trendPct = annualTrendPct(firstClose, lastClose);\n  const volPct = vol20AnnualPct(closes60);\n\n  const signal = signalFrom(trendPct, rsi);\n  const score = scoreFrom(trendPct, rsi, volPct);\n  const lecture = lectureText(signal, trendPct, volPct);\n\n  if (signal === \"ACHAT\") achat++;\n  else if (signal === \"VENTE\") vente++;\n  else neutre++;\n\n  rows.push({\n    symbol,\n    prix: Number.isFinite(lastClose) ? +lastClose.toFixed(6) : null,\n    signal,\n    score: +score.toFixed(6),\n    tendance_annuelle_pct: Number.isFinite(trendPct) ? +trendPct.toFixed(6) : null,\n    vol20_annuelle_pct: Number.isFinite(volPct) ? +volPct.toFixed(6) : null,\n    rsi14: Number.isFinite(rsi) ? +rsi.toFixed(6) : null,\n    lecture\n  });\n\n  assets.push({\n    symbol,\n    status: \"ok\",\n    nb_candles: j.meta?.nb_candles ?? null,\n    source: j.meta?.source ?? null,\n    interval: j.meta?.interval ?? null,\n    period: j.meta?.period ?? null,\n    warning: null\n  });\n}\n\nrows.sort((a, b) => (b.score ?? -999) - (a.score ?? -999));\n\nconst validTrend = rows.map(r => r.tendance_annuelle_pct).filter(Number.isFinite);\nconst validVol = rows.map(r => r.vol20_annuelle_pct).filter(Number.isFinite);\n\nconst avgTrend = validTrend.length ? validTrend.reduce((s,x)=>s+x,0)/validTrend.length : null;\nconst avgVol = validVol.length ? validVol.reduce((s,x)=>s+x,0)/validVol.length : null;\n\nconst summary = {\n  nb_assets: rows.length,\n  achat,\n  vente,\n  neutre,\n  tendance_moyenne_pct: Number.isFinite(avgTrend) ? +avgTrend.toFixed(1) : null,\n  volatilite_moyenne_pct: Number.isFinite(avgVol) ? +avgVol.toFixed(1) : null,\n  text: (() => {\n    const t = Number.isFinite(avgTrend) ? `${avgTrend.toFixed(1)} %` : \"N/A\";\n    const v = Number.isFinite(avgVol) ? `${avgVol.toFixed(1)} %` : \"N/A\";\n    return `Le marché apparaît équilibré, avec une tendance moyenne de ${t} par an et une volatilité moyenne autour de ${v}.`;\n  })(),\n  generated_at: new Date().toISOString()\n};\n\nreturn [{\n  json: {\n    market_ai_summary: summary,\n    market_ai_rows: rows,\n    market_radar_assets: assets\n  }\n}];\n"
       },
-      "id": "e43814c2-ef6e-41e1-b627-e9c904ee10e2",
+      "id": "6d2720d4-54ff-47a9-a161-4f518d411921",
       "name": "Build Market Radar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        1456,
-        144
+        -6144,
+        176
       ]
     },
     {
@@ -213,13 +213,13 @@
         "language": "javascript",
         "jsCode": "// n8n Function node: \"Assemble Full Daily\" ✅\n// Version robuste + FIX TechRadar root + NORMALISATION MLOps\n\n// --- helpers ---\nfunction isObj(v) {\n  return v && typeof v === \"object\" && !Array.isArray(v);\n}\n\nfunction deepMerge(target, src) {\n  if (!isObj(src)) return target;\n\n  for (const [k, v] of Object.entries(src)) {\n    if (v === undefined || v === null) continue;\n\n    if (Array.isArray(v)) {\n      const cur = target[k];\n      if (!Array.isArray(cur) || v.length >= cur.length) target[k] = v;\n      continue;\n    }\n\n    if (isObj(v)) {\n      if (!isObj(target[k])) target[k] = {};\n      deepMerge(target[k], v);\n      continue;\n    }\n\n    target[k] = v;\n  }\n  return target;\n}\n\nfunction pickFirst(obj, keys, fallback = null) {\n  for (const k of keys) {\n    if (obj && obj[k] !== undefined && obj[k] !== null) return obj[k];\n  }\n  return fallback;\n}\n\nfunction normalize(out) {\n  // --- TECH ---\n  out.tech_radar = pickFirst(out, [\"tech_radar\", \"techRadar\", \"tech\"], null);\n\n  // --- MARKET ---\n  out.market_ai_summary = pickFirst(out, [\"market_ai_summary\", \"market_summary\"], null);\n  out.market_ai_rows = pickFirst(out, [\"market_ai_rows\", \"market_rows_table\"], []);\n  out.market_radar_assets = pickFirst(out, [\"market_radar_assets\", \"market_assets\", \"assets\"], []);\n\n  out.market_rows_md = pickFirst(\n    out,\n    [\"market_rows_md\", \"marketRowsMd\", \"market_rows_markdown\"],\n    out.market_rows_md\n  );\n\n  // --- MLOps ---\n  out.mlops_summary = pickFirst(out, [\"mlops_summary\"], null);\n  out.mlops_kpis = pickFirst(out, [\"mlops_kpis\"], null);\n  out.mlops_decision = pickFirst(out, [\"mlops_decision\"], null);\n  out.mlops_champions_rows = pickFirst(\n    out,\n    [\"mlops_champions_rows\", \"champions\", \"mlops_champions\"],\n    []\n  );\n\n  // --- FIX Tech Radar root ---\n  const looksLikeTechRadarRoot =\n    out.tech_radar === null &&\n    out.type === \"tech_radar\" &&\n    isObj(out.metrics);\n\n  if (looksLikeTechRadarRoot) {\n    out.tech_radar = {\n      type: out.type,\n      status: out.status,\n      quality: out.quality,\n      headline: out.headline,\n      fetched_at: out.fetched_at,\n      metrics: out.metrics,\n      _raw: out._raw,\n    };\n\n    delete out.type;\n    delete out.status;\n    delete out.quality;\n    delete out.headline;\n    delete out.fetched_at;\n    delete out.metrics;\n    delete out._raw;\n    delete out.join_key;\n  }\n\n  // --- Standard ---\n  out.workflow = out.workflow || \"StormCopilot Daily Full\";\n  out.generated_at = out.generated_at || new Date().toISOString();\n\n  // --- Sécu types ---\n  if (!Array.isArray(out.market_ai_rows)) out.market_ai_rows = [];\n  if (!Array.isArray(out.market_radar_assets)) out.market_radar_assets = [];\n  if (!Array.isArray(out.mlops_champions_rows)) out.mlops_champions_rows = [];\n\n  return out;\n}\n\n// --- FUSION ---\nlet merged = {};\nfor (const it of items) {\n  if (it?.json) deepMerge(merged, it.json);\n}\n\nconst out = normalize(merged);\nreturn [{ json: out }];\n"
       },
-      "id": "cc6b2b06-9f72-45f9-9b41-36b7c9bcb11d",
+      "id": "94d57092-df5d-4d4d-b7cb-59270d715a7e",
       "name": "Assemble Full Daily",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        2480,
-        -144
+        -4784,
+        -304
       ]
     },
     {
@@ -230,13 +230,13 @@
           "timeout": 180000
         }
       },
-      "id": "989218b3-0765-4d28-a2a5-8dde7b13869e",
+      "id": "b3fc3d89-fd69-488a-8026-ee418c3cd47a",
       "name": "Refresh Tech Watch",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
       "position": [
-        544,
-        -128
+        -7424,
+        -96
       ]
     },
     {
@@ -248,10 +248,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1936,
+        -5600,
         -96
       ],
-      "id": "c39c2d8f-23e6-4448-b5b9-c75136cabcf5",
+      "id": "b6c2ce84-f72b-47c7-bf77-abf4da33b1bd",
       "name": "Merge"
     },
     {
@@ -261,54 +261,24 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
-        464
+        -5472,
+        -1312
       ],
-      "id": "38651632-4246-4f19-9414-a0f2b055498c",
+      "id": "1724d01f-1250-4383-af6f-3316c1ecd2e9",
       "name": "Format MLOps Champions"
     },
     {
       "parameters": {
-        "jsCode": "// n8n Function node: \"Format Daily Summary\" ✅\n// Version complète avec section MLOps\n\nconst d = items[0]?.json || {};\nconst generatedAt = d.generated_at || new Date().toISOString();\n\n// ---------------- TECH RADAR ----------------\nconst tech = d.tech_radar || {};\nconst techMetrics = tech.metrics || {};\nconst techQuality = tech.quality || (tech.status === \"ok\" ? \"✅ Complet\" : \"⚠️ Incomplet\");\nconst techHeadline = tech.headline || \"\";\nconst techFetched = tech.fetched_at || \"\";\n\nconst sourcesOk = techMetrics.sources_ok ?? techMetrics.nb_ok ?? 0;\nconst sourcesTotal = techMetrics.sources_total ?? 0;\nconst hot = techMetrics.hot ?? 0;\nconst trending = techMetrics.trending ?? 0;\nconst fresh = techMetrics.fresh ?? 0;\n\n// ---------------- MARKET ----------------\nconst msum = d.market_ai_summary || {};\nconst nbAssets = msum.nb_assets ?? d.market_ai_rows.length;\nconst achat = msum.achat ?? 0;\nconst vente = msum.vente ?? 0;\nconst neutre = msum.neutre ?? 0;\nconst trend = msum.tendance_moyenne_pct ?? null;\nconst vol = msum.volatilite_moyenne_pct ?? null;\nconst synth = msum.text || \"\";\n\nconst interval = d.market_radar_assets?.[0]?.interval || \"\";\nconst period = d.market_radar_assets?.[0]?.period || \"\";\n\nconst marketRowsMd = d.market_rows_md || \"_Aucune ligne IA._\";\n\n// Assets table\nlet assetsMd = \"\";\nif (d.market_radar_assets?.length) {\n  assetsMd += `| Symbole | Nb. bougies | Source | Intervalle | Période |\\n`;\n  assetsMd += `|---|---:|---|---|---|\\n`;\n  for (const a of d.market_radar_assets) {\n    assetsMd += `| ${a.symbol} | ${a.nb_candles} | ${a.source} | ${a.interval} | ${a.period} |\\n`;\n  }\n} else {\n  assetsMd = \"_Aucun asset._\";\n}\n\n// ---------------- MLOps ----------------\nconst mk = d.mlops_kpis || {};\nconst mdc = d.mlops_decision || {};\nconst champs = Array.isArray(d.mlops_champions_rows) ? d.mlops_champions_rows : [];\n\nlet mlopsTable = \"_Aucun champion MLOps._\";\nif (champs.length) {\n  mlopsTable = `| Symbole | Silhouette | AE recon | Score | run_id |\\n`;\n  mlopsTable += `|---|---:|---:|---:|---|\\n`;\n  for (const c of champs) {\n    mlopsTable += `| ${c.symbol} | ${c.silhouette?.toFixed(3)} | ${c.ae_reconstruction?.toFixed(3)} | ${c.score?.toFixed(3)} | ${c.run_id} |\\n`;\n  }\n}\n\n// ---------------- MARKDOWN FINAL ----------------\nconst md =\n`# 📊 StormCopilot – Rapport quotidien\n\nGénéré automatiquement par **StormCopilot** (n8n + FastAPI).\n\n## 📡 Tech Radar – Veille technologique\n${techHeadline ? `> ${techHeadline}\\n` : \"\"}\n\n| Indicateur | Valeur |\n|---|---|\n| Qualité globale | ${techQuality} |\n| Sources actives | ${sourcesOk} / ${sourcesTotal} |\n| Hot | ${hot} |\n| Trending | ${trending} |\n| Fresh | ${fresh} |\n\n${techFetched ? `Dernière collecte : ${techFetched}\\n` : \"\"}\n\n## 📈 Market Radar – Analyse des actifs (IA)\n\n| Indicateur | Valeur |\n|---|---|\n| Actifs analysés | ${nbAssets} |\n| ACHAT | ${achat} |\n| VENTE | ${vente} |\n| NEUTRE | ${neutre} |\n| Tendance moyenne | ${trend !== null ? `${trend}%` : \"\"} |\n| Volatilité moyenne | ${vol !== null ? `${vol}%` : \"\"} |\n| Intervalle | ${interval} |\n| Période | ${period} |\n\n${synth ? `> ${synth}\\n` : \"\"}\n\n### Détail IA par symbole\n${marketRowsMd}\n\n### Données marché\n${assetsMd}\n\n## 🧠 MLOps – Monitoring & décision\n\n| Indicateur | Valeur |\n|---|---|\n| Pipeline | ${mk.pipeline_status || \"—\"} |\n| Champions | ${mk.nb_champions ?? \"—\"} |\n| Drift moyen | ${mdc.drift_avg?.toFixed(3) ?? \"—\"} |\n| Drift max | ${mdc.drift_max?.toFixed(3) ?? \"—\"} |\n| Retrain recommandé | ${mdc.retrain_recommended ? \"OUI\" : \"NON\"} |\n\n### Champions MLOps\n${mlopsTable}\n\n---\n\nDernière exécution : ${generatedAt}\n`;\n\nreturn [{ json: { ...d, summary_text: md } }];\n"
+        "jsCode": "// n8n Function node: \"Format Daily Summary\" ✅\n// Version complète avec Tech Digest + MLOps + fixes safe\n\nconst d = items[0]?.json || {};\nconst generatedAt = d.generated_at || new Date().toISOString();\n\nfunction f3(x) {\n  const v = Number(x);\n  return Number.isFinite(v) ? v.toFixed(3) : \"—\";\n}\n\n// ---------------- TECH RADAR ----------------\nconst tech = d.tech_radar || {};\nconst techMetrics = tech.metrics || {};\nconst techQuality = tech.quality || (tech.status === \"ok\" ? \"✅ Complet\" : \"⚠️ Incomplet\");\nconst techHeadline = tech.headline || \"\";\nconst techFetched = tech.fetched_at || \"\";\nconst techDigestMd = tech.tech_digest_md || \"\";\n\nconst sourcesOk = techMetrics.sources_ok ?? techMetrics.nb_ok ?? 0;\nconst sourcesTotal = techMetrics.sources_total ?? 0;\nconst hot = techMetrics.hot ?? 0;\nconst trending = techMetrics.trending ?? 0;\nconst fresh = techMetrics.fresh ?? 0;\n\n// ---------------- MARKET ----------------\nconst msum = d.market_ai_summary || {};\nconst marketRowsArr = Array.isArray(d.market_ai_rows) ? d.market_ai_rows : [];\n\nconst nbAssets = msum.nb_assets ?? marketRowsArr.length;\nconst achat = msum.achat ?? 0;\nconst vente = msum.vente ?? 0;\nconst neutre = msum.neutre ?? 0;\nconst trend = msum.tendance_moyenne_pct ?? null;\nconst vol = msum.volatilite_moyenne_pct ?? null;\nconst synth = msum.text || \"\";\n\nconst interval = d.market_radar_assets?.[0]?.interval || \"\";\nconst period = d.market_radar_assets?.[0]?.period || \"\";\n\nconst marketRowsMd = d.market_rows_md || \"_Aucune ligne IA._\";\n\n// Assets table\nlet assetsMd = \"\";\nif (d.market_radar_assets?.length) {\n  assetsMd += `| Symbole | Nb. bougies | Source | Intervalle | Période |\\n`;\n  assetsMd += `|---|---:|---|---|---|\\n`;\n  for (const a of d.market_radar_assets) {\n    assetsMd += `| ${a.symbol} | ${a.nb_candles} | ${a.source} | ${a.interval} | ${a.period} |\\n`;\n  }\n} else {\n  assetsMd = \"_Aucun asset._\";\n}\n\n// ---------------- MLOps ----------------\nconst mk = d.mlops_kpis || {};\nconst mdc = d.mlops_decision || {};\nconst champs = Array.isArray(d.mlops_champions_rows) ? d.mlops_champions_rows : [];\n\nlet mlopsTable = \"_Aucun champion MLOps._\";\nif (champs.length) {\n  mlopsTable = `| Symbole | Silhouette | AE recon | Score | run_id |\\n`;\n  mlopsTable += `|---|---:|---:|---:|---|\\n`;\n  for (const c of champs) {\n    mlopsTable += `| ${c.symbol} | ${f3(c.silhouette)} | ${f3(c.ae_reconstruction)} | ${f3(c.score)} | ${c.run_id} |\\n`;\n  }\n}\n\n// ---------------- MARKDOWN FINAL ----------------\nconst md =\n`# 📊 StormCopilot – Rapport quotidien\n\nGénéré automatiquement par **StormCopilot** (n8n + FastAPI).\n\n## 📡 Tech Radar – Veille technologique\n${techHeadline ? `> ${techHeadline}\\n` : \"\"}\n\n| Indicateur | Valeur |\n|---|---|\n| Qualité globale | ${techQuality} |\n| Sources actives | ${sourcesOk} / ${sourcesTotal} |\n| Hot | ${hot} |\n| Trending | ${trending} |\n| Fresh | ${fresh} |\n\n${techDigestMd ? `\\n${techDigestMd}\\n` : \"\"}\n\n${techFetched ? `Dernière collecte : ${techFetched}\\n` : \"\"}\n## 📈 Market Radar – Analyse des actifs (IA)\n\n| Indicateur | Valeur |\n|---|---|\n| Actifs analysés | ${nbAssets} |\n| ACHAT | ${achat} |\n| VENTE | ${vente} |\n| NEUTRE | ${neutre} |\n| Tendance moyenne | ${trend !== null ? `${trend}%` : \"\"} |\n| Volatilité moyenne | ${vol !== null ? `${vol}%` : \"\"} |\n| Intervalle | ${interval} |\n| Période | ${period} |\n\n${synth ? `> ${synth}\\n` : \"\"}\n\n### Détail IA par symbole\n${marketRowsMd}\n\n### Données marché\n${assetsMd}\n\n## 🧠 MLOps – Monitoring & décision\n\n| Indicateur | Valeur |\n|---|---|\n| Pipeline | ${mk.pipeline_status || \"—\"} |\n| Champions | ${mk.nb_champions ?? \"—\"} |\n| Drift moyen | ${mdc.drift_avg !== undefined && mdc.drift_avg !== null ? f3(mdc.drift_avg) : \"—\"} |\n| Drift max | ${mdc.drift_max !== undefined && mdc.drift_max !== null ? f3(mdc.drift_max) : \"—\"} |\n| Retrain recommandé | ${mdc.retrain_recommended ? \"OUI\" : \"NON\"} |\n\n### Champions MLOps\n${mlopsTable}\n\n---\n\nDernière exécution : ${generatedAt}\n`;\n\nreturn [{ json: { ...d, summary_text: md } }];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2672,
-        -144
+        -4592,
+        -304
       ],
-      "id": "4fbb0b27-d1c3-4951-a240-1d4df3c2227f",
+      "id": "9d694d0d-0dca-443a-9e83-339ce1f205bd",
       "name": "Format Daily Summary"
-    },
-    {
-      "parameters": {
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
-      "position": [
-        2912,
-        560
-      ],
-      "id": "ff4af536-c583-4df3-8b37-1a1ebab4d149",
-      "name": "Webhook mlops-daily-full1"
-    },
-    {
-      "parameters": {
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
-      "position": [
-        3152,
-        -240
-      ],
-      "id": "3cee444e-d07f-4b47-9beb-9ab580da3e9d",
-      "name": "Respond to Webhook"
     },
     {
       "parameters": {
@@ -317,10 +287,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2304,
-        -144
+        -4960,
+        -304
       ],
-      "id": "6aa2a739-23d8-4502-aaea-808ef08420e7",
+      "id": "ddac622a-e1b2-4f77-a1e2-e306684b53d2",
       "name": "Build Market Rows"
     },
     {
@@ -330,10 +300,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2896,
-        -144
+        -4368,
+        -304
       ],
-      "id": "3536ad2a-86b3-4a14-9bc5-30ac5271961e",
+      "id": "021c1c54-6259-4c05-9345-5eb8cdd07278",
       "name": "Build Human Text Daily"
     },
     {
@@ -420,10 +390,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        3168,
-        -16
+        -3872,
+        16
       ],
-      "id": "dc60d532-dfcb-41cb-96f8-fe1b524ff437",
+      "id": "d365c322-609f-442a-83f2-a83d6ede0bb1",
       "name": "Generate Daily PDF"
     },
     {
@@ -431,10 +401,10 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        1264,
-        144
+        -6336,
+        176
       ],
-      "id": "dae0d9a2-da02-4270-921b-c775ff7591dc",
+      "id": "9b0abb08-60ec-4100-99ec-329103f2359a",
       "name": "Merge1"
     },
     {
@@ -444,23 +414,23 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1024,
-        144
+        -6576,
+        176
       ],
-      "id": "704ceaaf-3eb1-406b-a9f5-2a64bfb2727c",
+      "id": "d2d1f280-30a5-4a7b-adf4-3917bf71ef16",
       "name": "compress OHCLV1"
     },
     {
       "parameters": {
-        "jsCode": "// Normalize Tech Metrics (fix: handle {status,count,items} from /tech/watch/latest)\n// Mode: Run Once for All Items\n\nfunction pick(obj, paths, fallback = undefined) {\n  for (const p of paths) {\n    const v = p.split(\".\").reduce((a, k) => (a && a[k] !== undefined ? a[k] : undefined), obj);\n    if (v !== undefined && v !== null) return v;\n  }\n  return fallback;\n}\n\nconst in0 = items[0]?.json || {};\n\n// Si l'input est déjà enveloppé (rare)\nconst raw = in0._raw ? in0._raw : (in0.type === \"tech_radar\" ? in0 : in0);\n\n// Cas standard backend: { status, count, items: [...] }\nconst list = Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data?.items) ? raw.data.items : []);\nconst sources_total = Number(pick(raw, [\"count\", \"metrics.sources_total\", \"metrics.nb_ok\"], list.length)) || list.length;\n\n// sources_ok : si backend ne fournit pas nb_ok, on considère ok = total si status ok\nlet sources_ok = Number(pick(raw, [\"nb_ok\", \"metrics.sources_ok\", \"metrics.nb_ok\"], NaN));\nif (!Number.isFinite(sources_ok)) sources_ok = (raw.status === \"ok\" ? sources_total : 0);\n\n// Compute Hot/Trending/Fresh depuis rank_label\nconst hot = list.filter(x => String(x.rank_label || \"\").includes(\"Hot\")).length;\nconst trending = list.filter(x => String(x.rank_label || \"\").includes(\"Trending\")).length;\nconst fresh = list.filter(x => String(x.rank_label || \"\").includes(\"Fresh\")).length;\n\n// Headline : si pas fourni, on le fabrique depuis le top item\nlet headline = pick(raw, [\"headline\", \"title\"], \"\");\nif (!headline || headline.trim().length < 3) {\n  const top = list[0];\n  if (top) {\n    const src = top.source_name || \"Source\";\n    const txt = (top.short_summary || top.tw_summary_2_sent || top.summary || \"\").replace(/\\s+/g, \" \").trim();\n    headline = txt ? `${src} : ${txt.slice(0, 120)}${txt.length > 120 ? \"…\" : \"\"}` : (top.url || \"Aucun titre disponible\");\n  } else {\n    headline = \"Aucun titre disponible\";\n  }\n}\n\nconst quality = (sources_total > 0 && sources_ok === sources_total) ? \"✅ Complet\" : \"🟡 Partiel\";\nconst fetched_at = pick(raw, [\"fetched_at\", \"generated_at\"], new Date().toISOString());\n\nreturn [{\n  json: {\n    type: \"tech_radar\",\n    status: raw.status || \"ok\",\n    quality,\n    headline,\n    fetched_at,\n    metrics: { sources_ok, sources_total, hot, trending, fresh },\n    _raw: raw, // debug\n  }\n}];\n"
+        "jsCode": "// Normalize Tech Metrics (fix: handle {status,count,items} from /tech/watch/latest)\n// Mode: Run Once for All Items\n\nfunction pick(obj, paths, fallback = undefined) {\n  for (const p of paths) {\n    const v = p.split(\".\").reduce((a, k) => (a && a[k] !== undefined ? a[k] : undefined), obj);\n    if (v !== undefined && v !== null) return v;\n  }\n  return fallback;\n}\n\nconst in0 = items[0]?.json || {};\n\n// Si l'input est déjà enveloppé (rare)\nconst raw = in0._raw ? in0._raw : (in0.type === \"tech_radar\" ? in0 : in0);\n\n// Cas standard backend: { status, count, items: [...] }\nconst list = Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data?.items) ? raw.data.items : []);\nconst sources_total = Number(pick(raw, [\"count\", \"metrics.sources_total\", \"metrics.nb_ok\"], list.length)) || list.length;\n\n// sources_ok : si backend ne fournit pas nb_ok, on considère ok = total si status ok\nlet sources_ok = Number(pick(raw, [\"nb_ok\", \"metrics.sources_ok\", \"metrics.nb_ok\"], NaN));\nif (!Number.isFinite(sources_ok)) sources_ok = (raw.status === \"ok\" ? sources_total : 0);\n\n// Compute Hot/Trending/Fresh depuis rank_label\nconst hot = list.filter(x => String(x.rank_label || \"\").includes(\"Hot\")).length;\nconst trending = list.filter(x => String(x.rank_label || \"\").includes(\"Trending\")).length;\nconst fresh = list.filter(x => String(x.rank_label || \"\").includes(\"Fresh\")).length;\n\n// Headline : si pas fourni, on le fabrique depuis le top item\nlet headline = pick(raw, [\"headline\", \"title\"], \"\");\nif (!headline || headline.trim().length < 3) {\n  const top = list[0];\n  if (top) {\n    const src = top.source_name || \"Source\";\n    const txt = (top.short_summary || top.tw_summary_2_sent || top.summary || \"\").replace(/\\s+/g, \" \").trim();\n    headline = txt ? `${src} : ${txt.slice(0, 120)}${txt.length > 120 ? \"…\" : \"\"}` : (top.url || \"Aucun titre disponible\");\n  } else {\n    headline = \"Aucun titre disponible\";\n  }\n}\n\nconst quality = (sources_total > 0 && sources_ok === sources_total) ? \"✅ Complet\" : \"🟡 Partiel\";\nconst fetched_at = pick(raw, [\"fetched_at\", \"generated_at\"], new Date().toISOString());\n\nreturn [{\n  json: {\n    type: \"tech_radar\",\n    status: raw.status || \"ok\",\n    quality,\n    headline,\n    fetched_at,\n    metrics: { sources_ok, sources_total, hot, trending, fresh },\n    _raw: { ...raw, items: list }, // debug + garantit items\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1216,
-        -128
+        -6624,
+        -112
       ],
-      "id": "3ed47194-bac8-49ba-9478-fcfcd21458a5",
+      "id": "b406d353-152d-42c5-9ef5-7d732bcb6b37",
       "name": "Normalize Tech Metrics"
     },
     {
@@ -470,10 +440,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1440,
-        -128
+        -5808,
+        -112
       ],
-      "id": "893ae27c-e476-4d2f-be73-410701d3b7d1",
+      "id": "299ed0bf-156c-4fd0-a17f-6efda15ebbd0",
       "name": "set tech"
     },
     {
@@ -483,10 +453,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1664,
-        144
+        -5936,
+        176
       ],
-      "id": "c9798edb-2f83-4145-89b6-3769703451fc",
+      "id": "f1cf14bd-a491-4b56-8e03-5fff27db81a4",
       "name": "set market"
     },
     {
@@ -496,10 +466,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1552,
-        464
+        -6128,
+        -1312
       ],
-      "id": "1e0ca097-f28d-46f3-898e-85d4a3550276",
+      "id": "2d9944d4-83ef-44c6-92d6-465e11d15bef",
       "name": "MLOps Executive Pack"
     },
     {
@@ -509,10 +479,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1920,
-        464
+        -5760,
+        -1312
       ],
-      "id": "1f6f0df4-425f-450d-90ea-047b69748be2",
+      "id": "26b28086-4ce9-429b-8074-f7bbb8b81d3c",
       "name": "Build Summary"
     },
     {
@@ -524,10 +494,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        912,
+        -7440,
         -304
       ],
-      "id": "a7789507-6842-4a83-bf2d-eaabe828de4f",
+      "id": "9f260584-4da0-4870-819b-637c7ae36f4b",
       "name": "Fetch MLOps Executive (mlops-daily-full)",
       "onError": "continueErrorOutput"
     },
@@ -538,10 +508,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        1904,
+        -5840,
         -288
       ],
-      "id": "2934cae4-f82c-44f4-a63e-01ed6145cd76",
+      "id": "524518f0-078c-4a50-ad43-ef2e8dcec89b",
       "name": "set mlops"
     },
     {
@@ -553,40 +523,11 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        2128,
+        -5408,
         -304
       ],
-      "id": "537f922f-652b-4229-99ef-0c22a5c5c5b1",
+      "id": "18868156-b72a-4976-9755-fa2dee903881",
       "name": "Merge2"
-    },
-    {
-      "parameters": {
-        "sendTo": "alaalakhal611@gmail.com",
-        "subject": "📊 StormCopilot – Rapport quotidien",
-        "message": "=<div style=\"font-family: Arial, Helvetica, sans-serif; color:#1f2937; line-height:1.6;\">\n\n  <h2 style=\"color:#0f4c81; margin-bottom:5px;\">\n    📊 StormCopilot — Rapport quotidien\n  </h2>\n<hr style=\"margin-top:24px;border:none;border-top:1px solid #e5e7eb;\" />\n<p style=\"font-size:11px;color:#6b7280;\">\n  StormCopilot • ALERT<br/>\n  Severity: {{ $json.severity || \"INFO\" }}<br/>\n  Run ID: {{ $json.run_id || $execution.id }}<br/>\n  Generated at: {{ new Date().toISOString() }}\n</p>\n\n\n  <p style=\"color:#6b7280; margin-top:0; font-size:13px;\">\n    Généré automatiquement le {{ $json.generated_at }}\n  </p>\n\n  <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:20px 0;\" />\n\n  <p>Bonjour,</p>\n\n  <p>\n    Veuillez trouver en pièce jointe le\n    <strong>rapport quotidien StormCopilot</strong>,\n    regroupant les analyses clés issues de vos pipelines\n    <strong>Data, IA et MLOps</strong>.\n  </p>\n\n  <!-- Bloc aperçu rapide -->\n  <div style=\"background:#f8fafc; padding:15px; border-radius:6px; margin:20px 0;\">\n    <strong style=\"color:#0f4c81;\">📌 Aperçu rapide</strong><br/><br/>\n    📊 Actifs analysés : <strong>{{ $json.market_ai_summary.nb_assets }}</strong><br/>\n    📈 Signaux Achat : <strong>{{ $json.market_ai_summary.achat }}</strong><br/>\n    📉 Signaux Vente : <strong>{{ $json.market_ai_summary.vente }}</strong><br/>\n    📊 Tendance moyenne : <strong>{{ $json.market_ai_summary.tendance_moyenne_pct }} %</strong><br/>\n    🌪️ Volatilité moyenne : <strong>{{ $json.market_ai_summary.volatilite_moyenne_pct }} %</strong>\n  </div>\n\n  <p>Ce rapport inclut notamment :</p>\n\n  <ul>\n    <li>📈 Analyse du marché (signaux, tendances, volatilité)</li>\n    <li>🧠 Synthèse IA & MLOps (modèles, performances, champions)</li>\n    <li>📰 Veille technologique (Hot / Trending / Fresh)</li>\n  </ul>\n\n  <p>\n    Le document joint est au format PDF pour une lecture et un partage facilités.\n  </p>\n\n  <p style=\"margin-top:25px;\">\n    Cordialement,<br/>\n    <strong>StormCopilot</strong><br/>\n    <span style=\"color:#6b7280; font-size:12px;\">\n      Automated Intelligence & Monitoring\n    </span>\n  </p>\n\n  <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:30px 0;\" />\n\n  <p style=\"font-size:11px; color:#9ca3af;\">\n    Ce message a été envoyé automatiquement via n8n.\n  </p>\n\n</div>\n",
-        "options": {
-          "attachmentsUi": {
-            "attachmentsBinary": [
-              {}
-            ]
-          }
-        }
-      },
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        3808,
-        -16
-      ],
-      "id": "06dfffb3-841d-441a-a112-81f57cc5f02f",
-      "name": "Send a message",
-      "webhookId": "7ec44bee-4022-4edc-9a3b-9601001e3e16",
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "DvSKAKQRnMta8oyc",
-          "name": "n8n email copilot"
-        }
-      }
     },
     {
       "parameters": {
@@ -624,10 +565,10 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        3600,
-        -16
+        -3488,
+        16
       ],
-      "id": "f2544321-2cdd-4450-bd99-53297dc8a427",
+      "id": "96dad2e3-ddcf-4256-9943-35fb8011d2a3",
       "name": "prepare email"
     },
     {
@@ -651,10 +592,10 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        3408,
-        -16
+        -3680,
+        16
       ],
-      "id": "d3bc9fe5-700c-4127-a075-8e5c9190431c",
+      "id": "0b48d2da-a368-42e2-82b1-4f5dfe9625d7",
       "name": "Email avec pièce jointe"
     },
     {
@@ -664,10 +605,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2464,
-        464
+        -5024,
+        -1312
       ],
-      "id": "d0eae584-ca2b-4e45-8941-cb382199b26c",
+      "id": "8f56f00e-6a63-4e07-a7bf-ffbd4b4dfac4",
       "name": "Node Detect Malveillance"
     },
     {
@@ -698,10 +639,10 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        2672,
-        368
+        -4800,
+        -1408
       ],
-      "id": "4cff9651-f5cc-465f-a7ea-527980d48bd3",
+      "id": "99fa44f2-2bad-41b6-8f8b-65b67c36c05f",
       "name": "If"
     },
     {
@@ -711,10 +652,10 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2928,
-        352
+        -4544,
+        -1424
       ],
-      "id": "b7cada62-4e6b-4fd6-8659-7b78ea902f42",
+      "id": "4096abd9-8602-43ad-8c25-6ef0c3f4fdab",
       "name": "alert email"
     },
     {
@@ -727,10 +668,10 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        3280,
-        352
+        -4192,
+        -1424
       ],
-      "id": "1e561671-6fff-40d1-90a5-ce6919d1b06e",
+      "id": "e6cfa052-37b8-4c0a-8c49-21a55fa24c2b",
       "name": "Send Alert notif",
       "webhookId": "39b6be33-018e-46c1-870a-ee4679729020",
       "credentials": {
@@ -743,7 +684,7 @@
     {
       "parameters": {
         "operation": "addLabels",
-        "messageId": "={{$node[\"Send a message\"].json.id}}",
+        "messageId": "={{$node[\"Daily Full\"].json.id}}",
         "labelIds": [
           "Label_7222219908140623167"
         ]
@@ -751,12 +692,122 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        4016,
-        -16
+        -3072,
+        16
       ],
-      "id": "2f76ab2f-2b4d-475a-8286-b35a48538738",
+      "id": "90f18abb-d75f-4b1e-a58a-0dc5c228542e",
       "name": "Add label to message",
       "webhookId": "6e30bbcd-c7c4-488d-a1df-ebdb00b9b76a",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "DvSKAKQRnMta8oyc",
+          "name": "n8n email copilot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ 'http://host.docker.internal:8001/v1/ohlcv/' + $json[\"symbol\"] }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "interval",
+              "value": "={{$json.interval}}"
+            },
+            {
+              "name": "period",
+              "value": "2d"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -6912,
+        -1024
+      ],
+      "id": "a48881af-7f82-474f-8c4c-9c28844f1082",
+      "name": "HTTP OHLCV (2d for CSV)"
+    },
+    {
+      "parameters": {
+        "jsCode": "function findBars(j) {\n  return (j.bars || j.candles || j.data || j.ohlcv || []);\n}\n\nfunction pickOpen(b) {\n  if (!b) return null;\n  if (typeof b.open === \"number\") return b.open;\n  if (typeof b.o === \"number\") return b.o;\n  return null;\n}\n\nfunction pickClose(b) {\n  if (!b) return null;\n  if (typeof b.close === \"number\") return b.close;\n  if (typeof b.c === \"number\") return b.c;\n  if (typeof b.adjClose === \"number\") return b.adjClose;\n  if (typeof b.adj_close === \"number\") return b.adj_close;\n  return null;\n}\n\nreturn items.map((it) => {\n  const j = it.json || {};\n  const symbol = j.symbol || j.ticker || \"UNKNOWN\";\n  const bars = findBars(j);\n\n  // Garde uniquement les bougies qui ont au moins un close valide\n  const valid = Array.isArray(bars)\n    ? bars.filter(b => b && (typeof b.close === \"number\" || typeof b.c === \"number\"))\n    : [];\n\n  if (valid.length < 2) {\n    return { json: { indicator: symbol, open_today: \"\", close_previous_day: \"\", warning: j.warning || \"NO_2_BARS\" } };\n  }\n\n  const prev = valid[valid.length - 2];\n  const today = valid[valid.length - 1];\n\n  return {\n    json: {\n      indicator: symbol,\n      open_today: pickOpen(today) ?? \"\",\n      close_previous_day: pickClose(prev) ?? \"\",\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6704,
+        -1024
+      ],
+      "id": "19a8d12a-0947-496a-984a-706b267f58dd",
+      "name": "Extract Open/PrevClose"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.filter(it => {\n  const j = it.json || {};\n  return (\n    typeof j.open_today === \"number\" &&\n    typeof j.close_previous_day === \"number\"\n  );\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6496,
+        -1024
+      ],
+      "id": "16f7aab1-c7fa-46b0-a940-a4c143b65be3",
+      "name": "Filter Valid Rows"
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(it => {\n  const j = it.json;\n  return {\n    json: {\n      indicator: j.indicator,\n      open_today: Number(j.open_today.toFixed(2)),\n      close_previous_day: Number(j.close_previous_day.toFixed(2))\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6288,
+        -1024
+      ],
+      "id": "5bb8bd8b-6c3d-462a-842f-8692417c0a84",
+      "name": "Arrondir les valeurs"
+    },
+    {
+      "parameters": {
+        "jsCode": "function pad(n){ return String(n).padStart(2,\"0\"); }\n\n// Market day (YYYY-MM-DD) - simple\nconst now = new Date();\nconst market_day = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;\n\n// Timestamp for filename\nconst ts = `${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;\n\nconst rows = items.map(it => it.json);\n\n// CSV (3 colonnes strictes)\nlet csv = \"indicator,open_today,close_previous_day\\n\";\nfor (const r of rows) {\n  const open = Number(r.open_today).toFixed(2);\n  const prev = Number(r.close_previous_day).toFixed(2);\n  csv += `${r.indicator},${open},${prev}\\n`;\n}\n\nconst filename = `stormcopilot_open_close_${ts}.csv`;\nconst buffer = Buffer.from(csv, \"utf8\");\n\n// HTML rows with Gap%\nconst htmlRows = rows.map((r, idx) => {\n  const open = Number(r.open_today);\n  const prev = Number(r.close_previous_day);\n  const gap = ((open - prev) / prev) * 100;\n  const gapTxt = Number.isFinite(gap) ? `${gap.toFixed(2)}%` : \"\";\n  const gapColor = (Number.isFinite(gap) && gap < 0) ? \"#dc2626\" : \"#16a34a\"; // rouge/vert\n  const bg = (idx % 2 === 0) ? \"#ffffff\" : \"#f8fafc\";\n\n  return `\n    <tr style=\"background:${bg};\">\n      <td style=\"padding:10px 12px; border-top:1px solid #e2e8f0; font-size:13px;\"><b>${String(r.indicator||\"\")}</b></td>\n      <td style=\"padding:10px 12px; border-top:1px solid #e2e8f0; font-size:13px; text-align:right;\">${open.toFixed(2)}</td>\n      <td style=\"padding:10px 12px; border-top:1px solid #e2e8f0; font-size:13px; text-align:right;\">${prev.toFixed(2)}</td>\n      <td style=\"padding:10px 12px; border-top:1px solid #e2e8f0; font-size:13px; text-align:right; color:${gapColor}; font-weight:700;\">\n        ${gapTxt}\n      </td>\n    </tr>\n  `;\n}).join(\"\");\n\nconst subject = `StormCopilot DAILY – Open/Close – ${market_day}`;\n\nconst html = `\n<div style=\"font-family: Arial, Helvetica, sans-serif; color:#0f172a; background:#f8fafc; padding:24px; border-radius:14px;\">\n  <div style=\"max-width:760px; margin:0 auto; background:#ffffff; border:1px solid #e2e8f0; border-radius:16px; overflow:hidden;\">\n    <div style=\"padding:18px 22px; background:linear-gradient(90deg,#0f172a,#1e293b); color:#fff;\">\n      <div style=\"font-size:18px; font-weight:700;\">📈 StormCopilot – Daily Open/Close</div>\n      <div style=\"font-size:12px; opacity:0.85; margin-top:4px;\">\n        Jour de marché : <b>${market_day}</b> • Open du jour vs Close de la veille • Gap %\n      </div>\n    </div>\n\n    <div style=\"padding:18px 22px;\">\n      <p style=\"margin:0 0 12px 0; font-size:14px; line-height:1.6;\">Bonjour,</p>\n      <p style=\"margin:0 0 14px 0; font-size:14px; line-height:1.6;\">\n        Veuillez trouver en pièce jointe le fichier <b>CSV</b> (3 colonnes) pour les indicateurs disponibles.\n      </p>\n\n      <div style=\"margin:16px 0 10px 0; padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px; background:#f1f5f9;\">\n        <div style=\"font-size:13px; font-weight:700; margin-bottom:6px;\">Aperçu rapide</div>\n        <div style=\"font-size:12px; color:#334155;\">(${rows.length} indicateur(s) dans ce run) • Pièce jointe : <b>${filename}</b></div>\n      </div>\n\n      <table cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%; border-collapse:separate; border-spacing:0; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden;\">\n        <thead>\n          <tr style=\"background:#0ea5e9; color:#fff;\">\n            <th style=\"text-align:left; padding:10px 12px; font-size:13px;\">Indicateur</th>\n            <th style=\"text-align:right; padding:10px 12px; font-size:13px;\">Open (J)</th>\n            <th style=\"text-align:right; padding:10px 12px; font-size:13px;\">Close (J-1)</th>\n            <th style=\"text-align:right; padding:10px 12px; font-size:13px;\">Gap %</th>\n          </tr>\n        </thead>\n        <tbody>\n          ${htmlRows}\n        </tbody>\n      </table>\n\n      <div style=\"margin-top:16px; padding-top:12px; border-top:1px solid #e2e8f0; font-size:13px; color:#334155; line-height:1.6;\">\n        Cordialement,<br/><b>StormCopilot</b>\n      </div>\n\n      <div style=\"margin-top:10px; font-size:11px; color:#64748b;\">\n        Email automatique • ${market_day}\n      </div>\n    </div>\n  </div>\n</div>\n`;\n\nreturn [{\n  json: { filename, html, subject, market_day },\n  binary: {\n    data: {\n      data: buffer.toString(\"base64\"),\n      mimeType: \"text/csv\",\n      fileName: filename\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6080,
+        -1024
+      ],
+      "id": "6540d60d-c1f4-487b-a29b-dd0c31421b78",
+      "name": "Build CSV + Binary + Timestamp"
+    },
+    {
+      "parameters": {
+        "sendTo": "alaalakhal611@gmail.com",
+        "subject": "StormCopilot – Daily Open/Close",
+        "message": "={{$json.html}}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -5872,
+        -1024
+      ],
+      "id": "4002319f-2a79-4527-b0e7-055de4fcc437",
+      "name": "open/close du jour",
+      "webhookId": "7668eb5f-d402-4b31-a672-38d71cce3b5b",
       "credentials": {
         "gmailOAuth2": {
           "id": "DvSKAKQRnMta8oyc",
@@ -775,12 +826,134 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        3488,
-        352
+        -3984,
+        -1424
       ],
-      "id": "664331c3-e7c6-4fff-9461-0719c3c52a63",
-      "name": "Add label to message1",
+      "id": "59931bc3-3a89-4956-9a1a-d5f730fe92fb",
+      "name": "Label Alert",
       "webhookId": "d27cfbb1-d8d5-4c3b-af4a-b24ad72f284d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "DvSKAKQRnMta8oyc",
+          "name": "n8n email copilot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "alaalakhal611@gmail.com",
+        "subject": "📊 StormCopilot – Rapport quotidien",
+        "message": "=<div style=\"font-family: Arial, Helvetica, sans-serif; color:#1f2937; line-height:1.6;\">\n\n  <h2 style=\"color:#0f4c81; margin-bottom:5px;\">\n    📊 StormCopilot — Rapport quotidien\n  </h2>\n<hr style=\"margin-top:24px;border:none;border-top:1px solid #e5e7eb;\" />\n<p style=\"font-size:11px;color:#6b7280;\">\n  StormCopilot • ALERT<br/>\n  Severity: {{ $json.severity || \"INFO\" }}<br/>\n  Run ID: {{ $json.run_id || $execution.id }}<br/>\n  Generated at: {{ new Date().toISOString() }}\n</p>\n\n\n  <p style=\"color:#6b7280; margin-top:0; font-size:13px;\">\n    Généré automatiquement le {{ $json.generated_at }}\n  </p>\n\n  <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:20px 0;\" />\n\n  <p>Bonjour,</p>\n\n  <p>\n    Veuillez trouver en pièce jointe le\n    <strong>rapport quotidien StormCopilot</strong>,\n    regroupant les analyses clés issues de vos pipelines\n    <strong>Data, IA et MLOps</strong>.\n  </p>\n\n  <!-- Bloc aperçu rapide -->\n  <div style=\"background:#f8fafc; padding:15px; border-radius:6px; margin:20px 0;\">\n    <strong style=\"color:#0f4c81;\">📌 Aperçu rapide</strong><br/><br/>\n    📊 Actifs analysés : <strong>{{ $json.market_ai_summary.nb_assets }}</strong><br/>\n    📈 Signaux Achat : <strong>{{ $json.market_ai_summary.achat }}</strong><br/>\n    📉 Signaux Vente : <strong>{{ $json.market_ai_summary.vente }}</strong><br/>\n    📊 Tendance moyenne : <strong>{{ $json.market_ai_summary.tendance_moyenne_pct }} %</strong><br/>\n    🌪️ Volatilité moyenne : <strong>{{ $json.market_ai_summary.volatilite_moyenne_pct }} %</strong>\n  </div>\n\n  <p>Ce rapport inclut notamment :</p>\n\n  <ul>\n    <li>📈 Analyse du marché (signaux, tendances, volatilité)</li>\n    <li>🧠 Synthèse IA & MLOps (modèles, performances, champions)</li>\n    <li>📰 Veille technologique (Hot / Trending / Fresh)</li>\n  </ul>\n\n  <p>\n    Le document joint est au format PDF pour une lecture et un partage facilités.\n  </p>\n\n  <p style=\"margin-top:25px;\">\n    Cordialement,<br/>\n    <strong>StormCopilot</strong><br/>\n    <span style=\"color:#6b7280; font-size:12px;\">\n      Automated Intelligence & Monitoring\n    </span>\n  </p>\n\n  <hr style=\"border:none; border-top:1px solid #e5e7eb; margin:30px 0;\" />\n\n  <p style=\"font-size:11px; color:#9ca3af;\">\n    Ce message a été envoyé automatiquement via n8n.\n  </p>\n\n</div>\n",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {}
+            ]
+          }
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -3280,
+        16
+      ],
+      "id": "ab4537a3-1376-4d06-8282-dcc687fc878d",
+      "name": "Daily Full",
+      "webhookId": "7ec44bee-4022-4edc-9a3b-9601001e3e16",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "DvSKAKQRnMta8oyc",
+          "name": "n8n email copilot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node: Add Trace / Audit Stamp (final)\n// Place: after \"Build Human Text Daily\" and before \"Quality Gate\" + \"Generate Daily PDF\"\n\nconst d = items[0]?.json || {};\nconst now = new Date().toISOString();\n\n// ---------- helpers\nfunction numOr(x, def) {\n  const v = Number(x);\n  return Number.isFinite(v) ? v : def;\n}\nfunction strOr(x, def = \"\") {\n  const s = (x === null || x === undefined) ? \"\" : String(x);\n  return s.trim() ? s : def;\n}\nfunction safeLen(arr) {\n  return Array.isArray(arr) ? arr.length : 0;\n}\nfunction objSize(o) {\n  return (o && typeof o === \"object\" && !Array.isArray(o)) ? Object.keys(o).length : 0;\n}\n\n// ---------- detect pipeline\nconst isDailyFull = !!d.tech_radar || !!d.market_ai_summary;\nconst isMLOps =\n  (Array.isArray(d.mlops_champions_rows) && d.mlops_champions_rows.length > 0) ||\n  (Array.isArray(d.mlops_compare_rows) && d.mlops_compare_rows.length > 0) ||\n  (d.raw_champions && Object.keys(d.raw_champions).length > 0) ||\n  !!d.mlops_kpis;\n\nconst pipeline = isDailyFull ? \"daily_full\" : (isMLOps ? \"mlops_daily\" : \"unknown\");\n\n// ---------- run id\nconst runId =\n  d.run_id ||\n  d.trace?.run_id ||\n  `run_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 8)}`;\n\n// ---------- base trace\nd.trace = {\n  run_id: runId,\n  generated_at: d.generated_at || now,\n  workflow: strOr(d.workflow, \"StormCopilot\"),\n  pipeline,\n\n  // Quality / retry (may be filled by Quality Gate later)\n  quality_ok: (typeof d.quality_ok === \"boolean\") ? d.quality_ok : true,\n  quality_level: strOr(d.quality_level, \"\"),\n  quality_reason: strOr(d.quality_reason, \"\"),\n  retry_count: numOr(d.retry_count, 0),\n\n  // common\n  severity: d.severity ?? d.global_severity ?? \"\"\n};\n\n// ---------- pipeline-specific stats (NO NULLS)\nif (pipeline === \"daily_full\") {\n  const tech = d.tech_radar || {};\n  const met = tech.metrics || {};\n\n  d.trace.tech_sources_total = numOr(met.sources_total, 0);\n  d.trace.tech_sources_ok    = numOr(met.sources_ok, 0);\n  d.trace.tech_hot          = numOr(met.hot, 0);\n  d.trace.tech_trending     = numOr(met.trending, 0);\n  d.trace.tech_fresh        = numOr(met.fresh, 0);\n\n  const m = d.market_ai_summary || {};\n  d.trace.market_assets = numOr(m.nb_assets, 0);\n  d.trace.market_rows   = safeLen(d.market_ai_rows);\n\n} else if (pipeline === \"mlops_daily\") {\n  const k = d.mlops_kpis || {};\n  const rawChamp = d.raw_champions || {};\n  const rows = d.mlops_compare_rows || d.mlops_champions_rows || [];\n\n  d.trace.mlops_pipeline_status = strOr(k.pipeline_status, \"—\");\n  d.trace.mlops_nb_symbols_ok   = numOr(k.nb_symbols_ok, objSize(rawChamp));\n  d.trace.mlops_nb_requested    = numOr(k.nb_symbols_requested, 0);\n  d.trace.champions_count       = objSize(rawChamp);\n  d.trace.champions_rows_count  = safeLen(rows);\n\n  d.trace.drift_avg = numOr(k.drift_avg, 0);\n  d.trace.drift_max = numOr(k.drift_max, 0);\n  d.trace.retrain_recommended = !!k.retrain_recommended;\n\n  // Keep old tech fields out (or set to 0 if you want)\n  d.trace.tech_sources_total = 0;\n  d.trace.tech_sources_ok    = 0;\n  d.trace.tech_hot           = 0;\n  d.trace.tech_trending      = 0;\n  d.trace.tech_fresh         = 0;\n}\n\n// write back\nitems[0].json = d;\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4256,
+        16
+      ],
+      "id": "37b9f5d3-a24b-4300-baa9-f7bc680f70f6",
+      "name": "Add Trace"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Function node: Quality Gate (Daily Full + MLOps)\n// Place: after \"Add Trace / Audit Stamp\" and before \"Generate Daily PDF\"\n\nconst d = items[0]?.json || {};\nd.trace = d.trace || {};\n\nconst reasons = [];\nlet ok = true;\n\n// Detect pipeline (prefer trace.pipeline)\nconst pipeline =\n  d.trace.pipeline ||\n  (d.tech_radar || d.market_ai_summary ? \"daily_full\" : \"mlops_daily\");\n\n// --------------------\n// Helpers\nfunction hasNonEmptyObject(x) {\n  return x && typeof x === \"object\" && !Array.isArray(x) && Object.keys(x).length > 0;\n}\nfunction n(x) {\n  const v = Number(x);\n  return Number.isFinite(v) ? v : null;\n}\n// --------------------\n\n// ====================\n// Case 1: DAILY FULL\n// ====================\nif (pipeline === \"daily_full\") {\n  // Tech\n  const tech = d.tech_radar || {};\n  const met = tech.metrics || {};\n  const sourcesTotal = n(met.sources_total);\n  const sourcesOk = n(met.sources_ok);\n\n  if (!(sourcesTotal !== null && sourcesOk !== null && sourcesOk > 0 && sourcesOk <= sourcesTotal)) {\n    ok = false;\n    reasons.push(\"tech_missing_or_incomplete\");\n  }\n\n  // Market\n  const m = d.market_ai_summary || {};\n  const nbAssets = n(m.nb_assets);\n  if (!(nbAssets !== null && nbAssets > 0)) {\n    ok = false;\n    reasons.push(\"market_missing_or_incomplete\");\n  }\n\n  // Optional: require some rows\n  const rows = Array.isArray(d.market_ai_rows) ? d.market_ai_rows.length : 0;\n  if (rows === 0) {\n    ok = false;\n    reasons.push(\"market_rows_empty\");\n  }\n}\n\n// ====================\n// Case 2: MLOPS DAILY\n// ====================\nelse if (pipeline === \"mlops_daily\") {\n  const k = d.mlops_kpis || {};\n  const decision = d.mlops_decision || {};\n  const rawChamp = d.raw_champions || {};\n\n  // pipeline status\n  if (String(k.pipeline_status || \"\") !== \"✅ OK\") {\n    ok = false;\n    reasons.push(\"mlops_pipeline_not_ok\");\n  }\n\n  // must have champions\n  if (!hasNonEmptyObject(rawChamp)) {\n    ok = false;\n    reasons.push(\"mlops_champions_missing\");\n  }\n\n  // must have decision explanation\n  if (!String(decision.explanation || \"\").trim()) {\n    ok = false;\n    reasons.push(\"mlops_decision_missing\");\n  }\n\n  // optional: compare table present (not mandatory)\n  const cmpRows = Array.isArray(d.mlops_compare_rows) ? d.mlops_compare_rows.length : 0;\n  if (cmpRows === 0) {\n    reasons.push(\"mlops_compare_rows_empty\");\n    // (on ne fail pas pour ça, c'est juste un warning)\n  }\n}\n\n// Unknown pipeline -> soft fail\nelse {\n  ok = false;\n  reasons.push(\"pipeline_unknown\");\n}\n\n// ---- set quality\nconst level = ok ? \"PASS\" : \"FAIL\";\nconst reasonStr = reasons.join(\",\");\n\nd.quality_ok = ok;\nd.quality_level = level;\nd.quality_reason = reasonStr;\n\nd.trace.quality_ok = ok;\nd.trace.quality_level = level;\nd.trace.quality_reason = reasonStr;\n\nitems[0].json = d;\nreturn items;\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4080,
+        16
+      ],
+      "id": "b66b0161-4c46-4cc2-b1e3-d305c2db1b33",
+      "name": "Quality Gate"
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "fieldsToMatchString": "join_key",
+        "joinMode": "keepEverything",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        -5120,
+        -800
+      ],
+      "id": "06c272a7-d771-44b1-8d8a-c6301ee86386",
+      "name": "Merge3",
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// n8n Code node: Build Tech Digest (Top + Sources + Themes)\n// Place: after \"Normalize Tech Metrics\" and before \"Tech Clean & Rank\"\n\nconst tech = items[0]?.json || {};\nconst raw = tech._raw || {};\nconst list = Array.isArray(raw.items) ? raw.items : (Array.isArray(raw.data?.items) ? raw.data.items : []);\n\nfunction clean(s) {\n  return String(s || \"\")\n    .replace(/\\s+/g, \" \")\n    .replace(/[\\u0000-\\u001F]+/g, \"\")\n    .trim();\n}\nfunction clip(s, n=110) {\n  s = clean(s);\n  return s.length > n ? (s.slice(0, n - 1) + \"…\") : s;\n}\n\n// --- Split by label\nconst isHot = (x) => String(x.rank_label || \"\").toLowerCase().includes(\"hot\");\nconst isTrending = (x) => String(x.rank_label || \"\").toLowerCase().includes(\"trending\");\nconst isFresh = (x) => String(x.rank_label || \"\").toLowerCase().includes(\"fresh\");\n\nconst hot = list.filter(isHot);\nconst trending = list.filter(isTrending);\n\n// --- Top lists\nconst topHot = (hot.length ? hot : list).slice(0, 5).map(x => ({\n  source: clean(x.source_name || x.source || \"Source\"),\n  title: clip(x.title || x.headline || x.short_summary || x.tw_summary_2_sent || x.summary || x.url || \"—\", 120),\n  label: \"Hot\",\n  url: x.url || \"\"\n}));\n\nconst topTrending = (trending.length ? trending : list).slice(0, 5).map(x => ({\n  source: clean(x.source_name || x.source || \"Source\"),\n  title: clip(x.title || x.headline || x.short_summary || x.tw_summary_2_sent || x.summary || x.url || \"—\", 120),\n  label: \"Trending\",\n  url: x.url || \"\"\n}));\n\n// --- Top Sources\nconst srcCount = {};\nfor (const x of list) {\n  const s = clean(x.source_name || x.source || \"Source\");\n  srcCount[s] = (srcCount[s] || 0) + 1;\n}\nconst topSources = Object.entries(srcCount)\n  .sort((a,b) => b[1]-a[1])\n  .slice(0, 6)\n  .map(([source, count]) => ({ source, count }));\n\n// --- Themes (keywords)\nconst stop = new Set([\"the\",\"and\",\"for\",\"with\",\"from\",\"that\",\"this\",\"you\",\"your\",\"are\",\"was\",\"were\",\"to\",\"of\",\"in\",\"on\",\"a\",\"an\",\"is\",\"it\",\"as\",\"by\",\"at\",\"or\",\"be\",\"how\",\"what\",\"why\",\"when\",\"data\",\"ai\"]);\nconst bag = {};\nfor (const x of list.slice(0, 25)) {\n  const text = clean((x.title || \"\") + \" \" + (x.short_summary || x.tw_summary_2_sent || x.summary || \"\"));\n  for (const w of text.toLowerCase().split(/[^a-z0-9]+/g)) {\n    if (!w || w.length < 4) continue;\n    if (stop.has(w)) continue;\n    bag[w] = (bag[w] || 0) + 1;\n  }\n}\nconst themes = Object.entries(bag).sort((a,b)=>b[1]-a[1]).slice(0, 8).map(([k,v]) => ({ keyword:k, count:v }));\n\n// --- Markdown digest (PDF/mail)\nfunction mdTable(rows) {\n  let md = `| Source | Label | Titre |\\n|---|---|---|\\n`;\n  for (const r of rows) md += `| ${clip(r.source, 30)} | ${r.label} | ${clip(r.title, 95)} |\\n`;\n  return md;\n}\n\nlet digestMd = \"\";\ndigestMd += `### 🔥 Top Hot (5)\\n${topHot.length ? mdTable(topHot) : \"_Aucun item._\"}\\n\\n`;\ndigestMd += `### 📈 Top Trending (5)\\n${topTrending.length ? mdTable(topTrending) : \"_Aucun item._\"}\\n\\n`;\n\nif (topSources.length) {\n  digestMd += `### 🧩 Sources dominantes\\n| Source | # |\\n|---|---:|\\n`;\n  for (const s of topSources) digestMd += `| ${clip(s.source, 40)} | ${s.count} |\\n`;\n  digestMd += `\\n`;\n}\nif (themes.length) {\n  digestMd += `### 🏷️ Thèmes du jour\\n` + themes.map(t => `- ${t.keyword} (${t.count})`).join(\"\\n\") + `\\n`;\n}\n\nreturn [{\n  json: {\n    ...tech,\n    headline: clip(tech.headline || \"Veille Tech\", 110),\n    tech_digest_md: digestMd,\n    tech_top_hot: topHot,\n    tech_top_trending: topTrending,\n    tech_top_sources: topSources,\n    tech_themes: themes,\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6368,
+        -112
+      ],
+      "id": "81e6bb4a-52f6-4658-b876-5e031f0c5e8f",
+      "name": "Build Tech Digest"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Tech Clean & Rank (FINAL, frontend + PDF ready)\n\nconst tech = items[0]?.json || {};\nconst list = Array.isArray(tech._raw?.items) ? tech._raw.items : [];\n\nfunction clean(s){ return String(s||\"\").replace(/\\s+/g,\" \").trim(); }\nfunction clip(s,n=110){ s=clean(s); return s.length>n ? s.slice(0,n-1)+\"…\" : s; }\n\nfunction score100(x){\n  const v = Number(x.score_24h ?? x.score ?? 0);\n  if (!Number.isFinite(v)) return 0;\n  return Math.round(v <= 1 ? v * 100 : v);\n}\n\nfunction faviconOf(x){\n  if (x.favicon_url) return x.favicon_url;\n  try {\n    const h = new URL(x.url).hostname;\n    return `https://www.google.com/s2/favicons?sz=64&domain=${h}`;\n  } catch {\n    return \"\";\n  }\n}\n\n// ---- FILTER TRENDING 24H (⭐ Trending uniquement)\nconst trending24h = list\n  .filter(x => String(x.rank_label || \"\").includes(\"Trending\"))\n  .sort((a,b) => score100(b) - score100(a))\n  .slice(0, 6)\n  .map(x => ({\n    source: clean(x.source_name),\n    score: score100(x),\n    favicon: faviconOf(x),\n    url: x.url || \"\"\n  }));\n\n// ---- PDF / MAIL markdown\nlet trendingMd = \"### 📈 Top Trending (24h)\\n\";\nif (!trending24h.length) {\n  trendingMd += \"_Aucun item._\\n\\n\";\n} else {\n  trendingMd += `| Source | Score |\\n|---|---:|\\n`;\n  for (const t of trending24h) {\n    trendingMd += `| ${clip(t.source,40)} | ${t.score}/100 |\\n`;\n  }\n  trendingMd += \"\\n\";\n}\n\n// ---- RETURN\nreturn [{\n  json: {\n    ...tech,\n    top_trending_24h: trending24h,      // ✅ frontend\n    tech_digest_md: trendingMd + (tech.tech_digest_md || \"\")\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -6128,
+        -112
+      ],
+      "id": "e53f6a7b-8271-4c77-9768-7baf36dfa9ef",
+      "name": "Tech Clean & Rank"
+    },
+    {
+      "parameters": {
+        "operation": "addLabels",
+        "messageId": "={{ $json.id }}",
+        "labelIds": [
+          "Label_1739396177510524476"
+        ]
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        -5664,
+        -1024
+      ],
+      "id": "9cd67aca-cac6-49b2-8d99-d8c6a050bc2b",
+      "name": "Add label to message1",
+      "webhookId": "3fbb06c8-7029-480f-b5e2-49bf9908bb79",
       "credentials": {
         "gmailOAuth2": {
           "id": "DvSKAKQRnMta8oyc",
@@ -791,6 +964,38 @@
   ],
   "pinData": {},
   "connections": {
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRON - Daily 07:30": {
+      "main": [
+        [
+          {
+            "node": "Fetch MLOps Executive (mlops-daily-full)",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare Params",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "QuickTrain /mlops/train/market",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Webhook mlops-daily-full": {
       "main": [
         [
@@ -885,6 +1090,11 @@
             "node": "HTTP OHLCV",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "HTTP OHLCV (2d for CSV)",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -918,6 +1128,17 @@
         ]
       ]
     },
+    "Assemble Full Daily": {
+      "main": [
+        [
+          {
+            "node": "Format Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Refresh Tech Watch": {
       "main": [
         [
@@ -940,34 +1161,18 @@
         ]
       ]
     },
-    "CRON - Daily 07:30": {
+    "Format MLOps Champions": {
       "main": [
         [
           {
-            "node": "Fetch MLOps Executive (mlops-daily-full)",
+            "node": "Node Detect Malveillance",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Prepare Params",
+            "node": "Merge3",
             "type": "main",
-            "index": 0
-          },
-          {
-            "node": "QuickTrain /mlops/train/market",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Assemble Full Daily": {
-      "main": [
-        [
-          {
-            "node": "Format Daily Summary",
-            "type": "main",
-            "index": 0
+            "index": 1
           }
         ]
       ]
@@ -977,17 +1182,6 @@
         [
           {
             "node": "Build Human Text Daily",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Format MLOps Champions": {
-      "main": [
-        [
-          {
-            "node": "Node Detect Malveillance",
             "type": "main",
             "index": 0
           }
@@ -1009,12 +1203,18 @@
       "main": [
         [
           {
-            "node": "Generate Daily PDF",
+            "node": "Add Trace",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Generate Daily PDF": {
+      "main": [
+        [
           {
-            "node": "Respond to Webhook",
+            "node": "Email avec pièce jointe",
             "type": "main",
             "index": 0
           }
@@ -1047,7 +1247,7 @@
       "main": [
         [
           {
-            "node": "set tech",
+            "node": "Build Tech Digest",
             "type": "main",
             "index": 0
           }
@@ -1098,17 +1298,6 @@
         ]
       ]
     },
-    "Generate Daily PDF": {
-      "main": [
-        [
-          {
-            "node": "Email avec pièce jointe",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Fetch MLOps Executive (mlops-daily-full)": {
       "main": [
         [
@@ -1142,23 +1331,7 @@
       "main": [
         [
           {
-            "node": "Build Market Rows",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook mlops-daily-full1": {
-      "main": [
-        []
-      ]
-    },
-    "Email avec pièce jointe": {
-      "main": [
-        [
-          {
-            "node": "prepare email",
+            "node": "Merge3",
             "type": "main",
             "index": 0
           }
@@ -1169,7 +1342,18 @@
       "main": [
         [
           {
-            "node": "Send a message",
+            "node": "Daily Full",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email avec pièce jointe": {
+      "main": [
+        [
+          {
+            "node": "prepare email",
             "type": "main",
             "index": 0
           }
@@ -1196,13 +1380,7 @@
             "index": 0
           }
         ],
-        [
-          {
-            "node": "Webhook mlops-daily-full1",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "alert email": {
@@ -1220,6 +1398,72 @@
       "main": [
         [
           {
+            "node": "Label Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP OHLCV (2d for CSV)": {
+      "main": [
+        [
+          {
+            "node": "Extract Open/PrevClose",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Open/PrevClose": {
+      "main": [
+        [
+          {
+            "node": "Filter Valid Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Valid Rows": {
+      "main": [
+        [
+          {
+            "node": "Arrondir les valeurs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Arrondir les valeurs": {
+      "main": [
+        [
+          {
+            "node": "Build CSV + Binary + Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build CSV + Binary + Timestamp": {
+      "main": [
+        [
+          {
+            "node": "open/close du jour",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "open/close du jour": {
+      "main": [
+        [
+          {
             "node": "Add label to message1",
             "type": "main",
             "index": 0
@@ -1227,7 +1471,7 @@
         ]
       ]
     },
-    "Send a message": {
+    "Daily Full": {
       "main": [
         [
           {
@@ -1236,6 +1480,73 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Add Trace": {
+      "main": [
+        [
+          {
+            "node": "Quality Gate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Gate": {
+      "main": [
+        [
+          {
+            "node": "Generate Daily PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge3": {
+      "main": [
+        [
+          {
+            "node": "Build Market Rows",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Market Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Tech Digest": {
+      "main": [
+        [
+          {
+            "node": "Tech Clean & Rank",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tech Clean & Rank": {
+      "main": [
+        [
+          {
+            "node": "set tech",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Add label to message1": {
+      "main": [
+        []
       ]
     }
   },
@@ -1246,7 +1557,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "5d0ee404-f138-4f2e-9bb4-9ec4b6d3fb55",
+  "versionId": "3da96b72-a9dc-488d-b7df-be1cfa8c7eee",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"

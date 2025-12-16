@@ -51,6 +51,13 @@ class DailyPdfRequest(BaseModel):
 
     ohlcv_by_symbol: dict[str, list[dict]] | None = None
 
+    # ✅ AJOUT (Tech digest en tables propres)
+    tech_top_hot: list[dict] | None = None
+    tech_top_trending: list[dict] | None = None
+    tech_top_sources: list[dict] | None = None
+    tech_themes: list[dict] | None = None
+
+
     # ✅ AJOUT (Traçabilité + Quality Gate)
     trace: dict | None = None
     quality_ok: bool | None = None
@@ -319,6 +326,24 @@ def _style_table_default(table: Table):
     ]))
 
 
+def _add_simple_table(story, styles, title: str, header: list[str], rows: list[list[Any]], col_widths_cm: list[float]):
+    """
+    Ajoute un bloc titre + table stylée.
+    col_widths_cm : largeurs en cm (len == nb colonnes)
+    """
+    story.append(Paragraph(_safe(title), styles["h3"]))
+    if not rows:
+        story.append(Paragraph("Aucune donnée.", styles["normal"]))
+        story.append(Spacer(1, 0.2 * cm))
+        return
+
+    data = [header] + rows
+    tbl = Table(data, colWidths=[w * cm for w in col_widths_cm])
+    _style_table_default(tbl)
+    story.append(tbl)
+    story.append(Spacer(1, 0.25 * cm))
+
+
 # --------------------------------------------------------------------
 # 📌 Page de garde (Cover)
 # --------------------------------------------------------------------
@@ -456,11 +481,6 @@ def _add_dashboard_page(story, styles, payload: DailyPdfRequest):
         ),
     ]))
 
-    headline = _safe(tr.get("headline"))
-    if headline:
-        story.append(Spacer(1, 0.2 * cm))
-        story.append(Paragraph(f"🗞 Headline : {headline}", styles["small"]))
-
     mtxt = _safe(ms.get("text"))
     if mtxt:
         story.append(Spacer(1, 0.15 * cm))
@@ -493,10 +513,10 @@ def _add_executive_summary(story, styles, human_text: str | None):
 # --------------------------------------------------------------------
 # ✅ Tech Radar (STRUCTURÉ)
 # --------------------------------------------------------------------
-def _add_tech_section(story, styles, tech_radar: dict | None):
+def _add_tech_section(story, styles, payload: DailyPdfRequest):
     story.append(Paragraph("📡 Tech Radar", styles["section"]))
 
-    tr = tech_radar or {}
+    tr = payload.tech_radar or {}
     tm = (tr.get("metrics") or {}) if isinstance(tr, dict) else {}
 
     q_txt, q_col = _quality_badge(_safe(tr.get("quality")))
@@ -509,7 +529,7 @@ def _add_tech_section(story, styles, tech_radar: dict | None):
     trending = tm.get("trending", 0)
     fresh = tm.get("fresh", 0)
 
-    data = [
+    kpi = [
         ["Indicateur", "Valeur"],
         ["Sources actives", f"{sources_ok} / {sources_total}"],
         ["🔥 Hot", str(hot)],
@@ -517,17 +537,134 @@ def _add_tech_section(story, styles, tech_radar: dict | None):
         ["🆕 Fresh", str(fresh)],
         ["Statut", _safe(tr.get("status")) or "-"],
     ]
-    tbl = Table(data, colWidths=[6.2*cm, 9.4*cm])
+    tbl = Table(kpi, colWidths=[6.2 * cm, 9.4 * cm])
     _style_table_default(tbl)
+    # ✅ centre titres + valeurs
+    tbl.setStyle(TableStyle([
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+    ]))
     story.append(tbl)
+    story.append(Spacer(1, 0.2 * cm))
 
-    headline = _safe(tr.get("headline"))
-    if headline:
+    # -------------------------------------------------------------
+    # Tables propres: Hot / Trending (source only) + Sources + Themes
+    # + Centrage complet
+    # -------------------------------------------------------------
+    def _add_centered_simple_table(title: str, headers: list, rows: list, widths_cm: list):
+        if not rows:
+            return
         story.append(Spacer(1, 0.15 * cm))
-        story.append(Paragraph(f"🗞 <b>Headline</b> : {headline}", styles["normal"]))
+        story.append(Paragraph(title, styles["h3"]))
+        data = [headers] + rows
+        col_widths = [w * cm for w in widths_cm]
+        t = Table(data, colWidths=col_widths)
+        _style_table_default(t)
+        # ✅ centre titres + valeurs
+        t.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ]))
+        story.append(t)
+
+    # Hot (source only)
+    hot_items = payload.tech_top_hot or []
+    hot_rows = [[_safe(it.get("source"))] for it in hot_items if _safe(it.get("source"))]
+    _add_centered_simple_table("🔥 Top Hot", ["Source"], hot_rows, [15.6])
+
+    # Trending (source only)
+    trending_items = payload.tech_top_trending or []
+    tr_rows = [[_safe(it.get("source"))] for it in trending_items if _safe(it.get("source"))]
+    _add_centered_simple_table("⭐ Top Trending", ["Source"], tr_rows, [15.6])
+
+    # Sources dominantes (source + count)
+    tech_src = payload.tech_top_sources or []
+    src_rows = []
+    for x in tech_src:
+        s = _safe((x or {}).get("source"))
+        c = (x or {}).get("count", None)
+        if s:
+            src_rows.append([s, "" if c is None else str(c)])
+    _add_centered_simple_table("Sources dominantes", ["Source", "#"], src_rows, [12.6, 3.0])
+
+    # Thèmes (keyword + count)
+    tech_th = payload.tech_themes or []
+    th_rows = []
+    for x in tech_th:
+        k = _safe((x or {}).get("keyword"))
+        c = (x or {}).get("count", None)
+        if k:
+            th_rows.append([k, "" if c is None else str(c)])
+    _add_centered_simple_table("Thèmes du jour", ["Keyword", "#"], th_rows, [12.6, 3.0])
+
+    # -------------------------------------------------------------
+    # Agentic RAG — 2 phrases décisionnelles sous "Thèmes du jour"
+    # Focus du jour parmi:
+    # Cloud & Infrastructure / Data & Big Data / DevOps & CI/CD / IA-ML-GenAI-RAG
+    # -------------------------------------------------------------
+    if th_rows:
+        def _to_int(x):
+            try:
+                return int(float(str(x).replace(",", ".")))
+            except Exception:
+                return 1
+
+        def _match_bucket(keyword: str) -> str | None:
+            kw = (keyword or "").lower()
+
+            cloud = ["cloud", "infrastructure", "aws", "azure", "gcp", "kubernetes", "k8s", "iac", "terraform"]
+            data = ["data", "big data", "lakehouse", "datalake", "warehouse", "etl", "spark", "hadoop", "streaming"]
+            devops = ["devops", "ci/cd", "cicd", "pipeline", "gitops", "docker", "kubernetes", "helm", "release"]
+            ai = ["ia", "ai", "ml", "machine learning", "genai", "rag", "llm", "transformer", "embedding", "prompt"]
+
+            if any(t in kw for t in cloud):
+                return "Cloud & Infrastructure"
+            if any(t in kw for t in data):
+                return "Data & Big Data"
+            if any(t in kw for t in devops):
+                return "DevOps & CI/CD"
+            if any(t in kw for t in ai):
+                return "IA / ML / GenAI / RAG"
+            return None
+
+        buckets = {
+            "Cloud & Infrastructure": 0,
+            "Data & Big Data": 0,
+            "DevOps & CI/CD": 0,
+            "IA / ML / GenAI / RAG": 0,
+        }
+
+        for k, c in th_rows:
+            b = _match_bucket(k)
+            if b:
+                buckets[b] += _to_int(c)
+
+        focus = None
+        total = sum(buckets.values())
+        if total > 0:
+            focus = max(buckets, key=lambda x: buckets[x])
+
+        story.append(Spacer(1, 0.15 * cm))
+        if focus:
+            story.append(Paragraph(
+                f"Analyse agentique : les signaux tech du jour pointent surtout vers <b>{focus}</b>, ce qui en fait la tendance prioritaire à suivre.",
+                styles["normal"],
+            ))
+            story.append(Paragraph(
+                f"Décision : aujourd’hui, on recommande de concentrer la veille et les lectures sur <b>{focus}</b> (thèmes les plus fréquents dans le radar).",
+                styles["normal"],
+            ))
+        else:
+            story.append(Paragraph(
+                "Analyse agentique : les thèmes du jour sont variés, sans domination nette d’un axe (Cloud, Data, DevOps, IA).",
+                styles["normal"],
+            ))
+            story.append(Paragraph(
+                "Décision : privilégier une veille équilibrée, puis affiner selon les prochaines occurrences (tendance sur plusieurs runs).",
+                styles["normal"],
+            ))
 
     story.append(Spacer(1, 0.35 * cm))
-
 
 # --------------------------------------------------------------------
 # ✅ Market IA (STRUCTURÉ + coloration)
@@ -760,10 +897,11 @@ def _add_mlops_section(story, styles, payload: DailyPdfRequest):
     retrain_txt = "✅ Non" if retrain is False else "⚠ Oui"
 
     row1 = Table([[
-        _kpi_card("✅ Pipeline", pipeline_status or "OK", "Statut MLOps", "#16A34A" if (pipeline_status or "OK").strip().upper() in ("OK","SUCCESS","DONE") else "#F59E0B"),
+        _kpi_card("✅ Pipeline", pipeline_status or "OK", "Statut MLOps",
+                  "#16A34A" if (pipeline_status or "OK").strip().upper() in ("OK", "SUCCESS", "DONE") else "#F59E0B"),
         _kpi_card("🎯 Symboles OK", str(nb_ok), f"Demandés : {nb_req}", "#111827"),
         _kpi_card("🏆 Champions", str(nb_champ), "Nb champions", "#0F172A"),
-    ]], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
+    ]], colWidths=[5.3 * cm, 5.3 * cm, 5.3 * cm])
     row1.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(row1)
     story.append(Spacer(1, 0.25 * cm))
@@ -772,17 +910,23 @@ def _add_mlops_section(story, styles, payload: DailyPdfRequest):
         _kpi_card("📉 Drift moyen", _fmt_num(drift_avg, 3), "Qualité data", styles["blue_dark"]),
         _kpi_card("📈 Drift max", _fmt_num(drift_max, 3), "Pic observé", "#111827"),
         _kpi_card("🔁 Retrain", retrain_txt, "Recommandation", "#334155"),
-    ]], colWidths=[5.3*cm, 5.3*cm, 5.3*cm])
+    ]], colWidths=[5.3 * cm, 5.3 * cm, 5.3 * cm])
     row2.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
     story.append(row2)
 
-    explanation = _safe(d.get("explanation") or ms.get("decision_explanation"))
-    if explanation:
-        story.append(Spacer(1, 0.15 * cm))
-        story.append(Paragraph(f"💬 {explanation}", styles["normal"]))
+    # Décision (1 phrase propre)
+    decision_explanation = (
+        (ms.get("decision_explanation") if isinstance(ms, dict) else None)
+        or (d.get("explanation") if isinstance(d, dict) else None)
+        or ""
+    )
+    decision_explanation = " ".join(str(decision_explanation).replace("\n", " ").split()).strip()
+    if decision_explanation and not decision_explanation.endswith("."):
+        decision_explanation += "."
 
-    story.append(Spacer(1, 0.25 * cm))
-    story.append(Paragraph("🏆 Détail des champions", styles["h3"]))
+    if decision_explanation:
+        story.append(Spacer(1, 0.15 * cm))
+        story.append(Paragraph(f"Décision : {decision_explanation}", styles["normal"]))
 
     if not rows:
         story.append(Paragraph("Aucune donnée champions fournie.", styles["normal"]))
@@ -792,7 +936,7 @@ def _add_mlops_section(story, styles, payload: DailyPdfRequest):
     header = ["Symbol", "Silhouette", "Reconstruction AE", "Score global", "run_id"]
     data = [header]
 
-    # tri : score meilleur en haut (moins négatif)
+    # tri : score meilleur en haut
     try:
         rows = sorted(rows, key=lambda r: float(r.get("score", -999)), reverse=True)
     except Exception:
@@ -807,20 +951,52 @@ def _add_mlops_section(story, styles, payload: DailyPdfRequest):
             _safe(r.get("run_id")) or "-",
         ])
 
-    tbl = Table(data, colWidths=[2.0*cm, 2.4*cm, 3.4*cm, 2.4*cm, 5.9*cm])
+    tbl = Table(data, colWidths=[2.0 * cm, 2.4 * cm, 3.4 * cm, 2.4 * cm, 5.9 * cm])
     _style_table_default(tbl)
 
-    # coloration score
     amber = colors.HexColor("#F59E0B")
     tbl.setStyle(TableStyle([
-        ("ALIGN", (0, 1), (0, -1), "CENTER"),
-        ("ALIGN", (1, 1), (3, -1), "RIGHT"),
+        # ✅ centre TOUT (titres + valeurs)
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        # garde une touche visuelle sur Score global
         ("TEXTCOLOR", (3, 1), (3, -1), amber),
     ]))
 
     story.append(tbl)
-    story.append(Spacer(1, 0.35 * cm))
 
+    # -------------------------------------------------------------
+    # Agentic RAG — Champion du jour (Silhouette / AE / Score global)
+    # -------------------------------------------------------------
+    best_symbol = None
+    best_value = None
+
+    def _f(x, default=None):
+        try:
+            v = float(x)
+            return v
+        except Exception:
+            return default
+
+    for r in rows:
+        sym = _safe(r.get("symbol"))
+        sil = _f(r.get("silhouette"), 0.0)
+        ae = _f(r.get("ae_reconstruction"), 0.0)
+        sc = _f(r.get("score"), -999.0)
+        # score simple & explicable : on récompense Silhouette et Score, on pénalise AE
+        composite = (sc + sil - ae)
+        if best_value is None or composite > best_value:
+            best_value = composite
+            best_symbol = sym
+
+    if best_symbol:
+        story.append(Spacer(1, 0.15 * cm))
+        story.append(Paragraph(
+            f"Analyse agentique : le <b>champion du jour</b> est <b>{best_symbol}</b>, retenu pour son compromis favorable entre silhouette, reconstruction AE et score global.",
+            styles["normal"],
+        ))
+
+    story.append(Spacer(1, 0.35 * cm))
 
 # --------------------------------------------------------------------
 # ✅ OHLCV (optionnel)
@@ -978,7 +1154,7 @@ def generate_daily_report(payload: DailyPdfRequest):
     # (désactivé) Résumé exécutif : on ne l'inclut plus dans le PDF
     # _add_executive_summary(story, styles, payload.human_text)
  
-    _add_tech_section(story, styles, payload.tech_radar)
+    _add_tech_section(story, styles, payload)
     _add_market_ai_table(story, styles, payload.market_ai_rows, payload.market_ai_summary)
     _add_market_assets_table(story, styles, payload.market_radar_assets)
 
