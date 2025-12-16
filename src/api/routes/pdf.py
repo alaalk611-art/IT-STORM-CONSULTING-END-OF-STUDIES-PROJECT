@@ -51,6 +51,13 @@ class DailyPdfRequest(BaseModel):
 
     ohlcv_by_symbol: dict[str, list[dict]] | None = None
 
+    # ✅ AJOUT (Traçabilité + Quality Gate)
+    trace: dict | None = None
+    quality_ok: bool | None = None
+    quality_level: str | None = None
+    quality_reason: str | None = None
+
+
 
 # --------------------------------------------------------------------
 # 🎨 Helpers : dates / emojis / nettoyages
@@ -857,6 +864,93 @@ def _add_ohlcv_section(story, styles, ohlcv_by_symbol: dict[str, list[dict]] | N
         story.append(Spacer(1, 0.25 * cm))
 
 
+
+def _add_trace_quality_section(story, styles, payload: DailyPdfRequest):
+    trace = payload.trace or {}
+
+    # Quality gate peut être au root OU dans trace
+    q_ok = payload.quality_ok if payload.quality_ok is not None else trace.get("quality_ok")
+    q_level = _safe(payload.quality_level or trace.get("quality_level") or trace.get("quality") or "")
+    q_reason = _safe(payload.quality_reason or trace.get("quality_reason") or trace.get("quality_reason_msg") or "")
+
+    # Badge couleur
+    if q_ok is True or (q_level.upper() in ("PASS", "OK")):
+        q_txt, q_col = "✅ PASS", colors.HexColor("#16A34A")
+    elif q_ok is False or (q_level.upper() in ("FAIL", "KO")):
+        q_txt, q_col = "❌ FAIL", colors.HexColor("#DC2626")
+    else:
+        q_txt, q_col = "⚠ UNKNOWN", colors.HexColor("#F59E0B")
+
+    story.append(Paragraph("🔎 Traçabilité & Qualité", styles["section"]))
+    story.append(Paragraph("Audit (Add Trace) + décision (Quality Gate)", styles["normal"]))
+    story.append(Spacer(1, 0.2 * cm))
+
+    # 2 cartes : trace + quality
+    run_id = _safe(trace.get("run_id") or "")
+    gen_at = _pretty_dt(_safe(trace.get("generated_at") or payload.generated_at))
+    workflow = _safe(trace.get("workflow") or "")
+    pipeline = _safe(trace.get("pipeline") or "")
+    retry_count = trace.get("retry_count", 0)
+
+    left = Table([[
+        Paragraph("<b>Add Trace</b>", ParagraphStyle("tqh", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white)),
+    ], [
+        Paragraph(f"<b>run_id</b> : {run_id or '-'}", styles["small"]),
+    ], [
+        Paragraph(f"<b>generated_at</b> : {gen_at}", styles["small"]),
+    ], [
+        Paragraph(f"<b>workflow</b> : {workflow or '-'}", styles["small"]),
+    ], [
+        Paragraph(f"<b>pipeline</b> : {pipeline or '-'}", styles["small"]),
+    ], [
+        Paragraph(f"<b>retry_count</b> : {retry_count}", styles["small"]),
+    ]], colWidths=[7.6 * cm])
+
+    left.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor(styles["blue_dark"])),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("BOX", (0,0), (-1,-1), 0.8, colors.HexColor("#0B1220")),
+        ("INNERGRID", (0,0), (-1,-1), 0.25, colors.HexColor("#CBD5E1")),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+    ]))
+
+    right = Table([[
+        Paragraph("<b>Quality Gate</b>", ParagraphStyle("tqh2", fontName="Helvetica-Bold", fontSize=10, textColor=colors.white)),
+    ], [
+        _badge(f"Résultat : {q_txt}", q_col),
+    ], [
+        Paragraph(f"<b>quality_level</b> : {_safe(q_level) or '-'}", styles["small"]),
+    ], [
+        Paragraph(f"<b>quality_ok</b> : {('true' if q_ok is True else 'false' if q_ok is False else '-')}", styles["small"]),
+    ], [
+        Paragraph(f"<b>quality_reason</b> : {_safe(q_reason) or '-'}", styles["small"]),
+    ]], colWidths=[7.6 * cm])
+
+    right.setStyle(TableStyle([
+        ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1E293B")),
+        ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+        ("BOX", (0,0), (-1,-1), 0.8, colors.HexColor("#0B1220")),
+        ("INNERGRID", (0,0), (-1,-1), 0.25, colors.HexColor("#CBD5E1")),
+        ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ("RIGHTPADDING", (0,0), (-1,-1), 8),
+        ("TOPPADDING", (0,0), (-1,-1), 6),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ("VALIGN", (0,0), (-1,-1), "TOP"),
+    ]))
+
+    two = Table([[left, right]], colWidths=[7.8 * cm, 7.8 * cm])
+    two.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))
+    story.append(two)
+
+    story.append(Spacer(1, 0.35 * cm))
+    story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E5E7EB")))
+    story.append(Spacer(1, 0.2 * cm))
+
+
 # --------------------------------------------------------------------
 # ✅ ROUTE PRINCIPALE FASTAPI
 # --------------------------------------------------------------------
@@ -883,7 +977,7 @@ def generate_daily_report(payload: DailyPdfRequest):
     _add_dashboard_page(story, styles, payload)
     # (désactivé) Résumé exécutif : on ne l'inclut plus dans le PDF
     # _add_executive_summary(story, styles, payload.human_text)
-
+ 
     _add_tech_section(story, styles, payload.tech_radar)
     _add_market_ai_table(story, styles, payload.market_ai_rows, payload.market_ai_summary)
     _add_market_assets_table(story, styles, payload.market_radar_assets)
@@ -891,6 +985,7 @@ def generate_daily_report(payload: DailyPdfRequest):
     # ✅ AJOUT
     _add_mlops_section(story, styles, payload)
     _add_ohlcv_section(story, styles, payload.ohlcv_by_symbol, max_rows=7)
+    _add_trace_quality_section(story, styles, payload)
 
     story.append(Spacer(1, 0.35 * cm))
     story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#E5E7EB")))
