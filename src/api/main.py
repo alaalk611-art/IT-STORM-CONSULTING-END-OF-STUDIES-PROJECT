@@ -366,6 +366,13 @@ def get_ohlcv(symbol: str, interval: str = "1d", period: str = "6mo"):
 from src.api.routes import mlops_market
 app.include_router(mlops_market.router)
 
+from src.api import speech_rag
+app.include_router(speech_rag.router, prefix="/rag", tags=["rag"])
+
+from src.api import speech_tts
+app.include_router(speech_tts.router, prefix="/tts", tags=["tts"])
+
+
 from src.api.routes import pdf
 app.include_router(pdf.router)
 
