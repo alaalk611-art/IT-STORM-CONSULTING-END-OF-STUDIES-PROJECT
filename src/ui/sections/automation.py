@@ -512,7 +512,7 @@ def render_market_radar() -> None:
 def render_daily_full() -> None:
     """
     Carte Daily Full (workflow combiné Tech + Market).
-    - Bouton "Exécuter Daily Full" qui appelle /webhook/daily-full
+    - Bouton "Exécuter Daily Full" qui appelle /webhook/daily-tech-market
     - 4 tuiles : Quality, Hot, Trending, Actifs marché
     - Résumé texte + JSON brut
     """
@@ -526,7 +526,7 @@ def render_daily_full() -> None:
         st.markdown('<div class="pulse-btn">', unsafe_allow_html=True)
         if st.button("🔄 Exécuter Daily Full", key="refresh_full"):
             with st.spinner("Lancement du workflow n8n « StormCopilot Daily Full »..."):
-                raw = call_n8n(f"{N8N_BASE}/webhook/daily-full", payload={}, timeout=160)
+                raw = call_n8n(f"{N8N_BASE}/webhook/daily-tech-market", payload={}, timeout=160)
             st.session_state[state_key] = raw
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -806,7 +806,7 @@ def _default_workflows() -> List[Dict[str, Any]]:
                 {
                     "type": "n8n_webhook",
                     "params": {
-                        "url": f"{N8N_BASE}/webhook/daily-full",
+                        "url": f"{N8N_BASE}/webhook/daily-tech-market",
                         "timeout": 160,
                         "payload": {},
                     },

@@ -578,19 +578,19 @@ def _render_tab_training():
         st.markdown("### 🚀 Daily Full MLOps – orchestré par n8n")
         st.caption(
             "Lance le scénario complet : QuickTrain → Metrics → Champions, "
-            "via le workflow n8n `mlops-daily-full`."
+            "via le workflow n8n `daily-ml-ops`."
         )
 
-        if st.button("▶️ Exécuter mlops-daily-full (n8n)"):
+        if st.button("▶️ Exécuter daily-ml-ops (n8n)"):
             try:
                 resp = requests.post(
-                    f"{N8N_BASE}/webhook/mlops-daily-full",
+                    f"{N8N_BASE}/webhook/daily-ml-ops",
                     timeout=120,
                 )
                 resp.raise_for_status()
                 data = resp.json()
 
-                st.success("Workflow `mlops-daily-full` exécuté avec succès via n8n.")
+                st.success("Workflow `daily-ml-ops` exécuté avec succès via n8n.")
                 render_champions_synthesis_card()
                 # Petit résumé lisible
                 if isinstance(data, dict) and data:
@@ -622,7 +622,7 @@ def _render_tab_training():
                     st.warning("Réponse inattendue du workflow n8n (format non dict).")
 
             except Exception as e:
-                st.error(f"Erreur lors de l’appel du workflow n8n `mlops-daily-full` : {e}")
+                st.error(f"Erreur lors de l’appel du workflow n8n `daily-ml-ops` : {e}")
 
 
     st.markdown("---")
