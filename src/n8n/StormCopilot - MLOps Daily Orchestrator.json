@@ -17,8 +17,8 @@
       "type": "n8n-nodes-base.cron",
       "typeVersion": 1,
       "position": [
-        -8400,
-        144
+        -8928,
+        -96
       ]
     },
     {
@@ -218,7 +218,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
-        -4784,
+        -4368,
         -304
       ]
     },
@@ -274,7 +274,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4592,
+        -4176,
         -304
       ],
       "id": "9d694d0d-0dca-443a-9e83-339ce1f205bd",
@@ -287,7 +287,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4960,
+        -4544,
         -304
       ],
       "id": "ddac622a-e1b2-4f77-a1e2-e306684b53d2",
@@ -300,7 +300,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4368,
+        -3952,
         -304
       ],
       "id": "021c1c54-6259-4c05-9345-5eb8cdd07278",
@@ -390,7 +390,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        -3872,
+        -3456,
         16
       ],
       "id": "d365c322-609f-442a-83f2-a83d6ede0bb1",
@@ -523,7 +523,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -5408,
+        -5200,
         -304
       ],
       "id": "18868156-b72a-4976-9755-fa2dee903881",
@@ -565,7 +565,7 @@
       "type": "n8n-nodes-base.set",
       "typeVersion": 3.4,
       "position": [
-        -3488,
+        -3072,
         16
       ],
       "id": "96dad2e3-ddcf-4256-9943-35fb8011d2a3",
@@ -592,7 +592,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        -3680,
+        -3264,
         16
       ],
       "id": "0b48d2da-a368-42e2-82b1-4f5dfe9625d7",
@@ -600,12 +600,12 @@
     },
     {
       "parameters": {
-        "jsCode": "// ✅ TEST FORCÉ — Detect Malveillance\n// Objectif : forcer has_alert=true pour vérifier IF + email\n\nconst d = items[0]?.json || {};\n\nreturn [{\n  json: {\n    ...d,\n    has_alert: true,\n    severity: \"CRITICAL\",\n    alerts: [{\n      symbol: \"BNP.PA\",\n      run_id: \"TEST_RUN_ID_123\",\n      ae_reconstruction: 0.99,\n      silhouette: 0.05,\n      score: -2.0,\n      severity: \"CRITICAL\"\n    }],\n    generated_at: new Date().toISOString()\n  }\n}];\n"
+        "jsCode": "// Node: Detect Malveillance (GENERAL)\n// Output: ONE item only\n// - has_alert = true  => branche \"alert email\"\n// - has_alert = false => branche \"Respond to Webhook\"\n\nfunction n(x) {\n  const v = Number(x);\n  return Number.isFinite(v) ? v : null;\n}\n\nfunction pickFirstAlertLike(obj) {\n  // accepte plusieurs formats possibles\n  if (!obj) return null;\n  if (Array.isArray(obj.alerts) && obj.alerts.length) return obj.alerts[0];\n  if (Array.isArray(obj.anomalies) && obj.anomalies.length) return obj.anomalies[0];\n  if (obj.alert && typeof obj.alert === \"object\") return obj.alert;\n  return null;\n}\n\nfunction maxSeverity(a, b) {\n  const r = { INFO: 0, WARNING: 1, CRITICAL: 2 };\n  const A = (a || \"INFO\").toUpperCase();\n  const B = (b || \"INFO\").toUpperCase();\n  return (r[B] ?? 0) > (r[A] ?? 0) ? B : A;\n}\n\n// 1) agrège tous les items (important pour éviter double mail)\nlet best = null;\nlet severity = \"INFO\";\n\nfor (const it of items) {\n  const j = it.json || {};\n\n  // tu peux produire has_alert en amont, on le respecte\n  const upstreamHas = j.has_alert === true || j.has_alert === \"true\";\n\n  // sinon on tente de détecter via champs connus\n  const a = pickFirstAlertLike(j);\n  const ae = n(a?.ae_reconstruction ?? j.ae_reconstruction);\n  const sil = n(a?.silhouette ?? j.silhouette);\n  const score = n(a?.score ?? j.score);\n\n  // Heuristique générique (modifie les seuils si besoin)\n  const TH = {\n    ae_high: 0.70,\n    silhouette_low: 0.10,\n    score_low: -0.20,\n  };\n\n  const heurHas =\n    (ae !== null && ae >= TH.ae_high) ||\n    (sil !== null && sil <= TH.silhouette_low) ||\n    (score !== null && score <= TH.score_low) ||\n    (String(j.pipeline_status || \"\").includes(\"KO\"));\n\n  const has_alert = upstreamHas || heurHas;\n\n  if (has_alert) {\n    const sev = (a?.severity || j.severity || \"CRITICAL\").toUpperCase();\n    severity = maxSeverity(severity, sev);\n\n    // on garde la meilleure alerte (ici: la plus sévère)\n    if (!best) best = { it: j, a, ae, sil, score, sev };\n    else if (maxSeverity(best.sev, sev) === sev) best = { it: j, a, ae, sil, score, sev };\n  }\n}\n\n// 2) construire l’output unique\nconst now = new Date().toISOString();\n\nif (!best) {\n  // Pas d'alerte => Respond to Webhook (branche false)\n  const base = items[0]?.json || {};\n  return [{\n    json: {\n      ...base,\n      has_alert: false,\n      severity: \"INFO\",\n      alerts: [],\n      generated_at: now\n    }\n  }];\n}\n\n// Alerte => branche true\nconst j = best.it || {};\nconst a = best.a || {};\n\nreturn [{\n  json: {\n    ...j,\n    has_alert: true,\n    severity,\n    alerts: [{\n      symbol: a.symbol ?? j.symbol ?? j.ticker ?? \"-\",\n      run_id: a.run_id ?? j.run_id ?? j.mlflow_run_id ?? \"-\",\n      ae_reconstruction: best.ae,\n      silhouette: best.sil,\n      score: best.score,\n      severity\n    }],\n    generated_at: now\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -5024,
+        -4848,
         -1312
       ],
       "id": "8f56f00e-6a63-4e07-a7bf-ffbd4b4dfac4",
@@ -639,11 +639,12 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -4800,
+        -4592,
         -1408
       ],
       "id": "99fa44f2-2bad-41b6-8f8b-65b67c36c05f",
-      "name": "If"
+      "name": "If",
+      "executeOnce": false
     },
     {
       "parameters": {
@@ -652,7 +653,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4544,
+        -4336,
         -1424
       ],
       "id": "4096abd9-8602-43ad-8c25-6ef0c3f4fdab",
@@ -668,12 +669,14 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -4192,
+        -3984,
         -1424
       ],
       "id": "e6cfa052-37b8-4c0a-8c49-21a55fa24c2b",
       "name": "Send Alert notif",
       "webhookId": "39b6be33-018e-46c1-870a-ee4679729020",
+      "retryOnFail": false,
+      "maxTries": 2,
       "credentials": {
         "gmailOAuth2": {
           "id": "DvSKAKQRnMta8oyc",
@@ -692,7 +695,7 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -3072,
+        -2656,
         16
       ],
       "id": "90f18abb-d75f-4b1e-a58a-0dc5c228542e",
@@ -826,7 +829,7 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -3984,
+        -3760,
         -1424
       ],
       "id": "59931bc3-3a89-4956-9a1a-d5f730fe92fb",
@@ -855,7 +858,7 @@
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
       "position": [
-        -3280,
+        -2864,
         16
       ],
       "id": "ab4537a3-1376-4d06-8282-dcc687fc878d",
@@ -875,7 +878,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4256,
+        -3840,
         16
       ],
       "id": "37b9f5d3-a24b-4300-baa9-f7bc680f70f6",
@@ -888,7 +891,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -4080,
+        -3664,
         16
       ],
       "id": "b66b0161-4c46-4cc2-b1e3-d305c2db1b33",
@@ -904,7 +907,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        -5120,
+        -4912,
         -800
       ],
       "id": "06c272a7-d771-44b1-8d8a-c6301ee86386",
@@ -960,6 +963,32 @@
           "name": "n8n email copilot"
         }
       }
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = items[0]?.json || {};\n\nreturn [{\n  json: {\n    ...d,\n    has_alert: true,\n    severity: \"CRITICAL\",\n    alerts: [{\n      symbol: \"BNP.PA\",\n      run_id: \"TEST_RUN_ID_123\",\n      ae_reconstruction: 0.99,\n      silhouette: 0.05,\n      score: -2.0,\n      severity: \"CRITICAL\"\n    }],\n    generated_at: new Date().toISOString()\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -4848,
+        -1120
+      ],
+      "id": "42452730-ce64-437e-8722-be3448917b14",
+      "name": "forcer malveillance"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -4384,
+        -1264
+      ],
+      "id": "87638ed0-9ef2-478a-a065-f54da41e4648",
+      "name": "Respond to Webhook"
     }
   ],
   "pinData": {},
@@ -979,7 +1008,7 @@
       "main": [
         [
           {
-            "node": "Fetch MLOps Executive (mlops-daily-full)",
+            "node": "QuickTrain /mlops/train/market",
             "type": "main",
             "index": 0
           },
@@ -989,7 +1018,7 @@
             "index": 0
           },
           {
-            "node": "QuickTrain /mlops/train/market",
+            "node": "Fetch MLOps Executive (mlops-daily-full)",
             "type": "main",
             "index": 0
           }
@@ -1165,14 +1194,14 @@
       "main": [
         [
           {
-            "node": "Node Detect Malveillance",
+            "node": "set mlops",
             "type": "main",
             "index": 0
           },
           {
-            "node": "Merge3",
+            "node": "Node Detect Malveillance",
             "type": "main",
-            "index": 1
+            "index": 0
           }
         ]
       ]
@@ -1380,7 +1409,13 @@
             "index": 0
           }
         ],
-        []
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "alert email": {
@@ -1548,6 +1583,11 @@
       "main": [
         []
       ]
+    },
+    "forcer malveillance": {
+      "main": [
+        []
+      ]
     }
   },
   "active": true,
@@ -1557,7 +1597,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "3da96b72-a9dc-488d-b7df-be1cfa8c7eee",
+  "versionId": "95394436-e357-4edf-a0d5-784444de8b68",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"

@@ -9,7 +9,7 @@
         "responseData": "allEntries",
         "options": {}
       },
-      "id": "dc838f7e-f2b1-444d-90fa-aedefa337532",
+      "id": "5c82b83b-a3a6-4778-8dd0-886fba3dfffe",
       "name": "Webhook Tech Radar",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
@@ -24,7 +24,7 @@
         "language": "javascript",
         "jsCode": "// Entrée venant du Webhook (JSON)\nconst raw = items[0].json || {};\n\n// Paramètres optionnels avec défauts\nconst scope = raw.scope || \"tech_only\";\nconst timeout = raw.timeout || 90;\n\n// Tu pourrais plus tard ajouter d'autres filtres : since_days, sources, etc.\n\nreturn [\n  {\n    json: {\n      scope,\n      timeout\n    }\n  }\n];\n"
       },
-      "id": "b20c33f2-b699-4158-8bf6-8bb87f01d4ae",
+      "id": "dc4c2123-b3e7-4e70-bdb1-39dbd9e48bc4",
       "name": "Prepare Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
@@ -40,7 +40,7 @@
           "timeout": 120000
         }
       },
-      "id": "85aa16a7-4e45-4b2a-b495-ccf8994eb76a",
+      "id": "d633e3eb-6ae1-49a0-b727-e4fd27de653b",
       "name": "Refresh Tech Watch",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
@@ -54,7 +54,7 @@
         "language": "javascript",
         "jsCode": "// Réponse brute de l'API backend /tech/watch/latest\nconst resp = $json || {};\n\nconst status = resp.status || \"unknown\";\nconst count = resp.count ?? 0;\nconst items = Array.isArray(resp.items) ? resp.items : [];\n\n// Petit comptage : Hot / Trending / Fresh\nlet hot = 0;\nlet trending = 0;\nlet fresh = 0;\n\nfor (const it of items) {\n  const rl = String(it.rank_label || \"\");\n  if (rl.startsWith(\"🔥\")) hot++;\n  else if (rl.startsWith(\"⭐\")) trending++;\n  else fresh++;\n}\n\n// Métriques pour le radar\nconst sourcesTotal = count;\nconst nbOk = count;          // toutes les entrées chargées correctement\nconst nbErr = 0;             // les erreurs sont filtrées côté backend\nconst sourcesOk = count;\nconst sourcesError = 0;\nconst duration = resp.duration || null;   // peut être null ici\nconst truncated = false;                  // /latest renvoie l'état courant\n\n// Déduire un niveau de qualité global\nlet quality = \"Inconnu\";\nif (status === \"ok\" && sourcesTotal > 0) {\n  quality = \"✅ Complet\";\n} else if (status === \"ok\" && sourcesTotal === 0) {\n  quality = \"⚠️ Vide\";\n} else if (status === \"error\") {\n  quality = \"❌ Échec\";\n}\n\n// Construire un petit résumé texte\nlet headline = \"Etat de la veille inconnu.\";\nif (sourcesTotal > 0) {\n  headline = `Veille chargée : ${sourcesOk}/${sourcesTotal} sources actives.`;\n  if (hot > 0 || trending > 0) {\n    headline += ` ${hot} Hot · ${trending} Trending.`;\n  }\n}\n\n// On renvoie un JSON propre, prêt pour StormCopilot\nreturn [\n  {\n    json: {\n      type: \"tech_radar\",\n      status,\n      quality,\n      headline,\n      metrics: {\n        nb_ok: nbOk,\n        nb_err: nbErr,\n        sources_total: sourcesTotal,\n        sources_ok: sourcesOk,\n        sources_error: sourcesError,\n        duration_sec: duration,\n        truncated,\n        hot,\n        trending,\n        fresh\n      },\n      fetched_at: new Date().toISOString(),\n      raw: resp\n    }\n  }\n];\n"
       },
-      "id": "0e33afdb-8355-491b-9487-a5d6a9dcc0b0",
+      "id": "7837eb8c-8a9f-4425-a276-b0f1fa94057f",
       "name": "Build Tech Radar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
@@ -104,10 +104,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "c4473c05-376f-4f40-9d15-2e50fcd7b123",
+  "versionId": "86a55cdd-d1fb-4a3c-840d-a39769c4c845",
   "meta": {
-    "instanceId": "1fb275a1143c08295349f5dc2018e6128d43180d882d8eb9ae4c4469b812ea9e"
+    "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"
   },
-  "id": "v6yiJ0hXHc7z1vG1",
+  "id": "pPQNr5893nj8x1bV",
   "tags": []
 }

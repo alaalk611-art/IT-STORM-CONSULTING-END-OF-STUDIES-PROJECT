@@ -9,7 +9,7 @@
         "responseData": "allEntries",
         "options": {}
       },
-      "id": "9d8901cb-23e2-454f-abd9-ccefa25abac9",
+      "id": "dc1c3c93-1c75-43a3-b620-143b4313e873",
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 1,
@@ -24,7 +24,7 @@
         "language": "javascript",
         "jsCode": "const raw = items[0].json;\n\nconst symbols = typeof raw.symbols === \"string\"\n  ? raw.symbols.split(\",\").map(s => s.trim())\n  : raw.symbols || [\"^FCHI\", \"BNP.PA\", \"AIR.PA\", \"MC.PA\", \"OR.PA\", \"ORA.PA\"];\n\nreturn symbols.map(symbol => ({\n  json: {\n    symbol,\n    interval: raw.interval || \"1d\",\n    period: raw.period || \"1y\",\n  }\n}));\n"
       },
-      "id": "1d797274-4bc4-4b85-8814-9c4159d8ca80",
+      "id": "9dcd9e85-3a5b-4c58-aa75-99e6e2852160",
       "name": "Prepare Payload",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
@@ -52,7 +52,7 @@
           ]
         }
       },
-      "id": "e0944ad7-e9a4-4d26-abe5-ea7c7d913b01",
+      "id": "5f669f1c-3886-41d4-90d0-d70735fbfe09",
       "name": "HTTP Request",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
@@ -68,7 +68,7 @@
         "language": "javascript",
         "jsCode": "// Données originales venant de \"Prepare Payload\"\nconst orig = $item(0).$node[\"Prepare Payload\"].json || {};\n// Réponse de ton backend (node HTTP Request)\nconst resp = $json || {};\n\nconst candles = Array.isArray(resp.candles) ? resp.candles : [];\n\n// ---- Fonctions utilitaires ----\nfunction extractCloses(candles) {\n  const closes = [];\n  for (const c of candles) {\n    let v = c.c;\n    if (typeof v === \"string\") {\n      v = parseFloat(v.replace(\",\", \".\"));\n    }\n    if (Number.isFinite(v)) {\n      closes.push(v);\n    }\n  }\n  return closes;\n}\n\nfunction computeStats(candles) {\n  const closes = extractCloses(candles);\n  const n = closes.length;\n\n  if (n === 0) {\n    return {\n      first_close: null,\n      last_close: null,\n      pct_change: null,\n      volatility: null,\n      trend: \"Inconnue\",\n      signal: \"NEUTRE\",\n    };\n  }\n\n  const first = closes[0];\n  const last = closes[n - 1];\n  const pct_change = first !== 0 ? ((last - first) / first) * 100 : 0;\n\n  // Rendements journaliers\n  const rets = [];\n  for (let i = 1; i < n; i++) {\n    const prev = closes[i - 1];\n    const cur = closes[i];\n    if (prev && prev !== 0) {\n      rets.push(cur / prev - 1);\n    }\n  }\n\n  let vol = null;\n  if (rets.length > 1) {\n    const mean =\n      rets.reduce((acc, r) => acc + r, 0) / rets.length;\n    let varSum = 0;\n    for (const r of rets) {\n      varSum += (r - mean) * (r - mean);\n    }\n    const variance = varSum / (rets.length - 1);\n    // Vol annualisée (approx) * 100 pour %\n    vol = Math.sqrt(variance) * Math.sqrt(252) * 100;\n  }\n\n  let trend = \"Latérale\";\n  let signal = \"NEUTRE\";\n\n  if (pct_change > 8) {\n    trend = \"Haussière\";\n    signal = \"ACHAT\";\n  } else if (pct_change < -8) {\n    trend = \"Baissière\";\n    signal = \"VENTE\";\n  }\n\n  return {\n    first_close: first,\n    last_close: last,\n    pct_change,\n    volatility: vol,\n    trend,\n    signal,\n  };\n}\n\nconst stats = computeStats(candles);\n\nreturn {\n  json: {\n    // symbole robuste\n    symbol: resp.symbol || orig.symbol || \"UNKNOWN\",\n\n    nb_candles: candles.length,\n\n    source: resp.source || \"yfinance\",\n    interval: resp.interval || orig.interval || null,\n    period: resp.period || orig.period || null,\n\n    // 🔥 Nouveaux champs enrichis\n    first_close: stats.first_close,\n    last_close: stats.last_close,\n    pct_change: stats.pct_change,\n    volatility: stats.volatility,\n    trend: stats.trend,\n    signal: stats.signal,\n\n    error_message: resp.error?.message || null,\n    error_status: resp.error?.status || null,\n\n    fetched_at: new Date().toISOString(),\n  },\n};\n"
       },
-      "id": "cc3ded8c-72fb-44b7-942c-a508f3dde576",
+      "id": "ea41ed0e-f7f9-4b79-a5a3-57fc2309c015",
       "name": "Minimal Radar",
       "type": "n8n-nodes-base.code",
       "typeVersion": 1,
@@ -125,10 +125,10 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "5c767f86-2e9d-4aea-b390-8a2c16b5bd81",
+  "versionId": "48e46909-3418-4006-b0bd-92b055185537",
   "meta": {
-    "instanceId": "1fb275a1143c08295349f5dc2018e6128d43180d882d8eb9ae4c4469b812ea9e"
+    "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"
   },
-  "id": "R0hLmxva8wjaztew",
+  "id": "YeapMADaLkaEOCZU",
   "tags": []
 }
