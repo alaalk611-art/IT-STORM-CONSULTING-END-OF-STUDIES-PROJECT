@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
 # Path: src/ui/sections/speech_chat.py
-# Voice Copilot — Premium UI
-# - Tab unique: 🎙 Live
-# - Sous-tabs: ✅ Question unique (stable) + 📞 Appel téléphonique (multi-tours UI-only)
-# - Micro navigateur (MediaRecorder) → STT → RAG → TTS
-# - Trace d’exécution (timings) sans debug bruit
-# - 100% f-string safe
+# Voice Copilot — Premium UI (FINAL)
+#
+# ✅ Fixes included:
+# 1) 🎛️ VU-mètre RMS (bar + valeur) + contraintes audio (AGC/NS/EC) => micro “moins faible”
+# 2) 🔊 TTS complet (plus de limite ~17s) :
+#    - Split en chunks courts
+#    - Appels multiples /tts/synthesize (b64)
+#    - Concat bytes MP3 => 1 seul Blob audio/mpeg => lecture complète
+# 3) 🛡️ Mode anti-hallucination (UI-only): si sources vides => réponse prudente + question
 
 from __future__ import annotations
 
@@ -72,7 +75,6 @@ def _inject_page_css() -> None:
 
 
 def _component_single_question(lang: str) -> str:
-    # ✅ Version stable : une seule question (pas d'historique)
     return f"""
 <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
             border:1px solid rgba(148,163,184,.35);
@@ -118,6 +120,19 @@ def _component_single_question(lang: str) -> str:
     .b-white {{
       background:#ffffff; color:#0f172a;
       border-color: rgba(148,163,184,.55);
+    }}
+
+    .toggle {{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,.45);
+      background:#ffffff;
+      font-size:12px;
+      font-weight:900;
+      color:#0f172a;
+      cursor:pointer;
+      user-select:none;
     }}
 
     .status {{
@@ -226,6 +241,11 @@ def _component_single_question(lang: str) -> str:
   </style>
 
   <div class="rowtop">
+    <label class="toggle" title="Si pas de sources, réponse prudente + question de précision">
+      <input id="antiHall" type="checkbox" checked style="margin-right:6px;" />
+      🛡️ Anti-hallucination
+    </label>
+
     <button id="btnStart" class="btn b-dark">🎤 Start</button>
     <button id="btnStop"  class="btn b-white">⏹ Stop</button>
     <button id="btnSend"  class="btn b-bordeaux">🧪 Transcrire</button>
@@ -235,6 +255,15 @@ def _component_single_question(lang: str) -> str:
       <div id="dot" class="dot"></div>
       <span id="status">Idle</span>
     </div>
+  </div>
+
+  <!-- 🎛️ VU Meter -->
+  <div style="margin-top:8px; display:flex; align-items:center; gap:10px;">
+    <div style="font-weight:900; font-size:12px;">VU</div>
+    <div style="flex:1; height:10px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+      <div id="vuBar" style="width:0%; height:100%; background:linear-gradient(90deg,#16a34a,#f59e0b,#ef4444);"></div>
+    </div>
+    <div id="vuTxt" style="font-weight:900; font-size:12px; width:110px; text-align:right;">RMS=0.0000</div>
   </div>
 
   <div style="margin-top:10px;">
@@ -287,6 +316,8 @@ def _component_single_question(lang: str) -> str:
   const btnSend  = document.getElementById("btnSend");
   const btnAsk   = document.getElementById("btnAsk");
 
+  const antiHallEl = document.getElementById("antiHall");
+
   const statusEl = document.getElementById("status");
   const dotEl    = document.getElementById("dot");
 
@@ -307,6 +338,9 @@ def _component_single_question(lang: str) -> str:
   const tRag   = document.getElementById("tRag");
   const tTts   = document.getElementById("tTts");
 
+  const vuBar = document.getElementById("vuBar");
+  const vuTxt = document.getElementById("vuTxt");
+
   let mediaRecorder = null;
   let chunks = [];
   let stream = null;
@@ -315,6 +349,12 @@ def _component_single_question(lang: str) -> str:
   let lastObjectUrl = null;
   let t0 = null;
   let tick = {{ stt: null, rag: null, tts: null, total: null }};
+
+  // VU-meter state
+  let audioCtx = null;
+  let analyser = null;
+  let data = null;
+  let vuTimer = null;
 
   function msToStr(ms) {{
     if (ms === null || ms === undefined) return "—";
@@ -355,6 +395,189 @@ def _component_single_question(lang: str) -> str:
     return (s || "").toString().replace(/\\s+/g, " ").trim();
   }}
 
+  function cleanAnswer(text) {{
+    let t = (text || "").toString();
+    t = t.replace(/\\r/g, "");
+    t = t.replace(/\\n{{3,}}/g, "\\n\\n").trim();
+
+    const parts = t.split(/(?<=[\\.!\\?])\\s+/).map(x => x.trim()).filter(Boolean);
+    const seen = new Set();
+    const out = [];
+    for (const p of parts) {{
+      const key = p.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôùûüÿñæœ\\s]/gi, "").replace(/\\s+/g, " ").trim();
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }}
+    t = out.join(" ").trim();
+
+    const maxChars = 2000;
+    if (t.length > maxChars) t = t.slice(0, maxChars).trim() + "…";
+    return t;
+  }}
+
+  function buildRagPrompt(userQuestion, antiHall) {{
+    const base = [
+      "Règles de réponse :",
+      "- Réponds comme un humain à l’oral",
+      "- Une seule réponse claire et utile",
+      "- Pas de répétition, pas de blabla",
+      "- Phrases courtes",
+      "- Maximum 6 phrases",
+    ];
+    if (antiHall) {{
+      base.push(
+        "",
+        "Anti-hallucination :",
+        "- Si tu n’es pas sûr, dis-le clairement.",
+        "- Ne devine pas.",
+        "- Pose UNE question courte pour préciser."
+      );
+    }}
+    base.push("", "Question :", userQuestion);
+    return base.join("\\n");
+  }}
+
+  function antiHallFallback(originalQ) {{
+    const q = (originalQ || "").trim();
+    if (!q) return "Je n’ai pas assez d’éléments pour répondre avec certitude. Tu peux préciser ta question ?";
+    return "Je n’ai pas trouvé d’éléments fiables dans ma base pour répondre avec certitude. " +
+           "Tu peux préciser (ex: le point exact, ou le document concerné) ?";
+  }}
+
+  // ----------------------------
+  // 🎛️ VU-meter
+  // ----------------------------
+  function startVu(s) {{
+    if (!vuBar || !vuTxt) return;
+    try {{
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(s);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      data = new Float32Array(analyser.fftSize);
+      src.connect(analyser);
+
+      if (vuTimer) clearInterval(vuTimer);
+      vuTimer = setInterval(() => {{
+        analyser.getFloatTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / data.length);
+        const pct = Math.min(100, Math.max(0, rms * 220)); // scaling
+        vuBar.style.width = pct + "%";
+        vuTxt.textContent = "RMS=" + rms.toFixed(4);
+      }}, 80);
+    }} catch (e) {{
+      // ignore
+    }}
+  }}
+
+  function stopVu() {{
+    if (vuTimer) clearInterval(vuTimer);
+    vuTimer = null;
+    try {{ if (audioCtx) audioCtx.close(); }} catch(e) {{}}
+    audioCtx = null; analyser = null; data = null;
+    if (vuBar) vuBar.style.width = "0%";
+    if (vuTxt) vuTxt.textContent = "RMS=0.0000";
+  }}
+
+  // ----------------------------
+  // 🔊 TTS: split => multi-call => concat mp3 => 1 Blob
+  // ----------------------------
+  function splitForTts(text, maxLen) {{
+    const t = (text || "").toString().trim();
+    if (!t) return [];
+    const maxL = Math.max(80, maxLen || 140);
+
+    const sentences = t
+      .replace(/\\s+/g, " ")
+      .split(/(?<=[\\.!\\?])\\s+/)
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    const chunks = [];
+    let cur = "";
+    for (const s of sentences) {{
+      if (!cur) {{ cur = s; continue; }}
+      if ((cur.length + 1 + s.length) <= maxL) cur += " " + s;
+      else {{ chunks.push(cur); cur = s; }}
+    }}
+    if (cur) chunks.push(cur);
+
+    const final = [];
+    for (const c of chunks) {{
+      if (c.length <= maxL) final.push(c);
+      else for (let i=0;i<c.length;i+=maxL) final.push(c.slice(i,i+maxL));
+    }}
+    return final.filter(Boolean);
+  }}
+
+  function b64ToBytes(b64) {{
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }}
+
+  async function ttsSynthesizeB64(text) {{
+    const url = "{API_BASE}/tts/synthesize";
+    const resp = await fetch(url, {{
+      method: "POST",
+      headers: {{ "Content-Type": "application/json" }},
+      body: JSON.stringify({{ text: text, lang: "{lang}" }})
+    }});
+    const body = await resp.text();
+    if (!resp.ok) throw new Error(body || "TTS error");
+    const json = JSON.parse(body);
+    const b64 = (json.audio_base64 || "").trim();
+    if (!b64) throw new Error("Empty audio");
+    return b64;
+  }}
+
+  async function speakTTSLong(text) {{
+    const t = (text || "").toString().trim();
+    if (!t || t === "(vide)" || t === "(réponse vide)") return;
+
+    setBadge(bTTS, "RUN");
+    setStatus("TTS…", "run");
+
+    const tStart = performance.now();
+
+    // Chunks plus petits => pas de coupe ~17s côté TTS
+    const parts = splitForTts(t, 140);
+
+    const byteParts = [];
+    for (const part of parts) {{
+      const b64 = await ttsSynthesizeB64(part);
+      byteParts.push(b64ToBytes(b64));
+    }}
+
+    let totalLen = 0;
+    for (const a of byteParts) totalLen += a.length;
+    const merged = new Uint8Array(totalLen);
+    let off = 0;
+    for (const a of byteParts) {{ merged.set(a, off); off += a.length; }}
+
+    const blob = new Blob([merged], {{ type: "audio/mpeg" }});
+    const url = URL.createObjectURL(blob);
+
+    try {{ ttsPlayer.pause(); ttsPlayer.currentTime = 0; }} catch(e) {{}}
+    ttsPlayer.src = url;
+
+    try {{ await ttsPlayer.play(); }} catch(e) {{ /* user can press play */ }}
+
+    tick.tts = performance.now() - tStart;
+    tTts.textContent = msToStr(tick.tts);
+
+    setBadge(bTTS, "OK");
+    setStatus("Done ✅", "ok");
+  }}
+
+  // ----------------------------
+  // Record / STT / RAG
+  // ----------------------------
   async function start() {{
     chunks = [];
     lastBlob = null;
@@ -369,7 +592,18 @@ def _component_single_question(lang: str) -> str:
     setStatus("Recording…", "run");
 
     try {{
-      stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
+      stream = await navigator.mediaDevices.getUserMedia({{
+        audio: {{
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000
+        }}
+      }});
+
+      startVu(stream);
+
       mediaRecorder = new MediaRecorder(stream, {{ mimeType: "audio/webm" }});
 
       mediaRecorder.ondataavailable = (e) => {{
@@ -403,6 +637,7 @@ def _component_single_question(lang: str) -> str:
       if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
       if (stream) stream.getTracks().forEach(t => t.stop());
     }} catch(e) {{}}
+    stopVu();
   }}
 
   async function sendToSTT() {{
@@ -452,51 +687,9 @@ def _component_single_question(lang: str) -> str:
     }}
   }}
 
-  async function speakTTS(text) {{
-    const t = (text || "").toString().trim();
-    if (!t || t === "(vide)" || t === "(réponse vide)") return;
-
-    setBadge(bTTS, "RUN");
-    setStatus("TTS…", "run");
-
-    const url = "{API_BASE}/tts/synthesize";
-    const tStart = performance.now();
-
-    try {{
-      const resp = await fetch(url, {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ text: t, lang: "{lang}" }})
-      }});
-
-      const body = await resp.text();
-      if (!resp.ok) {{
-        setBadge(bTTS, "ERR");
-        setStatus("Error", "err");
-        return;
-      }}
-
-      const json = JSON.parse(body);
-      const b64 = (json.audio_base64 || "").trim();
-      if (b64) {{
-        ttsPlayer.src = "data:audio/mpeg;base64," + b64;
-        try {{ await ttsPlayer.play(); }} catch(e) {{}}
-      }}
-
-      tick.tts = performance.now() - tStart;
-      tTts.textContent = msToStr(tick.tts);
-
-      setBadge(bTTS, "OK");
-      setStatus("Done ✅", "ok");
-    }} catch (err) {{
-      setBadge(bTTS, "ERR");
-      setStatus("Error", "err");
-    }}
-  }}
-
   async function askRAG() {{
-    const q = (transcriptEl.textContent || "").trim();
-    if (!q || q === "(vide)" || q.includes("transcription en cours")) {{
+    const qRaw = (transcriptEl.textContent || "").trim();
+    if (!qRaw || qRaw === "(vide)" || qRaw.includes("transcription en cours")) {{
       alert("D’abord fais la transcription STT.");
       return;
     }}
@@ -511,11 +704,14 @@ def _component_single_question(lang: str) -> str:
     const url = "{API_BASE}/rag/ask";
     const tStart = performance.now();
 
+    const antiHall = antiHallEl ? !!antiHallEl.checked : true;
+    const enriched = buildRagPrompt(qRaw, antiHall);
+
     try {{
       const resp = await fetch(url, {{
         method: "POST",
         headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ question: q }})
+        body: JSON.stringify({{ question: enriched }})
       }});
 
       const body = await resp.text();
@@ -527,18 +723,23 @@ def _component_single_question(lang: str) -> str:
       }}
 
       const json = JSON.parse(body);
-      const ans = (json.answer || "").trim();
-      answerEl.textContent = ans || "(réponse vide)";
-
       const src = Array.isArray(json.sources) ? json.sources : [];
       sourcesEl.textContent = src.length ? ("Sources: " + src.join(" | ")) : "Sources: —";
+
+      let ans = cleanAnswer((json.answer || "").trim());
+      if (antiHall && src.length === 0) {{
+        ans = antiHallFallback(qRaw);
+      }}
+
+      answerEl.textContent = ans || "(réponse vide)";
 
       tick.rag = performance.now() - tStart;
       tRag.textContent = msToStr(tick.rag);
 
       setBadge(bRAG, "OK");
 
-      await speakTTS(answerEl.textContent);
+      // 🔊 TTS complet (concat blob)
+      await speakTTSLong(answerEl.textContent);
 
       tick.total = (t0 ? (performance.now() - t0) : null);
       tTotal.textContent = msToStr(tick.total);
@@ -561,7 +762,6 @@ def _component_single_question(lang: str) -> str:
 
 
 def _component_call_mode(lang: str) -> str:
-    # ✅ Call-mode: push-to-talk multi-tours + mémoire courte UI-only + scénario + timer
     return f"""
 <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial;
             border:1px solid rgba(148,163,184,.35);
@@ -607,6 +807,19 @@ def _component_call_mode(lang: str) -> str:
     .b-white {{
       background:#ffffff; color:#0f172a;
       border-color: rgba(148,163,184,.55);
+    }}
+
+    .toggle {{
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px;
+      border-radius:999px;
+      border:1px solid rgba(148,163,184,.45);
+      background:#ffffff;
+      font-size:12px;
+      font-weight:900;
+      color:#0f172a;
+      cursor:pointer;
+      user-select:none;
     }}
 
     .status {{
@@ -724,23 +937,20 @@ def _component_call_mode(lang: str) -> str:
       font-weight:800;
     }}
 
-    /* Chat bubbles */
     .chat {{
       background:#ffffff;
       min-height:160px;
       max-height:240px;
       overflow:auto;
     }}
-    .toggle {{
-      display:inline-flex; align-items:center; gap:8px;
+    .hint {{
+      margin-top:8px;
       padding:8px 10px;
-      border-radius:999px;
-      border:1px solid rgba(148,163,184,.45);
-      background:#ffffff;
+      border-radius:14px;
+      border:1px dashed rgba(148,163,184,.55);
+      color:#475569;
+      background: rgba(248,250,252,.7);
       font-size:12px;
-      font-weight:900;
-      color:#0f172a;
-      cursor:pointer;
     }}
   </style>
 
@@ -759,6 +969,16 @@ def _component_call_mode(lang: str) -> str:
       Multi-tours (3)
     </label>
 
+    <label class="toggle" title="L’agent accuse réception et enchaîne naturellement">
+      <input id="activeListen" type="checkbox" checked style="margin-right:6px;" />
+      Écoute active
+    </label>
+
+    <label class="toggle" title="Si pas de sources, réponse prudente + question de précision">
+      <input id="antiHall" type="checkbox" checked style="margin-right:6px;" />
+      🛡️ Anti-hallucination
+    </label>
+
     <button id="btnResetCtx" class="btn b-white" style="padding:8px 12px;">
       ♻️ Reset
     </button>
@@ -766,6 +986,19 @@ def _component_call_mode(lang: str) -> str:
     <div id="callBar" class="callbar">
       📞 <span id="callTimer">00:00</span> • <span id="callState">Idle</span>
     </div>
+  </div>
+
+  <div class="hint">
+    Astuce: parle en 1 phrase, puis “Transcrire” → “Interroger”. Le TTS lit toute la réponse, même longue.
+  </div>
+
+  <!-- 🎛️ VU Meter -->
+  <div style="margin-top:10px; display:flex; align-items:center; gap:10px;">
+    <div style="font-weight:900; font-size:12px;">VU</div>
+    <div style="flex:1; height:10px; background:#e2e8f0; border-radius:999px; overflow:hidden;">
+      <div id="vuBar" style="width:0%; height:100%; background:linear-gradient(90deg,#16a34a,#f59e0b,#ef4444);"></div>
+    </div>
+    <div id="vuTxt" style="font-weight:900; font-size:12px; width:110px; text-align:right;">RMS=0.0000</div>
   </div>
 
   <div class="rowtop" style="margin-top:10px;">
@@ -853,6 +1086,8 @@ def _component_call_mode(lang: str) -> str:
 
   const chatEl = document.getElementById("chat");
   const useContextEl = document.getElementById("useContext");
+  const activeListenEl = document.getElementById("activeListen");
+  const antiHallEl = document.getElementById("antiHall");
   const btnResetCtx = document.getElementById("btnResetCtx");
   const ctxHintEl = document.getElementById("ctxHint");
 
@@ -861,6 +1096,9 @@ def _component_call_mode(lang: str) -> str:
   const callBar = document.getElementById("callBar");
   const callTimerEl = document.getElementById("callTimer");
   const callStateEl = document.getElementById("callState");
+
+  const vuBar = document.getElementById("vuBar");
+  const vuTxt = document.getElementById("vuTxt");
 
   let mediaRecorder = null;
   let chunks = [];
@@ -871,13 +1109,17 @@ def _component_call_mode(lang: str) -> str:
   let t0 = null;
   let tick = {{ stt: null, rag: null, tts: null, total: null }};
 
-  // Call state
+  // VU-meter state
+  let audioCtx = null;
+  let analyser = null;
+  let data = null;
+  let vuTimer = null;
+
   let callOn = false;
   let callStartedAt = null;
   let callTimer = null;
 
-  // Multi-turn memory (UI only)
-  let HISTORY = []; //
+  let HISTORY = [];
   const MAX_TURNS = 3;
 
   function msToStr(ms) {{
@@ -926,6 +1168,165 @@ def _component_call_mode(lang: str) -> str:
       .replaceAll(">", "&gt;");
   }}
 
+  function cleanAnswer(text) {{
+    let t = (text || "").toString();
+    t = t.replace(/\\r/g, "");
+    t = t.replace(/\\n{{3,}}/g, "\\n\\n").trim();
+
+    const parts = t.split(/(?<=[\\.!\\?])\\s+/).map(x => x.trim()).filter(Boolean);
+    const seen = new Set();
+    const out = [];
+    for (const p of parts) {{
+      const key = p.toLowerCase().replace(/[^a-z0-9àâçéèêëîïôùûüÿñæœ\\s]/gi, "").replace(/\\s+/g, " ").trim();
+      if (!key) continue;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }}
+    t = out.join(" ").trim();
+
+    const maxChars = 2200;
+    if (t.length > maxChars) t = t.slice(0, maxChars).trim() + "…";
+    return t;
+  }}
+
+  function antiHallFallback(originalQ) {{
+    const q = (originalQ || "").trim();
+    if (!q) return "Je n’ai pas assez d’éléments pour répondre avec certitude. Tu peux préciser ta question ?";
+    return "Je n’ai pas trouvé d’éléments fiables dans ma base pour répondre avec certitude. " +
+           "Tu peux préciser (ex: le point exact, ou le document concerné) ?";
+  }}
+
+  // ----------------------------
+  // 🎛️ VU-meter
+  // ----------------------------
+  function startVu(s) {{
+    if (!vuBar || !vuTxt) return;
+    try {{
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = audioCtx.createMediaStreamSource(s);
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      data = new Float32Array(analyser.fftSize);
+      src.connect(analyser);
+
+      if (vuTimer) clearInterval(vuTimer);
+      vuTimer = setInterval(() => {{
+        analyser.getFloatTimeDomainData(data);
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / data.length);
+        const pct = Math.min(100, Math.max(0, rms * 220));
+        vuBar.style.width = pct + "%";
+        vuTxt.textContent = "RMS=" + rms.toFixed(4);
+      }}, 80);
+    }} catch (e) {{}}
+  }}
+
+  function stopVu() {{
+    if (vuTimer) clearInterval(vuTimer);
+    vuTimer = null;
+    try {{ if (audioCtx) audioCtx.close(); }} catch(e) {{}}
+    audioCtx = null; analyser = null; data = null;
+    if (vuBar) vuBar.style.width = "0%";
+    if (vuTxt) vuTxt.textContent = "RMS=0.0000";
+  }}
+
+  // ----------------------------
+  // 🔊 TTS: split => multi-call => concat mp3 => 1 Blob
+  // ----------------------------
+  function splitForTts(text, maxLen) {{
+    const t = (text || "").toString().trim();
+    if (!t) return [];
+    const maxL = Math.max(80, maxLen || 140);
+
+    const sentences = t
+      .replace(/\\s+/g, " ")
+      .split(/(?<=[\\.!\\?])\\s+/)
+      .map(x => x.trim())
+      .filter(Boolean);
+
+    const chunks = [];
+    let cur = "";
+    for (const s of sentences) {{
+      if (!cur) {{ cur = s; continue; }}
+      if ((cur.length + 1 + s.length) <= maxL) cur += " " + s;
+      else {{ chunks.push(cur); cur = s; }}
+    }}
+    if (cur) chunks.push(cur);
+
+    const final = [];
+    for (const c of chunks) {{
+      if (c.length <= maxL) final.push(c);
+      else for (let i=0;i<c.length;i+=maxL) final.push(c.slice(i,i+maxL));
+    }}
+    return final.filter(Boolean);
+  }}
+
+  function b64ToBytes(b64) {{
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+  }}
+
+  async function ttsSynthesizeB64(text) {{
+    const url = "{API_BASE}/tts/synthesize";
+    const resp = await fetch(url, {{
+      method: "POST",
+      headers: {{ "Content-Type": "application/json" }},
+      body: JSON.stringify({{ text: text, lang: "{lang}" }})
+    }});
+    const body = await resp.text();
+    if (!resp.ok) throw new Error(body || "TTS error");
+    const json = JSON.parse(body);
+    const b64 = (json.audio_base64 || "").trim();
+    if (!b64) throw new Error("Empty audio");
+    return b64;
+  }}
+
+  async function speakTTSLong(text) {{
+    const t = (text || "").toString().trim();
+    if (!t || t === "(vide)" || t === "(réponse vide)") return;
+
+    setBadge(bTTS, "RUN");
+    setStatus("TTS…", "run");
+    if (callOn) callUi(true, "Speaking");
+
+    const tStart = performance.now();
+
+    const parts = splitForTts(t, 140);
+    const byteParts = [];
+    for (const part of parts) {{
+      const b64 = await ttsSynthesizeB64(part);
+      byteParts.push(b64ToBytes(b64));
+    }}
+
+    let totalLen = 0;
+    for (const a of byteParts) totalLen += a.length;
+    const merged = new Uint8Array(totalLen);
+    let off = 0;
+    for (const a of byteParts) {{ merged.set(a, off); off += a.length; }}
+
+    const blob = new Blob([merged], {{ type: "audio/mpeg" }});
+    const url = URL.createObjectURL(blob);
+
+    try {{ ttsPlayer.pause(); ttsPlayer.currentTime = 0; }} catch(e) {{}}
+    ttsPlayer.src = url;
+
+    try {{ await ttsPlayer.play(); }} catch(e) {{}}
+
+    tick.tts = performance.now() - tStart;
+    tTts.textContent = msToStr(tick.tts);
+
+    setBadge(bTTS, "OK");
+    setStatus("Done ✅", "ok");
+    if (callOn) callUi(true, "Connected");
+  }}
+
+  // ----------------------------
+  // Call mode UI + Memory
+  // ----------------------------
   function renderChat() {{
     if (!chatEl) return;
 
@@ -971,9 +1372,7 @@ def _component_call_mode(lang: str) -> str:
     HISTORY.push({{ role, text: t }});
 
     const maxMsgs = MAX_TURNS * 2;
-    if (HISTORY.length > maxMsgs) {{
-      HISTORY = HISTORY.slice(HISTORY.length - maxMsgs);
-    }}
+    if (HISTORY.length > maxMsgs) HISTORY = HISTORY.slice(HISTORY.length - maxMsgs);
     renderChat();
   }}
 
@@ -1001,9 +1400,7 @@ def _component_call_mode(lang: str) -> str:
     callUi(true, "Connected");
     if (callTimer) clearInterval(callTimer);
     callTimer = setInterval(() => {{
-      if (callTimerEl && callStartedAt) {{
-        callTimerEl.textContent = fmtMMSS(performance.now() - callStartedAt);
-      }}
+      if (callTimerEl && callStartedAt) callTimerEl.textContent = fmtMMSS(performance.now() - callStartedAt);
     }}, 250);
   }}
 
@@ -1044,11 +1441,14 @@ def _component_call_mode(lang: str) -> str:
       }}
       resetHistory();
       pushHistory("assistant", "Bonjour, support StormCopilot à l’appareil. Je vous écoute.");
-      pushHistory("assistant", "Contexte: vous appelez au sujet d’un besoin de clarification lié à IT-STORM (consulting / portage salarial).");
+      pushHistory("assistant", "Contexte: appel au sujet d’IT STORM (consulting / portage salarial).");
       pushHistory("assistant", "Dites-moi votre question en une phrase, je vous réponds avec des éléments documentés.");
     }};
   }}
 
+  // ----------------------------
+  // Record / STT / RAG
+  // ----------------------------
   async function start() {{
     chunks = [];
     lastBlob = null;
@@ -1064,7 +1464,18 @@ def _component_call_mode(lang: str) -> str:
     if (callOn) callUi(true, "Recording");
 
     try {{
-      stream = await navigator.mediaDevices.getUserMedia({{ audio: true }});
+      stream = await navigator.mediaDevices.getUserMedia({{
+        audio: {{
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          sampleRate: 48000
+        }}
+      }});
+
+      startVu(stream);
+
       mediaRecorder = new MediaRecorder(stream, {{ mimeType: "audio/webm" }});
 
       mediaRecorder.ondataavailable = (e) => {{
@@ -1100,6 +1511,8 @@ def _component_call_mode(lang: str) -> str:
       if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
       if (stream) stream.getTracks().forEach(t => t.stop());
     }} catch(e) {{}}
+    stopVu();
+    if (callOn) callUi(true, "Connected");
   }}
 
   async function sendToSTT() {{
@@ -1153,50 +1566,24 @@ def _component_call_mode(lang: str) -> str:
     }}
   }}
 
-  async function speakTTS(text) {{
-    const t = (text || "").toString().trim();
-    if (!t || t === "(vide)" || t === "(réponse vide)") return;
+  function buildCallPrompt(q, ctxText, useCtx, activeListen, antiHall) {{
+    const rules = [
+      "Tu es un agent vocal en conversation téléphonique (ton naturel).",
+      "Réponds comme un humain à l’oral.",
+      "Une seule réponse claire et utile.",
+      "Pas de répétition, pas de blabla.",
+      "Phrases courtes. Maximum 6 phrases.",
+      "Si la question est ambiguë, pose UNE question courte de clarification.",
+    ];
+    if (antiHall) rules.push("Anti-hallucination : si tu n’es pas sûr, dis-le clairement. Ne devine pas.");
+    const listen = activeListen
+      ? "Écoute active: commence par une courte phrase de réception puis répond."
+      : "Écoute active: désactivée.";
 
-    setBadge(bTTS, "RUN");
-    setStatus("TTS…", "run");
-    if (callOn) callUi(true, "Speaking");
-
-    const url = "{API_BASE}/tts/synthesize";
-    const tStart = performance.now();
-
-    try {{
-      const resp = await fetch(url, {{
-        method: "POST",
-        headers: {{ "Content-Type": "application/json" }},
-        body: JSON.stringify({{ text: t, lang: "{lang}" }})
-      }});
-
-      const body = await resp.text();
-      if (!resp.ok) {{
-        setBadge(bTTS, "ERR");
-        setStatus("Error", "err");
-        if (callOn) callUi(true, "TTS error");
-        return;
-      }}
-
-      const json = JSON.parse(body);
-      const b64 = (json.audio_base64 || "").trim();
-      if (b64) {{
-        ttsPlayer.src = "data:audio/mpeg;base64," + b64;
-        try {{ await ttsPlayer.play(); }} catch(e) {{}}
-      }}
-
-      tick.tts = performance.now() - tStart;
-      tTts.textContent = msToStr(tick.tts);
-
-      setBadge(bTTS, "OK");
-      setStatus("Done ✅", "ok");
-      if (callOn) callUi(true, "Connected");
-    }} catch (err) {{
-      setBadge(bTTS, "ERR");
-      setStatus("Error", "err");
-      if (callOn) callUi(true, "TTS error");
-    }}
+    let prompt = rules.join("\\n") + "\\n\\n" + listen + "\\n";
+    if (useCtx && ctxText) prompt += "\\nHistorique récent :\\n" + ctxText + "\\n";
+    prompt += "\\nUtilisateur :\\n" + q;
+    return prompt;
   }}
 
   async function askRAG() {{
@@ -1217,13 +1604,16 @@ def _component_call_mode(lang: str) -> str:
     const url = "{API_BASE}/rag/ask";
     const tStart = performance.now();
 
-    // ✅ Multi-tours: enrichit la question (sans changer le backend)
     const useCtx = useContextEl ? !!useContextEl.checked : true;
-    let enriched = q;
+    const activeListen = activeListenEl ? !!activeListenEl.checked : true;
+    const antiHall = antiHallEl ? !!antiHallEl.checked : true;
+
+    let ctxText = "";
     if (useCtx && HISTORY.length) {{
-      const ctx = HISTORY.map(m => (m.role === "user" ? "User: " : "Assistant: ") + m.text).join("\\n");
-      enriched = "Contexte (conversation récente):\\n" + ctx + "\\n\\nQuestion actuelle:\\n" + q;
+      ctxText = HISTORY.map(m => (m.role === "user" ? "User: " : "Assistant: ") + m.text).join("\\n");
     }}
+
+    const enriched = buildCallPrompt(q, ctxText, useCtx, activeListen, antiHall);
 
     try {{
       const resp = await fetch(url, {{
@@ -1242,22 +1632,26 @@ def _component_call_mode(lang: str) -> str:
       }}
 
       const json = JSON.parse(body);
-      const ans = (json.answer || "").trim();
-      answerEl.textContent = ans || "(réponse vide)";
-
       const src = Array.isArray(json.sources) ? json.sources : [];
       sourcesEl.textContent = src.length ? ("Sources: " + src.join(" | ")) : "Sources: —";
+
+      let ans = cleanAnswer((json.answer || "").trim());
+      if (antiHall && src.length === 0) ans = antiHallFallback(q);
+
+      answerEl.textContent = ans || "(réponse vide)";
 
       tick.rag = performance.now() - tStart;
       tRag.textContent = msToStr(tick.rag);
 
       setBadge(bRAG, "OK");
 
-      // ✅ update multi-tours memory (call-mode)
-      pushHistory("user", q);
-      pushHistory("assistant", ans);
+      // Memory (call-mode)
+      if (callOn) {{
+        pushHistory("user", q);
+        pushHistory("assistant", ans);
+      }}
 
-      await speakTTS(answerEl.textContent);
+      await speakTTSLong(answerEl.textContent);
 
       tick.total = (t0 ? (performance.now() - t0) : null);
       tTotal.textContent = msToStr(tick.total);
@@ -1277,7 +1671,6 @@ def _component_call_mode(lang: str) -> str:
   btnSend.onclick  = sendToSTT;
   btnAsk.onclick   = askRAG;
 
-  // initial render chat
   renderChat();
 }})();
 </script>
@@ -1288,30 +1681,37 @@ def render_stt_only() -> None:
     _inject_page_css()
 
     st.markdown(
-        f"""
+        """
 <div class="vc-hero">
   <div class="vc-title">Voice Copilot</div>
   <div class="vc-sub">
     Démo PFE stable : tu parles → transcription (Whisper) → question RAG → réponse documentée + lecture audio.
   </div>
-  
+
+  <div class="vc-pills">
+    <div class="vc-pill">🎛️ VU-mètre RMS</div>
+    <div class="vc-pill">🛡️ Anti-hallucination</div>
+    <div class="vc-pill">🔊 TTS complet (concat blob)</div>
+    <div class="vc-pill">🎙 Micro navigateur</div>
+    <div class="vc-pill">🧪 STT</div>
+    <div class="vc-pill">💬 RAG</div>
+    <div class="vc-pill">📞 Call-mode</div>
+  </div>
 </div>
 """,
         unsafe_allow_html=True,
     )
     st.markdown("")
 
-    # ✅ Un seul tab principal : Live
     (tab_live,) = st.tabs(["🎙 Live"])
 
     with tab_live:
-        # Sous-tabs: Question unique + Appel
         sub1, sub2 = st.tabs(["✅ Question unique", "📞 Appel téléphonique"])
 
         with sub1:
             lang = st.selectbox("Langue STT/TTS", ["fr", "en"], index=0, key="vc_lang_single")
-            components.html(_component_single_question(lang), height=860, scrolling=False)
+            components.html(_component_single_question(lang), height=950, scrolling=False)
 
         with sub2:
             lang = st.selectbox("Langue STT/TTS", ["fr", "en"], index=0, key="vc_lang_call")
-            components.html(_component_call_mode(lang), height=980, scrolling=False)
+            components.html(_component_call_mode(lang), height=1120, scrolling=False)
