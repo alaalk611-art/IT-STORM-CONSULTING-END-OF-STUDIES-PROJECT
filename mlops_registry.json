@@ -9,13 +9,13 @@
     "score": -0.07717582860797256
   },
   "BNP.PA": {
-    "run_id": "339c5678f1ed4fb48b559a3c959e5f41",
+    "run_id": "83e3acfa8e4242309bf887a9102ea6e1",
     "metrics": {
-      "silhouette": 0.3210038054624519,
-      "ae_reconstruction": 0.5807128548622131,
+      "silhouette": 0.35775829444879376,
+      "ae_reconstruction": 0.505832850933075,
       "autoencoder_msg": null
     },
-    "score": -0.25970904939976125
+    "score": -0.1480745564842812
   },
   "MC.PA": {
     "run_id": "05ade5c49ab0424093061e1b84069cfc",
@@ -36,21 +36,21 @@
     "score": -0.058083671132514225
   },
   "OR.PA": {
-    "run_id": "2799c154cd18452588f5518c326b4a2b",
+    "run_id": "e6522a8effd748e584be667dca8e17ad",
     "metrics": {
-      "silhouette": 0.3936687082863156,
-      "ae_reconstruction": 0.6547216773033142,
+      "silhouette": 0.362373196222394,
+      "ae_reconstruction": 0.5679032802581787,
       "autoencoder_msg": null
     },
-    "score": -0.2610529690169986
+    "score": -0.2055300840357847
   },
   "ORA.PA": {
-    "run_id": "f16a02b4f8274a14bd39583432b8683f",
+    "run_id": "a8b7d7b8e1624ac9868f6577cab8b22a",
     "metrics": {
-      "silhouette": 0.36465483226745526,
-      "ae_reconstruction": 0.6367303133010864,
+      "silhouette": 0.36355703705145015,
+      "ae_reconstruction": 0.5238730311393738,
       "autoencoder_msg": null
     },
-    "score": -0.27207548103363116
+    "score": -0.16031599408792363
   }
 }

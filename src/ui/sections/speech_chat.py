@@ -1294,11 +1294,7 @@ def render_stt_only() -> None:
   <div class="vc-sub">
     Démo PFE stable : tu parles → transcription (Whisper) → question RAG → réponse documentée + lecture audio.
   </div>
-  <div class="vc-pills">
-    <div class="vc-pill">Micro (MediaRecorder)</div>
-    <div class="vc-pill">Trace d’exécution</div>
-    <div class="vc-pill">API: <code>{API_BASE}</code></div>
-  </div>
+  
 </div>
 """,
         unsafe_allow_html=True,
