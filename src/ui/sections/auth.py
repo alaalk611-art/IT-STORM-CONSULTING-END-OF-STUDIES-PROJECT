@@ -285,18 +285,40 @@ def _render_totp_qr_forced() -> None:
 
 
 def _check_totp_code(otp: str) -> bool:
-    """Vérifie le code TOTP (Google Authenticator)."""
+    """Vérifie le code TOTP (Google Authenticator) — version robuste."""
     if not _is_totp_enabled():
         return False
-    secret = os.getenv("SC_TOTP_SECRET", "")
+
+    raw_secret = os.getenv("SC_TOTP_SECRET", "")
+    secret = (
+        (raw_secret or "")
+        .strip()
+        .replace(" ", "")
+        .strip('"')
+        .strip("'")
+    )
     if not secret:
         return False
-    try:
-        totp = pyotp.TOTP(secret)  # type: ignore
-        return bool(totp.verify(otp.strip(), valid_window=1))
-    except Exception:
+
+    # Nettoyage code: on garde uniquement les chiffres
+    code = "".join(ch for ch in (otp or "").strip() if ch.isdigit())
+    if len(code) < 6:
         return False
 
+    try:
+        totp = pyotp.TOTP(secret)  # type: ignore
+        # valid_window=2 => tolère +/- 60s (souvent nécessaire sur Windows/VM)
+        ok = bool(totp.verify(code, valid_window=2))
+        # Debug léger (optionnel)
+        st.session_state["_auth_last_totp_debug"] = {
+            "server_time": int(time.time()),
+            "remaining": int(totp.interval - (time.time() % totp.interval)),
+            "input_len": len(code),
+            "ok": ok,
+        }
+        return ok
+    except Exception:
+        return False
 
 # =========================
 # Email OTP (3e facteur)
