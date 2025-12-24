@@ -105,3 +105,4 @@ faster-whisper
 pyotp
 qrcode[pil]
 pillow
+rank-bm25
