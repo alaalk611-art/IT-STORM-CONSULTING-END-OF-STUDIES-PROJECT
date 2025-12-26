@@ -29,16 +29,20 @@ def _inject_css() -> None:
             .upload-wrapper {
                 padding: 0.75rem 0.2rem 0.2rem 0.2rem;
             }
-
             .upload-header-box {
                 background: linear-gradient(135deg,#eff6ff,#e0f2fe);
                 border-radius: 18px;
-                padding: 1.0rem 1.2rem 1.0rem 1.2rem;
+                padding: 1.8rem 1.2rem;          /* ✅ padding vertical augmenté */
                 border: 1px solid #bae6fd;
                 box-shadow: 0 10px 25px rgba(15,23,42,0.06);
-                margin-bottom: 1.0rem;
-            }
+                margin-bottom: 0.9rem;
 
+                display: flex;                   /* ✅ clé du centrage */
+                flex-direction: column;
+                align-items: center;             /* centre horizontal */
+                justify-content: center;         /* centre vertical */
+                text-align: center;
+            }
             .upload-title {
                 font-size: 1.32rem;
                 font-weight: 750;
@@ -77,7 +81,7 @@ def _inject_css() -> None:
             .pipeline-card.status-active {
                 border-color: #bae6fd;
                 background: #f0f9ff;
-                box-shadow: 0 6px 14px rgba(59,130,246,0.12);
+                box-shadow: 0 8px 22px rgba(14,165,233,.18);
                 opacity: 1.0;
             }
 
@@ -271,6 +275,125 @@ def _inject_css() -> None:
                 color: #1d4ed8;
                 box-shadow: 0 6px 14px rgba(37,99,235,0.20);
             }
+            /* ===== Header centered + animations (Wizard only) ===== */
+
+            .upload-header-box {
+            position: relative;
+            overflow: hidden;
+            text-align: center;              /* ✅ center text */
+            }
+
+            .upload-header-inner{
+            max-width: 880px;                /* ✅ nicer line lengths */
+            margin: 0 auto;
+            }
+
+            .upload-header-kicker{
+            display: inline-flex;
+            align-items: center;
+            gap: .5rem;
+            font-size: .78rem;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #1f2937;
+            opacity: .75;
+            padding: .22rem .6rem;
+            border: 1px solid rgba(2,132,199,.18);
+            border-radius: 999px;
+            background: rgba(255,255,255,.55);
+            backdrop-filter: blur(6px);
+            margin-bottom: .55rem;
+            }
+
+            .upload-dot{
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            background: #0ea5e9;
+            box-shadow: 0 0 0 3px rgba(14,165,233,.18);
+            animation: uploadPulse 1.8s ease-in-out infinite;
+            }
+
+            .upload-title{
+            font-size: 1.70rem;              /* ✅ stronger title */
+            line-height: 1.15;
+            margin: 0.15rem 0 0.35rem 0;
+            }
+
+            .upload-subtitle{
+            max-width: 760px;
+            margin: 0 auto;
+            line-height: 1.45;
+            opacity: .9;
+            text-align: center;
+            }
+
+            .upload-header-pill{
+            display: inline-flex;
+            align-items: center;
+            gap: .55rem;
+            margin-top: .80rem;
+            padding: .38rem .80rem;
+            border-radius: 999px;
+            border: 1px solid rgba(2,132,199,.18);
+            background: rgba(255,255,255,.55);
+            backdrop-filter: blur(6px);
+            font-size: .82rem;
+            color: #0f172a;
+            }
+
+            .upload-header-pill .pill-dot{
+            width: 8px;
+            height: 8px;
+            border-radius: 999px;
+            background: #22c55e;
+            box-shadow: 0 0 0 3px rgba(34,197,94,.16);
+            }
+
+            .upload-header-pill .pill-sep{
+            opacity: .55;
+            }
+
+            /* subtle gradient shimmer */
+            .upload-header-box:before{
+            content:"";
+            position:absolute;
+            inset:-60% -40%;
+            background: radial-gradient(circle at 20% 20%, rgba(14,165,233,.18), transparent 55%),
+                        radial-gradient(circle at 80% 30%, rgba(34,197,94,.12), transparent 52%),
+                        radial-gradient(circle at 40% 80%, rgba(59,130,246,.10), transparent 55%);
+            transform: rotate(10deg);
+            animation: headerFloat 10s ease-in-out infinite;
+            pointer-events:none;
+            }
+
+            .upload-header-animated{
+            animation: headerIn .55s ease both;
+            }
+
+            /* Animations */
+            @keyframes headerIn{
+            from{opacity:0; transform: translateY(10px) scale(.99);}
+            to{opacity:1; transform: translateY(0) scale(1);}
+            }
+
+            @keyframes uploadPulse{
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50%      { transform: scale(1.15); opacity: .78; }
+            }
+
+            @keyframes headerFloat{
+            0%,100% { transform: translate3d(0,0,0) rotate(10deg); }
+            50%     { transform: translate3d(0,-10px,0) rotate(10deg); }
+            }
+
+            /* Reduce motion (accessibility) */
+            @media (prefers-reduced-motion: reduce){
+            .upload-header-animated{ animation: none; }
+            .upload-dot{ animation: none; }
+            .upload-header-box:before{ animation: none; }
+            }
+
             .stButton > button:disabled {
                 opacity: 0.45;
                 cursor: not-allowed;
@@ -469,18 +592,7 @@ def render_upload_tab() -> None:
     st.markdown('<div class="upload-wrapper">', unsafe_allow_html=True)
 
     # Nouveau titre / sous-titre
-    st.markdown(
-        """
-        <div class="upload-header-box">
-          <h2 class="upload-title">Organise ton corpus en 3 étapes</h2>
-          <p class="upload-subtitle">
-            Importe les fichiers, crée les chunks nécessaires puis mets à jour l’index utilisé par le copilot.
-          </p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+    st.markdown( """ <div class="upload-header-box"> <h2 class="upload-title">Alimentation du Copilot en connaissances</h2> <p class="upload-subtitle"> Importe les fichiers, crée les chunks nécessaires puis mets à jour l’index utilisé par le copilot. </p> </div> """, unsafe_allow_html=True, )
     _render_pipeline(step1_done, step2_done, step3_done)
 
     st.markdown(
@@ -500,11 +612,12 @@ def render_upload_tab() -> None:
     col_left, col_center, col_right = st.columns([1, 2, 1])
     with col_center:
         selected_label = st.radio(
-            "",
+            "Étape",
             labels,
             index=current_idx,
             horizontal=True,
             key="upload_steps_radio",
+            label_visibility="collapsed",
         )
 
     selected_idx = labels.index(selected_label)
