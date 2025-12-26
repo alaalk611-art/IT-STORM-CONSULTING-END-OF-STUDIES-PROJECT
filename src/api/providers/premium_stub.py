@@ -8,9 +8,7 @@ from src.api.providers.base import MarketDataProvider
 
 
 class PremiumProvider(MarketDataProvider):
-    \"""
-    Exemple de squelette si tu branches TwelveData / Polygon / EODHD (clé API requise).
-    \"""
+    
     name = "premium"
 
     def __init__(self):
