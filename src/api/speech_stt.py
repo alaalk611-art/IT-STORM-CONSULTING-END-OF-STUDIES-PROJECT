@@ -4,13 +4,12 @@
 # Objectif : transcription stable (anti-hallucination) pour démo PFE
 
 from __future__ import annotations
-
+import unicodedata
 import os
 import re
 import tempfile
 import subprocess
-from typing import Optional
-
+from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, UploadFile, File, Query
 from fastapi.responses import JSONResponse
 from faster_whisper import WhisperModel
@@ -20,6 +19,63 @@ router = APIRouter()
 # Modèle (CPU stable)
 model = WhisperModel("small", device="cpu", compute_type="int8")
 
+_DOMAIN_TERMS = [
+    "IT-STORM", "StormCopilot", "portage salarial", "consulting", "mission",
+    "client", "contrat", "facturation", "indépendant", "société de portage",
+]
+
+# Corrections ultra ciblées (anti "IT Store")
+_PROPER_NOUN_FIXES = {
+    r"\bit\s*store\b": "IT-STORM",
+    r"\bit\s*storm\b": "IT-STORM",
+    r"\bit\s*storme\b": "IT-STORM",
+    r"\bstorm\s*copilot\b": "StormCopilot",
+}
+
+def _clean_text(t: str) -> str:
+    t = (t or "").strip()
+    # espaces propres
+    t = re.sub(r"\s+", " ", t)
+    # éviter ponctuation bizarre répétée
+    t = re.sub(r"[•·]+", " ", t).strip()
+    return t
+
+def _apply_domain_fixes(t: str) -> str:
+    out = t
+    for pat, rep in _PROPER_NOUN_FIXES.items():
+        out = re.sub(pat, rep, out, flags=re.IGNORECASE)
+    return out
+
+def _quality_score(text: str, info: Any) -> float:
+    """
+    Score simple de qualité.
+    On combine longueur + logprob + no_speech_prob si dispo.
+    """
+    t = (text or "").strip()
+    if not t:
+        return -999.0
+
+    # longueur (évite les 1-2 mots)
+    L = len(t)
+    len_score = min(1.0, L / 40.0)
+
+    # faster-whisper info peut contenir ces champs selon version
+    avg_logprob = getattr(info, "avg_logprob", None)
+    no_speech_prob = getattr(info, "no_speech_prob", None)
+
+    lp = 0.0
+    if isinstance(avg_logprob, (int, float)):
+        # typiquement ~[-1.5 .. -0.1], plus haut = mieux
+        lp = max(-2.0, min(0.0, float(avg_logprob)))  # clamp
+        lp = (lp + 2.0) / 2.0  # map [-2..0] -> [0..1]
+
+    ns = 0.0
+    if isinstance(no_speech_prob, (int, float)):
+        # plus no_speech_prob est grand = pire
+        ns = 1.0 - max(0.0, min(1.0, float(no_speech_prob)))
+
+    # pondérations
+    return 0.55 * len_score + 0.35 * lp + 0.10 * ns
 
 _BAD_PATTERNS = [
     r"amara\.org",
@@ -57,45 +113,72 @@ def _ffmpeg_to_wav16k_mono(src_path: str) -> str:
 
 def _transcribe_whisper(wav_path: str, lang: Optional[str]) -> str:
     """
-    Transcription robuste :
-    - 1) VAD soft (réduit bruit)
-    - 2) fallback sans VAD si sortie vide/hallucinée
+    Transcription robuste multi-stratégies :
+    - A) VAD soft + beam (stable)
+    - B) sans VAD + beam (si VAD coupe)
+    - C) VAD + sampling léger (si beam donne du "faux propre")
+    Puis on choisit le meilleur candidat via un score de qualité.
+    + initial_prompt pour préserver noms propres (IT-STORM, StormCopilot, portage salarial)
+    + post-correction ciblée (IT Store -> IT-STORM)
     """
-    # 1) tentative avec VAD "soft"
-    segments, info = model.transcribe(
-        wav_path,
-        language=lang if lang else None,
-        task="transcribe",
-        vad_filter=True,
-        vad_parameters={
-            "threshold": 0.3,
-            "min_silence_duration_ms": 250,
-        },
-        beam_size=5,
-        temperature=0.0,
-        condition_on_previous_text=False,
+    initial_prompt = (
+        "Contexte : IT-STORM (avec un tiret), StormCopilot, portage salarial, consulting, mission client. "
+        "Ne pas confondre IT-STORM avec IT Store. "
+        "Mots importants : portage salarial, société de portage, contrat, facturation."
     )
-    parts = [s.text.strip() for s in segments if getattr(s, "text", "").strip()]
-    text = " ".join(parts).strip()
 
-    if text and not _looks_like_hallucination(text):
-        return text
+    candidates: List[Tuple[str, float]] = []
 
-    # 2) fallback : sans VAD (utile si VAD coupe la voix)
-    segments2, info2 = model.transcribe(
-        wav_path,
-        language=lang if lang else None,
-        task="transcribe",
-        vad_filter=False,
-        beam_size=5,
-        temperature=0.0,
-        condition_on_previous_text=False,
-    )
-    parts2 = [s.text.strip() for s in segments2 if getattr(s, "text", "").strip()]
-    text2 = " ".join(parts2).strip()
+    def run_once(vad: bool, beam: bool) -> Tuple[str, Any]:
+        kwargs = dict(
+            language=lang if lang else None,
+            task="transcribe",
+            condition_on_previous_text=False,
+            temperature=0.0 if beam else 0.2,  # sampling léger si pas beam
+            initial_prompt=initial_prompt,
+        )
+        if vad:
+            kwargs["vad_filter"] = True
+            kwargs["vad_parameters"] = {"threshold": 0.3, "min_silence_duration_ms": 250}
+        else:
+            kwargs["vad_filter"] = False
 
-    return text2
+        if beam:
+            kwargs["beam_size"] = 5
+        else:
+            # sampling contrôlé (réduit les "corrections automatiques")
+            kwargs["beam_size"] = 1
 
+        segments, info = model.transcribe(wav_path, **kwargs)
+        parts = [s.text.strip() for s in segments if getattr(s, "text", "").strip()]
+        txt = _clean_text(" ".join(parts))
+        txt = _apply_domain_fixes(txt)
+        return txt, info
+
+    # A) VAD + beam
+    tA, infoA = run_once(vad=True, beam=True)
+    if tA and not _looks_like_hallucination(tA):
+        candidates.append((tA, _quality_score(tA, infoA)))
+
+    # B) no VAD + beam
+    tB, infoB = run_once(vad=False, beam=True)
+    if tB and not _looks_like_hallucination(tB):
+        candidates.append((tB, _quality_score(tB, infoB)))
+
+    # C) VAD + sampling léger (parfois meilleur pour noms propres)
+    tC, infoC = run_once(vad=True, beam=False)
+    if tC and not _looks_like_hallucination(tC):
+        candidates.append((tC, _quality_score(tC, infoC)))
+
+    if not candidates:
+        # dernier recours : renvoyer la "moins pire" (même si vide)
+        return _apply_domain_fixes(_clean_text(tA or tB or tC or ""))
+
+    # choisir meilleur score
+    candidates.sort(key=lambda x: x[1], reverse=True)
+    best = candidates[0][0]
+
+    return best
 
 @router.post("/transcribe")
 async def transcribe(

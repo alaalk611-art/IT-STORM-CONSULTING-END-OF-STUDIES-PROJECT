@@ -701,7 +701,7 @@ def _component_single_question(lang: str) -> str:
     sourcesEl.textContent = "Sources: —";
     try {{ ttsPlayer.pause(); ttsPlayer.src = ""; }} catch(e) {{}}
 
-    const url = "{API_BASE}/rag/ask";
+    const url = "{API_BASE}/rag/hybrid";
     const tStart = performance.now();
 
     const antiHall = antiHallEl ? !!antiHallEl.checked : true;
@@ -1502,7 +1502,7 @@ def _component_call_mode(lang: str) -> str:
       }}
       const enriched = buildCallPrompt(q, ctxText, useCtx, antiHall);
 
-      const ragUrl = "{API_BASE}/rag/ask";
+      const ragUrl = "{API_BASE}/rag/hybrid";
       const ragResp = await fetch(ragUrl, {{
         method:"POST",
         headers:{{"Content-Type":"application/json"}},
