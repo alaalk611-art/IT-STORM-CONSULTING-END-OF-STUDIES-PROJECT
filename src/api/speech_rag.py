@@ -73,11 +73,63 @@ def _normalize_quotes(quotes: Any, max_items: int = 8) -> List[Dict[str, str]]:
                     out.append(d)
     return out
 
+def _detect_intent(q: str) -> str:
+    """
+    Intent léger (rule-based) :
+    - definition: "c'est quoi", "définis", "définition", "que signifie"
+    - procedure: "comment", "étapes", "procédure", "mettre en place", "installer"
+    - comparison: "différence", "vs", "comparaison", "plutôt", "mieux que"
+    """
+    t = (q or "").strip().lower()
 
-def _build_hybrid_prompt(user_q: str, quotes: List[Dict[str, str]]) -> str:
-    """
-    Prompt: réponse générée MAIS strictement basée sur le contexte.
-    """
+    # normalisation légère
+    t = re.sub(r"\s+", " ", t)
+
+    # comparaison
+    if re.search(r"\b(vs|versus|différence|difference|compar(ai|a)son|comparer|plutôt|mieux que)\b", t):
+        return "comparison"
+
+    # procédure
+    if re.search(r"\b(comment|étapes|etapes|procédure|procedure|mettre en place|installer|configurer|déployer|faire)\b", t):
+        return "procedure"
+
+    # définition
+    if re.search(r"\b(c['’ ]?est quoi|c est quoi|définis|definis|définition|definition|que signifie|signification)\b", t):
+        return "definition"
+
+    return "general"
+
+
+def _prompt_rules_for_intent(intent: str) -> str:
+    if intent == "definition":
+        return "\n".join([
+            "Format de réponse :",
+            "- 1 phrase : définition simple.",
+            "- 1 phrase : exemple concret lié à IT-STORM/StormCopilot.",
+            "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+        ])
+    if intent == "procedure":
+        return "\n".join([
+            "Format de réponse :",
+            "- 3 à 5 étapes max, courtes (une phrase par étape).",
+            "- Termine par 1 phrase \"résultat attendu\".",
+            "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+        ])
+    if intent == "comparison":
+        return "\n".join([
+            "Format de réponse :",
+            "- 2 à 3 différences claires (phrases courtes).",
+            "- 1 phrase : quand choisir A vs B (si le contexte le permet).",
+            "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+        ])
+    return "\n".join([
+        "Format de réponse :",
+        "- 2 à 4 phrases max, directes.",
+        "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+    ])
+
+
+def _build_hybrid_prompt(user_q: str, quotes: List[Dict[str, str]], intent: str) -> str:
     ctx_lines: List[str] = []
     for i, q in enumerate(quotes, start=1):
         txt = (q.get("text") or "").strip()
@@ -90,17 +142,19 @@ def _build_hybrid_prompt(user_q: str, quotes: List[Dict[str, str]]) -> str:
             ctx_lines.append(f"[{i}] {txt}")
 
     context_block = "\n\n".join(ctx_lines).strip()
+    intent_rules = _prompt_rules_for_intent(intent)
 
     return f"""
 Tu es l’assistant vocal de StormCopilot.
 Tu réponds en français, avec un ton naturel et professionnel.
 
 Règles strictes :
-- Réponds en 2 à 4 phrases maximum.
-- Réponse générée, claire, utile, sans blabla.
 - Appuie-toi UNIQUEMENT sur le Contexte ci-dessous.
+- Ne devine pas. Ne fabrique pas de chiffres.
 - Si le contexte ne suffit pas pour répondre avec certitude, dis exactement : "Je ne sais pas."
-- Ne cite pas de liens, ne fabrique pas de chiffres, ne devine pas.
+
+Intention détectée : {intent}
+{intent_rules}
 
 Contexte :
 {context_block if context_block else "(vide)"}
@@ -110,6 +164,7 @@ Question :
 
 Réponse :
 """.strip()
+
 
 
 def _ollama_generate(prompt: str) -> Dict[str, Any]:
@@ -217,7 +272,9 @@ async def rag_hybrid(req: RagAskRequest):
     sources = rag_out.get("sources", []) or []
     quotes_norm = _normalize_quotes(rag_out.get("quotes", []), max_items=min(8, max(3, req.top_k)))
 
-    prompt = _build_hybrid_prompt(user_q, quotes_norm)
+    intent = _detect_intent(user_q)
+    prompt = _build_hybrid_prompt(user_q, quotes_norm, intent)
+
 
     try:
         llm_out = _ollama_generate(prompt)
@@ -236,6 +293,7 @@ async def rag_hybrid(req: RagAskRequest):
                 "backend": "ollama",
                 "model": llm_out.get("model", ""),
                 "top_k": req.top_k,
+                "intent": intent,
             },
         },
     )

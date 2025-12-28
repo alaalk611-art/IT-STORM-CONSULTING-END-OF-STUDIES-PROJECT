@@ -703,7 +703,7 @@ def _component_single_question(lang: str) -> str:
 
     const url = "{API_BASE}/rag/hybrid";
     const tStart = performance.now();
-
+    
     const antiHall = antiHallEl ? !!antiHallEl.checked : true;
     const enriched = buildRagPrompt(qRaw, antiHall);
 
@@ -777,6 +777,7 @@ def _component_call_mode(lang: str) -> str:
       --accent2:#be123c;
       --glass:rgba(255,255,255,.07);
     }}
+
     .wrap {{
       border:1px solid var(--stroke);
       border-radius:22px;
@@ -787,7 +788,9 @@ def _component_call_mode(lang: str) -> str:
         linear-gradient(180deg, rgba(2,6,23,.92), rgba(2,6,23,.88));
       box-shadow: 0 28px 80px rgba(2,6,23,.55);
       color: var(--text);
+      overflow:hidden;
     }}
+
     .call-header {{
       display:flex; align-items:center; justify-content:space-between; gap:12px;
       padding:14px; border-radius:18px;
@@ -802,6 +805,7 @@ def _component_call_mode(lang: str) -> str:
       box-shadow:0 14px 35px rgba(190,18,60,.18);
       display:flex; align-items:center; justify-content:center;
       font-weight:950;
+      letter-spacing:.02em;
     }}
     .callee-meta {{ display:flex; flex-direction:column; gap:2px; }}
     .callee-name {{ font-weight:950; font-size:14px; letter-spacing:.02em; }}
@@ -814,6 +818,7 @@ def _component_call_mode(lang: str) -> str:
       background: rgba(255,255,255,.06);
       font-size:12px; font-weight:850; color: var(--text);
       user-select:none;
+      white-space:nowrap;
     }}
     .dot {{ width:8px; height:8px; border-radius:999px; background:#64748b; }}
     .dot.live {{
@@ -828,14 +833,6 @@ def _component_call_mode(lang: str) -> str:
     }}
 
     .controls {{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }}
-    .toggle {{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:9px 12px; border-radius:999px;
-      border:1px solid var(--stroke);
-      background: rgba(255,255,255,.05);
-      font-size:12px; font-weight:900; color: var(--text);
-      user-select:none;
-    }}
     .btn {{
       padding:10px 14px; border-radius:999px;
       cursor:pointer;
@@ -867,13 +864,12 @@ def _component_call_mode(lang: str) -> str:
       background: linear-gradient(90deg,#22c55e,#f59e0b,#ef4444);
     }}
     .vu-txt {{
-      font-weight:950; font-size:12px; width:110px; text-align:right;
+      font-weight:950; font-size:12px; width:170px; text-align:right;
       color: var(--text);
     }}
 
-    .grid {{ display:grid; grid-template-columns: 1.2fr .8fr; gap:14px; margin-top:14px; }}
-    @media (max-width: 980px) {{ .grid {{ grid-template-columns: 1fr; }} }}
-
+    /* ✅ call-only layout (single column) */
+    .grid {{ display:grid; grid-template-columns: 1fr; gap:14px; margin-top:14px; }}
     .card {{
       border-radius:18px; border:1px solid var(--stroke);
       background: rgba(255,255,255,.05);
@@ -885,7 +881,7 @@ def _component_call_mode(lang: str) -> str:
     }}
 
     .chat {{
-      height: 360px; overflow:auto; padding:10px;
+      height: 420px; overflow:auto; padding:10px;
       border-radius:16px;
       border:1px solid rgba(148,163,184,.18);
       background: rgba(2,6,23,.35);
@@ -912,57 +908,23 @@ def _component_call_mode(lang: str) -> str:
       letter-spacing:.02em;
     }}
 
-    .box {{
-      white-space: pre-wrap;
-      border-radius:16px;
-      padding:10px;
-      border:1px solid rgba(148,163,184,.20);
-      background: rgba(255,255,255,.05);
-      color: var(--text);
-      min-height: 110px;
-      font-size:13px;
-      line-height:1.45;
+    .mini {{
+      margin-top:10px;
+      color: var(--muted);
+      font-size:12px;
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      align-items:center;
+      justify-content:space-between;
     }}
-    .mini {{ margin-top:8px; color: var(--muted); font-size:12px; }}
     .audio {{
       width:100%; margin-top:10px;
       filter: invert(0.92) hue-rotate(180deg) saturate(1.0);
       border-radius:14px;
     }}
 
-    .trace {{
-      margin-top:14px;
-      border-radius:18px; border:1px solid var(--stroke);
-      background: rgba(255,255,255,.04);
-      padding:12px;
-    }}
-    .trace-row {{
-      display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;
-      justify-content:center;
-    }}
-    .step {{
-      display:inline-flex; align-items:center; gap:8px;
-      padding:8px 10px; border-radius:999px;
-      border:1px solid rgba(148,163,184,.22);
-      background: rgba(255,255,255,.05);
-      font-size:12px; font-weight:900;
-    }}
-    .badge {{
-      font-size:11px; padding:3px 8px;
-      border-radius:999px; border:1px solid rgba(148,163,184,.25);
-      background: rgba(255,255,255,.05); font-weight:950;
-    }}
-    .badge.ok {{ border-color: rgba(34,197,94,.35); background: rgba(34,197,94,.10); }}
-    .badge.err {{ border-color: rgba(239,68,68,.35); background: rgba(239,68,68,.10); }}
-    .badge.wait{{ border-color: rgba(190,18,60,.25); background: rgba(190,18,60,.08); }}
-    .badge.run {{ border-color: rgba(190,18,60,.35); background: rgba(190,18,60,.12); }}
-
-    .meta {{
-      margin-top:10px; display:flex; flex-wrap:wrap;
-      gap:10px; justify-content:center;
-      color: var(--muted); font-size:12px;
-    }}
-    .meta b {{ color: var(--text); }}
+    .hidden {{ display:none !important; }}
   </style>
 
   <div class="wrap">
@@ -970,7 +932,7 @@ def _component_call_mode(lang: str) -> str:
       <div class="callee">
         <div class="avatar">IT</div>
         <div class="callee-meta">
-          <div class="callee-name">Service client IT STORM · StormCopilot</div>
+          <div class="callee-name">Service client IT-STORM · StormCopilot</div>
           <div class="callee-sub">
             <span class="chip"><span class="dot" id="liveDot"></span> <span id="callState">Boot</span></span>
             <span class="chip">⏱ <span id="callTimer">00:00</span></span>
@@ -980,21 +942,6 @@ def _component_call_mode(lang: str) -> str:
       </div>
 
       <div class="controls">
-        <label class="toggle" title="Si décoché: le système se tait (pause)">
-          <input id="autoMode" type="checkbox" checked />
-          🤖 Auto
-        </label>
-
-        <label class="toggle" title="Garde les 3 derniers tours">
-          <input id="useContext" type="checkbox" checked />
-          Multi-tours (3)
-        </label>
-
-        <label class="toggle" title="Si pas de sources => prudence + question">
-          <input id="antiHall" type="checkbox" checked />
-          🛡️ Anti-hallucination
-        </label>
-
         <button id="btnHang" class="btn btn-danger">📴 Raccrocher</button>
       </div>
     </div>
@@ -1008,55 +955,36 @@ def _component_call_mode(lang: str) -> str:
     <div class="grid">
       <div class="card">
         <div class="card-title">
-          <span>📞 Conversation</span>
+          <span>📞 Appel en cours</span>
           <span id="ctxHint" style="color:var(--muted); font-size:12px; font-weight:850;">Contexte: 0 tour</span>
         </div>
-        <div id="chat" class="chat"></div>
-        <div class="mini">Pré-écoute micro</div>
-        <audio id="player" class="audio" controls></audio>
-      </div>
 
-      <div class="card">
-        <div class="card-title">
-          <span>🧠 Pipeline</span>
-          <span id="sources" style="color:var(--muted); font-size:12px; font-weight:850;">Sources: —</span>
+        <div id="chat" class="chat"></div>
+
+        <div class="mini">
+          <span>Parlez normalement. Le système transcrit et répond automatiquement.</span>
+          <span style="opacity:.9;">Mode IA (écoute → STT → RAG → TTS)</span>
         </div>
 
-        <div class="mini">Transcription (STT)</div>
-        <div id="transcript" class="box">(vide)</div>
-
-        <div class="mini" style="margin-top:10px;">Réponse (RAG)</div>
-        <div id="answer" class="box">(vide)</div>
-
-        <div class="mini" style="margin-top:10px;">Lecture (TTS)</div>
+        <audio id="player" class="audio" controls></audio>
         <audio id="ttsPlayer" class="audio" controls></audio>
+
+        <div class="hidden">
+          <div id="transcript"></div>
+          <div id="answer"></div>
+          <div id="sources"></div>
+        </div>
       </div>
     </div>
-
-    <div class="trace">
-      <div style="text-align:center; font-weight:950;">🧾 Trace d’exécution</div>
-      <div class="trace-row">
-        <div class="step">🎤 Record <span class="badge wait" id="bRecord">WAIT</span></div>
-        <div class="step">🧪 STT <span class="badge wait" id="bSTT">WAIT</span></div>
-        <div class="step">💬 RAG <span class="badge wait" id="bRAG">WAIT</span></div>
-        <div class="step">🔊 TTS <span class="badge wait" id="bTTS">WAIT</span></div>
-      </div>
-      <div class="meta">
-        <div>⏱ total: <b id="tTotal">—</b></div>
-        <div>🧪 stt: <b id="tStt">—</b></div>
-        <div>💬 rag: <b id="tRag">—</b></div>
-        <div>🔊 tts: <b id="tTts">—</b></div>
-      </div>
-    </div>
-
   </div>
 </div>
 
 <script>
 (function() {{
-  const autoModeEl = document.getElementById("autoMode");
-  const useContextEl = document.getElementById("useContext");
-  const antiHallEl = document.getElementById("antiHall");
+  const autoModeEl = {{ checked: true }};
+  const useContextEl = {{ checked: true }};
+  const antiHallEl = {{ checked: true }};
+
   const btnHang = document.getElementById("btnHang");
 
   const liveDot = document.getElementById("liveDot");
@@ -1073,16 +1001,6 @@ def _component_call_mode(lang: str) -> str:
 
   const player    = document.getElementById("player");
   const ttsPlayer = document.getElementById("ttsPlayer");
-
-  const bRecord = document.getElementById("bRecord");
-  const bSTT    = document.getElementById("bSTT");
-  const bRAG    = document.getElementById("bRAG");
-  const bTTS    = document.getElementById("bTTS");
-
-  const tTotal = document.getElementById("tTotal");
-  const tStt   = document.getElementById("tStt");
-  const tRag   = document.getElementById("tRag");
-  const tTts   = document.getElementById("tTts");
 
   const vuBar = document.getElementById("vuBar");
   const vuTxt = document.getElementById("vuTxt");
@@ -1107,6 +1025,7 @@ def _component_call_mode(lang: str) -> str:
   const MAX_TURNS = 3;
 
   let isBusy = false;
+  let isSpeaking = false;
   let silenceCount = 0;
   let recStartedAt = 0;
 
@@ -1114,30 +1033,24 @@ def _component_call_mode(lang: str) -> str:
   let lastAssistantMsg = "";
   let hasSpeech = false;
 
-  // Tuning: silence detection
-  const RMS_START_THRESHOLD = 0.008;
-  const RMS_SILENCE_THRESHOLD = 0.004;
+  // ✅ adaptive thresholds (will be tuned from noise floor)
+  let RMS_START_THRESHOLD = 0.010;
+  let RMS_SILENCE_THRESHOLD = 0.006;
   const SILENCE_MS_TO_STOP = 900;
   const MIN_RECORD_MS = 900;
 
-  // --- helpers
+  // ✅ noise floor calibration
+  let noiseFloor = 0.002;
+  let calibrated = false;
+
+  function updateThresholdsFromNoise(rms) {{
+    noiseFloor = 0.92 * noiseFloor + 0.08 * rms;
+    RMS_SILENCE_THRESHOLD = Math.max(0.004, noiseFloor * 1.6);
+    RMS_START_THRESHOLD   = Math.max(0.008, noiseFloor * 2.6);
+  }}
+
   function esc(s) {{
     return (s || "").toString().replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
-  }}
-  function setBadge(el, state) {{
-    el.textContent = state;
-    el.className = "badge";
-    if (state === "OK") el.classList.add("ok");
-    if (state === "ERR") el.classList.add("err");
-    if (state === "WAIT") el.classList.add("wait");
-    if (state === "RUN") el.classList.add("run");
-  }}
-  function resetTrace() {{
-    setBadge(bRecord,"WAIT");
-    setBadge(bSTT,"WAIT");
-    setBadge(bRAG,"WAIT");
-    setBadge(bTTS,"WAIT");
-    tTotal.textContent="—"; tStt.textContent="—"; tRag.textContent="—"; tTts.textContent="—";
   }}
   function fmtMMSS(ms) {{
     const s = Math.max(0, Math.floor(ms/1000));
@@ -1149,24 +1062,23 @@ def _component_call_mode(lang: str) -> str:
     callStateEl.textContent = state;
     liveDot.className = "dot" + (callOn ? " live" : "");
   }}
-  function msToStr(ms) {{
-    return (ms/1000).toFixed(2) + "s";
-  }}
   function pushHistory(role, text) {{
     const t = (text || "").toString().trim();
     if (!t) return;
+
     HISTORY.push({{role, text:t}});
-    const maxMsgs = MAX_TURNS*2;
+    const maxMsgs = MAX_TURNS * 2;
     if (HISTORY.length > maxMsgs) HISTORY = HISTORY.slice(HISTORY.length - maxMsgs);
+
     renderChat();
   }}
   function renderChat() {{
     if (!HISTORY.length) {{
       chatEl.innerHTML = '<div style="color: var(--muted); font-size:13px;">(Conversation vide)</div>';
-      ctxHintEl.textContent="Contexte: 0 tour";
+      ctxHintEl.textContent = "Contexte: 0 tour";
       return;
     }}
-    let html="";
+    let html = "";
     for (const m of HISTORY) {{
       const isUser = m.role === "user";
       html += `
@@ -1177,14 +1089,15 @@ def _component_call_mode(lang: str) -> str:
           </div>
         </div>`;
     }}
-    chatEl.innerHTML=html;
-    chatEl.scrollTop=chatEl.scrollHeight;
-    const turns = HISTORY.filter(x=>x.role==="assistant").length;
+    chatEl.innerHTML = html;
+    chatEl.scrollTop = chatEl.scrollHeight;
+
+    const turns = HISTORY.filter(x => x.role === "assistant").length;
     ctxHintEl.textContent = `Contexte: ${{turns}} tour(s)`;
   }}
 
   function safeText(s) {{
-    return (s || "").toString().replace(/\\s+/g," ").trim();
+    return (s || "").toString().replace(/\\s+/g, " ").trim();
   }}
   function cleanAnswer(text) {{
     let t = (text || "").toString().replace(/\\r/g,"").replace(/\\n{{3,}}/g,"\\n\\n").trim();
@@ -1198,11 +1111,11 @@ def _component_call_mode(lang: str) -> str:
       out.push(p);
     }}
     t = out.join(" ").trim();
-    if (t.length > 2200) t = t.slice(0,2200).trim()+"…";
+    if (t.length > 2200) t = t.slice(0,2200).trim() + "…";
     return t;
   }}
   function antiHallFallback(originalQ) {{
-    const q=(originalQ||"").trim();
+    const q = (originalQ||"").trim();
     if (!q) return "Je n’ai pas assez d’éléments pour répondre avec certitude. Tu peux préciser ?";
     return "Je n’ai pas trouvé d’éléments fiables dans ma base pour répondre avec certitude. Tu peux préciser ?";
   }}
@@ -1212,7 +1125,7 @@ def _component_call_mode(lang: str) -> str:
     return no.some(x => t === x || t.startsWith(x + " "));
   }}
 
-  // ---- VU + RMS
+  // ---- VU + RMS + auto record trigger
   function startVu(s) {{
     try {{
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1229,23 +1142,27 @@ def _component_call_mode(lang: str) -> str:
         for (let i=0;i<data.length;i++) sum += data[i]*data[i];
         const rms = Math.sqrt(sum/data.length);
 
+        // ✅ adaptive thresholds from noise floor
+        updateThresholdsFromNoise(rms);
+        if (!calibrated && performance.now() - callStartedAt > 1200) calibrated = true;
+
         const pct = Math.min(100, Math.max(0, rms*220));
         vuBar.style.width = pct + "%";
-        vuTxt.textContent = "RMS=" + rms.toFixed(4);
+        vuTxt.textContent = "RMS=" + rms.toFixed(4) + " | NF=" + noiseFloor.toFixed(4);
 
-        // ✅ track voice start
         if (rms >= RMS_START_THRESHOLD) hasSpeech = true;
 
-        // ✅ start recording only if not busy + cooldown ok
-        if (autoModeEl.checked && callOn && !isBusy && (!mediaRecorder || mediaRecorder.state==="inactive")) {{
+        const ttsPlaying = (ttsPlayer && !ttsPlayer.paused && !ttsPlayer.ended && ttsPlayer.currentTime > 0);
+
+        if (autoModeEl.checked && callOn && !isBusy && !isSpeaking && !ttsPlaying &&
+            (!mediaRecorder || mediaRecorder.state === "inactive")) {{
           if (performance.now() < cooldownUntil) return;
           if (rms >= RMS_START_THRESHOLD) {{
             autoStartRecording();
           }}
         }}
 
-        // stop on silence (only if speech occurred)
-        if (mediaRecorder && mediaRecorder.state==="recording") {{
+        if (mediaRecorder && mediaRecorder.state === "recording") {{
           if (rms < RMS_SILENCE_THRESHOLD) silenceCount += 80;
           else silenceCount = 0;
 
@@ -1267,7 +1184,7 @@ def _component_call_mode(lang: str) -> str:
     vuTxt.textContent="RMS=0.0000";
   }}
 
-  // ---- TTS concat blob
+  // ---- TTS
   function splitForTts(text, maxLen) {{
     const t=(text||"").toString().trim();
     if(!t) return [];
@@ -1307,12 +1224,16 @@ def _component_call_mode(lang: str) -> str:
     if(!b64) throw new Error("Empty audio");
     return b64;
   }}
+
   async function speak(text) {{
     const t=(text||"").toString().trim();
     if(!t) return;
-    setBadge(bTTS,"RUN");
+
+    isSpeaking = true;
+    cooldownUntil = performance.now() + 600;
+
+    micStateEl.textContent = "Speaking";
     callUi("Speaking");
-    const tStart = performance.now();
 
     const parts = splitForTts(t, 140);
     const byteParts=[];
@@ -1331,14 +1252,24 @@ def _component_call_mode(lang: str) -> str:
 
     try {{ ttsPlayer.pause(); ttsPlayer.currentTime=0; }} catch(e) {{}}
     ttsPlayer.src=url;
-    try {{ await ttsPlayer.play(); }} catch(e) {{}}
 
-    tTts.textContent = msToStr(performance.now() - tStart);
-    setBadge(bTTS,"OK");
-    callUi("Connected");
+    ttsPlayer.onplaying = () => {{ isSpeaking = true; }};
+    ttsPlayer.onended = () => {{
+      isSpeaking = false;
+      cooldownUntil = performance.now() + 900;
+      micStateEl.textContent = "Ready";
+      callUi("Connected");
+    }};
+
+    try {{ await ttsPlayer.play(); }} catch(e) {{
+      isSpeaking = false;
+      cooldownUntil = performance.now() + 900;
+      micStateEl.textContent = "Ready";
+      callUi("Connected");
+    }}
   }}
 
-  // ---- Auto record (voice activity)
+  // ---- Auto record
   async function autoStartRecording() {{
     if (isBusy) return;
     if (!autoModeEl.checked || !callOn) return;
@@ -1348,12 +1279,18 @@ def _component_call_mode(lang: str) -> str:
     silenceCount=0;
     hasSpeech=false;
 
-    setBadge(bRecord,"RUN");
-    micStateEl.textContent="Recording";
+    micStateEl.textContent = "Recording";
     callUi("Listening");
 
     try {{
-      mediaRecorder = new MediaRecorder(stream, {{ mimeType: "audio/webm" }});
+      // ✅ robust mimeType (opus/webm fallback)
+      const mime =
+        (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) ? "audio/webm;codecs=opus" :
+        (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm")) ? "audio/webm" :
+        "";
+
+      mediaRecorder = mime ? new MediaRecorder(stream, {{ mimeType: mime }}) : new MediaRecorder(stream);
+
       mediaRecorder.ondataavailable = (e) => {{
         if (e.data && e.data.size > 0) chunks.push(e.data);
       }};
@@ -1363,20 +1300,27 @@ def _component_call_mode(lang: str) -> str:
         lastObjectUrl = URL.createObjectURL(lastBlob);
         player.src = lastObjectUrl;
 
-        setBadge(bRecord,"OK");
-        micStateEl.textContent="Processing";
+        micStateEl.textContent = "Processing";
 
         if (autoModeEl.checked && callOn) {{
           autoPipeline().catch(()=>{{}});
         }}
       }};
 
-      window.t0 = performance.now();
       recStartedAt = performance.now();
       mediaRecorder.start();
+
+      // ✅ fallback stop after 6s (if silence detection doesn't stop)
+      setTimeout(() => {{
+        try {{
+          if (mediaRecorder && mediaRecorder.state === "recording") {{
+            autoStopRecording();
+          }}
+        }} catch(e) {{}}
+      }}, 6000);
+
     }} catch(e) {{
-      setBadge(bRecord,"ERR");
-      micStateEl.textContent="Recorder error";
+      micStateEl.textContent = "Recorder error";
       callUi("Recorder error");
     }}
   }}
@@ -1385,21 +1329,19 @@ def _component_call_mode(lang: str) -> str:
     try {{
       if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
     }} catch(e) {{}}
-    // ✅ DO NOT stop tracks here
-    micStateEl.textContent="Processing";
+    micStateEl.textContent = "Processing";
     callUi("Processing");
   }}
 
   // ---- RAG prompt builder
   function buildCallPrompt(q, ctxText, useCtx, antiHall) {{
     const rules = [
-      "Tu es un agent vocal en conversation téléphonique (service client).",
-      "Réponds comme un humain à l’oral.",
-      "Réponse claire, sans répétition, sans bruit.",
-      "Phrases courtes. Maximum 6 phrases.",
-      "Termine toujours par: 'Avez-vous d'autres questions ?'",
+      "Tu es un agent vocal en conversation téléphonique (service client IT-STORM).",
+      "Réponds comme un humain à l’oral, naturel et professionnel.",
+      "Phrases courtes. Pas de répétitions. Maximum 6 phrases.",
+      "Termine toujours par : 'Avez-vous d'autres questions ?'",
     ];
-    if (antiHall) rules.push("Anti-hallucination : si tu n’es pas sûr, dis-le. Ne devine pas.");
+    if (antiHall) rules.push("Anti-hallucination : si tu n’es pas sûr, dis exactement : 'Je ne sais pas.'");
     let prompt = rules.join("\\n") + "\\n";
     if (useCtx && ctxText) prompt += "\\nHistorique récent :\\n" + ctxText + "\\n";
     prompt += "\\nUtilisateur :\\n" + q;
@@ -1412,20 +1354,12 @@ def _component_call_mode(lang: str) -> str:
     if (!lastBlob) return;
     isBusy = true;
 
-    resetTrace();
-    setBadge(bRecord,"OK");
-    setBadge(bSTT,"RUN");
-    setBadge(bRAG,"WAIT");
-    setBadge(bTTS,"WAIT");
-
     callUi("Transcribing");
+    micStateEl.textContent = "Transcribing";
 
-    const sttStart = performance.now();
     try {{
-      // guard empty blob
       if (lastBlob.size < 1200) {{
         cooldownUntil = performance.now() + 900;
-        setBadge(bSTT,"ERR");
         const msg = "Je n’ai pas bien entendu. Peux-tu répéter ?";
         transcriptEl.textContent = "(trop court)";
         answerEl.textContent = msg;
@@ -1435,8 +1369,6 @@ def _component_call_mode(lang: str) -> str:
         }}
         try {{ await speak(msg); }} catch(e) {{}}
         isBusy = false;
-        micStateEl.textContent="Ready";
-        callUi("Connected");
         return;
       }}
 
@@ -1444,19 +1376,16 @@ def _component_call_mode(lang: str) -> str:
       form.append("file", lastBlob, "mic.webm");
 
       const sttUrl = "{API_BASE}/stt/transcribe?lang={lang}";
-      const resp = await fetch(sttUrl, {{ method:"POST", body: form }});
-      const body = await resp.text();
-      if (!resp.ok) throw new Error(body || "STT error");
+      const sttResp = await fetch(sttUrl, {{ method:"POST", body: form }});
+      const sttBody = await sttResp.text();
+      if (!sttResp.ok) throw new Error(sttBody || "STT error");
+      const sttJson = JSON.parse(sttBody);
 
-      const json = JSON.parse(body);
-      const q = safeText(json.text || "");
+      const q = safeText(sttJson.text || "");
       transcriptEl.textContent = q || "(texte vide)";
-      tStt.textContent = msToStr(performance.now() - sttStart);
-      setBadge(bSTT,"OK");
 
       if (!q) {{
         cooldownUntil = performance.now() + 900;
-        setBadge(bRAG,"ERR");
         const msg = "Je n’ai pas bien entendu. Peux-tu répéter ?";
         answerEl.textContent = msg;
         if (lastAssistantMsg !== msg) {{
@@ -1465,34 +1394,27 @@ def _component_call_mode(lang: str) -> str:
         }}
         await speak(msg);
         isBusy = false;
-        micStateEl.textContent="Ready";
-        callUi("Connected");
         return;
       }}
 
       if (isNoIntent(q)) {{
-        setBadge(bRAG,"OK");
-        setBadge(bTTS,"RUN");
         const bye = "Très bien. Je vous souhaite une excellente journée Monsieur.";
-        answerEl.textContent = bye;
-        sourcesEl.textContent = "Sources: —";
         pushHistory("user", q);
         pushHistory("assistant", bye);
         await speak(bye);
         callOn = false;
         callUi("Ended");
         liveDot.className = "dot";
-        micStateEl.textContent="Ended";
+        micStateEl.textContent = "Ended";
         isBusy = false;
         return;
       }}
 
       pushHistory("user", q);
 
-      setBadge(bRAG,"RUN");
       callUi("Answering");
+      micStateEl.textContent = "Answering";
 
-      const ragStart = performance.now();
       const useCtx = useContextEl ? !!useContextEl.checked : true;
       const antiHall = antiHallEl ? !!antiHallEl.checked : true;
 
@@ -1523,30 +1445,16 @@ def _component_call_mode(lang: str) -> str:
       }}
 
       answerEl.textContent = ans || "(réponse vide)";
-      tRag.textContent = msToStr(performance.now() - ragStart);
-      setBadge(bRAG,"OK");
-
       pushHistory("assistant", ans);
       lastAssistantMsg = ans;
 
-      setBadge(bTTS,"RUN");
-      callUi("Speaking");
-      const ttsStart = performance.now();
       await speak(ans);
-      tTts.textContent = msToStr(performance.now() - ttsStart);
-      setBadge(bTTS,"OK");
 
-      tTotal.textContent = msToStr(performance.now() - (window.t0 || performance.now()));
-      micStateEl.textContent = "Ready";
-      callUi("Connected");
       isBusy = false;
       return;
 
     }} catch(err) {{
-      // ✅ anti-spam + cooldown
       cooldownUntil = performance.now() + 1800;
-      setBadge(bSTT,"ERR");
-      setBadge(bRAG,"ERR");
       const msg = "Désolé, j’ai eu un souci technique. Peux-tu répéter ?";
       answerEl.textContent = msg;
       if (lastAssistantMsg !== msg) {{
@@ -1555,12 +1463,11 @@ def _component_call_mode(lang: str) -> str:
       }}
       try {{ await speak(msg); }} catch(e) {{}}
       isBusy = false;
-      micStateEl.textContent="Ready";
+      micStateEl.textContent = "Ready";
       callUi("Connected");
     }}
   }}
 
-  // ---- init call + greeting
   function startCall() {{
     callOn = true;
     callStartedAt = performance.now();
@@ -1575,41 +1482,34 @@ def _component_call_mode(lang: str) -> str:
   }}
 
   async function greet() {{
-    const greetText = "Bonjour, vous êtes bien sur le service client IT STORM. Je vous écoute. Quelle est votre question ?";
+    const greetText = "Bonjour, vous êtes bien sur le service client IT-STORM. Je vous écoute. Quelle est votre question ?";
     pushHistory("assistant", greetText);
-    setBadge(bTTS,"RUN");
     await speak(greetText);
-    setBadge(bTTS,"OK");
   }}
 
-  // ---- hang
   btnHang.onclick = () => {{
     callOn = false;
     liveDot.className = "dot";
     callUi("Ended");
-    micStateEl.textContent="Ended";
-    resetTrace();
+    micStateEl.textContent = "Ended";
 
     try {{
       if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
     }} catch(e) {{}}
 
-    // ✅ stop tracks ONLY here
     try {{
       if (stream) stream.getTracks().forEach(t => t.stop());
     }} catch(e) {{}}
 
     stopVu();
     try {{ ttsPlayer.pause(); }} catch(e) {{}}
+
     pushHistory("assistant", "Appel terminé. Je vous souhaite une excellente journée Monsieur.");
   }};
 
-  // ---- bootstrap
-  resetTrace();
   renderChat();
   startCall();
 
-  // ✅ open mic ONCE
   navigator.mediaDevices.getUserMedia({{
     audio: {{
       echoCancellation:true,
@@ -1624,7 +1524,7 @@ def _component_call_mode(lang: str) -> str:
     greet().catch(()=>{{}});
   }}).catch(err => {{
     callUi("Mic denied");
-    micStateEl.textContent="Mic denied";
+    micStateEl.textContent = "Mic denied";
     alert("Micro refusé. Autorise le micro dans Chrome.");
   }});
 
