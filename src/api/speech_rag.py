@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 # Path: src/api/speech_rag.py
-# RAG API — /ask (ancré) + /generate (LLM pur) + /hybrid (RAG->contexte->LLM)
+# RAG API — /ask (ancré) + /generate (LLM pur) + /hybrid (RAG->contexte->LLM) + /fast (téléphone)
 
 from __future__ import annotations
 
 import os
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List
 
 import requests
 from fastapi import APIRouter, HTTPException
@@ -27,6 +27,7 @@ except Exception as e:
 class RagAskRequest(BaseModel):
     question: str
     top_k: int = 6
+    
 
 
 # ----------------- Helpers -----------------
@@ -73,6 +74,7 @@ def _normalize_quotes(quotes: Any, max_items: int = 8) -> List[Dict[str, str]]:
                     out.append(d)
     return out
 
+
 def _detect_intent(q: str) -> str:
     """
     Intent léger (rule-based) :
@@ -81,19 +83,14 @@ def _detect_intent(q: str) -> str:
     - comparison: "différence", "vs", "comparaison", "plutôt", "mieux que"
     """
     t = (q or "").strip().lower()
-
-    # normalisation légère
     t = re.sub(r"\s+", " ", t)
 
-    # comparaison
     if re.search(r"\b(vs|versus|différence|difference|compar(ai|a)son|comparer|plutôt|mieux que)\b", t):
         return "comparison"
 
-    # procédure
     if re.search(r"\b(comment|étapes|etapes|procédure|procedure|mettre en place|installer|configurer|déployer|faire)\b", t):
         return "procedure"
 
-    # définition
     if re.search(r"\b(c['’ ]?est quoi|c est quoi|définis|definis|définition|definition|que signifie|signification)\b", t):
         return "definition"
 
@@ -102,31 +99,39 @@ def _detect_intent(q: str) -> str:
 
 def _prompt_rules_for_intent(intent: str) -> str:
     if intent == "definition":
-        return "\n".join([
-            "Format de réponse :",
-            "- 1 phrase : définition simple.",
-            "- 1 phrase : exemple concret lié à IT-STORM/StormCopilot.",
-            "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
-        ])
+        return "\n".join(
+            [
+                "Format de réponse :",
+                "- 1 phrase : définition simple.",
+                "- 1 phrase : exemple concret lié à IT-STORM/StormCopilot.",
+                "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+            ]
+        )
     if intent == "procedure":
-        return "\n".join([
-            "Format de réponse :",
-            "- 3 à 5 étapes max, courtes (une phrase par étape).",
-            "- Termine par 1 phrase \"résultat attendu\".",
-            "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
-        ])
+        return "\n".join(
+            [
+                "Format de réponse :",
+                "- 3 à 5 étapes max, courtes (une phrase par étape).",
+                "- Termine par 1 phrase \"résultat attendu\".",
+                "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+            ]
+        )
     if intent == "comparison":
-        return "\n".join([
+        return "\n".join(
+            [
+                "Format de réponse :",
+                "- 2 à 3 différences claires (phrases courtes).",
+                "- 1 phrase : quand choisir A vs B (si le contexte le permet).",
+                "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
+            ]
+        )
+    return "\n".join(
+        [
             "Format de réponse :",
-            "- 2 à 3 différences claires (phrases courtes).",
-            "- 1 phrase : quand choisir A vs B (si le contexte le permet).",
+            "- 2 à 4 phrases max, directes.",
             "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
-        ])
-    return "\n".join([
-        "Format de réponse :",
-        "- 2 à 4 phrases max, directes.",
-        "- Si le contexte ne suffit pas : \"Je ne sais pas.\"",
-    ])
+        ]
+    )
 
 
 def _build_hybrid_prompt(user_q: str, quotes: List[Dict[str, str]], intent: str) -> str:
@@ -165,6 +170,38 @@ Question :
 Réponse :
 """.strip()
 
+
+def _build_fast_prompt(user_q: str, quotes: List[Dict[str, str]]) -> str:
+    """
+    Prompt ultra-court optimisé pour le mode téléphone (latence faible).
+    """
+    ctx_lines: List[str] = []
+    for i, q in enumerate(quotes, start=1):
+        txt = (q.get("text") or "").strip()
+        src = (q.get("source") or "").strip()
+        if not txt:
+            continue
+        if src:
+            ctx_lines.append(f"- {txt} ({src})")
+        else:
+            ctx_lines.append(f"- {txt}")
+
+    context_block = "\n".join(ctx_lines[:3]).strip()
+
+    return f"""
+Tu es un agent vocal IT-STORM (service client).
+Réponds en 2 à 4 phrases, naturel et direct.
+Utilise uniquement le contexte. Si tu n'es pas sûr, dis : "Je ne sais pas."
+Termine par : "Avez-vous d'autres questions ?"
+
+Contexte :
+{context_block if context_block else "(vide)"}
+
+Question :
+{user_q}
+
+Réponse :
+""".strip()
 
 
 def _ollama_generate(prompt: str) -> Dict[str, Any]:
@@ -241,7 +278,6 @@ async def llm_generate(req: RagAskRequest):
         status_code=200,
         content={
             "answer": out.get("answer", ""),
-            # on met une source "technique" pour éviter ton fallback antiHall côté JS
             "sources": [f"ollama:{out.get('model','')}"],
             "quotes": [],
             "confidence": 0.0,
@@ -275,7 +311,6 @@ async def rag_hybrid(req: RagAskRequest):
     intent = _detect_intent(user_q)
     prompt = _build_hybrid_prompt(user_q, quotes_norm, intent)
 
-
     try:
         llm_out = _ollama_generate(prompt)
     except Exception as e:
@@ -294,6 +329,60 @@ async def rag_hybrid(req: RagAskRequest):
                 "model": llm_out.get("model", ""),
                 "top_k": req.top_k,
                 "intent": intent,
+            },
+        },
+    )
+
+
+@router.post("/fast")
+async def rag_fast(req: RagAskRequest):
+    """
+    FAST = version légère pour le mode téléphone (top_k faible + prompt court).
+    On garde /hybrid pour le mode normal.
+    """
+    if rag_brain is None:
+        raise HTTPException(status_code=500, detail=f"rag_brain_import_failed: {_IMPORT_ERR}")
+
+    q_raw = (req.question or "").strip()
+    user_q = _extract_user_question(q_raw)
+    if len(user_q) < 2:
+        return JSONResponse(status_code=422, content={"answer": "", "sources": [], "quotes": []})
+
+    # Clamp top_k (FAST)
+    top_k = int(req.top_k or 2)
+    if top_k < 1:
+        top_k = 1
+    if top_k > 3:
+        top_k = 3
+
+    try:
+        rag_out = rag_brain.smart_rag_answer(user_q, top_k=top_k)  # type: ignore[attr-defined]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"rag_retrieve_failed: {e}")
+
+    sources = rag_out.get("sources", []) or []
+    quotes_norm = _normalize_quotes(rag_out.get("quotes", []), max_items=min(3, max(1, top_k)))
+
+    prompt = _build_fast_prompt(user_q, quotes_norm)
+
+    try:
+        llm_out = _ollama_generate(prompt)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ollama_fast_failed: {e}")
+
+    return JSONResponse(
+        status_code=200,
+        content={
+            "answer": llm_out.get("answer", ""),
+            "sources": sources if isinstance(sources, list) else [],
+            "quotes": quotes_norm,
+            "confidence": rag_out.get("confidence", 0.0),
+            "quality": {"mode": "fast_phone"},
+            "dbg": {
+                "backend": "ollama",
+                "model": llm_out.get("model", ""),
+                "top_k": top_k,
+                "intent": "phone_fast",
             },
         },
     )

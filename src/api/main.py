@@ -379,4 +379,13 @@ app.include_router(pdf.router)
 app.include_router(v1)
 app.include_router(tech_watch.router)
 app.include_router(router)
+
+from src.api.rag_jury import router as rag_jury_router
+app.include_router(rag_jury_router)
+app.include_router(rag_jury_router, prefix="/rag", tags=["rag-jury"])
+
+from src.api.rag_summary import router as rag_summary_router
+app.include_router(rag_summary_router)
+
 # src/api
+

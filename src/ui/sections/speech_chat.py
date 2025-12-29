@@ -23,38 +23,77 @@ def _inject_page_css() -> None:
     st.markdown(
         """
 <style>
-/* Page polish (simple, stable) */
+/* ================================
+   Voice Copilot – UI polish (blue)
+   ================================ */
+
+/* Hero */
 .vc-hero{
-  padding:1.1rem 1.2rem;
-  border-radius:18px;
-  background:
-    radial-gradient(circle at 0% 0%,rgba(190,18,60,.16),transparent 55%),
-    radial-gradient(circle at 100% 0%,rgba(127,29,29,.12),transparent 55%),
-    linear-gradient(135deg,rgba(15,23,42,.96),rgba(15,23,42,.90));
-  border:1px solid rgba(148,163,184,.35);
-  box-shadow:0 24px 60px rgba(15,23,42,.45);
+  text-align:center;
+  padding:1.2rem 1.4rem;
+  border-radius:22px;
+  background: linear-gradient(
+    135deg,
+    #f0f9ff,   /* sky-50 */
+    #e0f2fe    /* sky-100 */
+  );
+  border:1px solid #bae6fd;
+  box-shadow:0 14px 35px rgba(14,165,233,.18);
+  margin-bottom: 0.6rem;
 }
+
 .vc-title{
   font-size:1.25rem;
   font-weight:850;
   letter-spacing:.02em;
-  background:linear-gradient(120deg,#e5e7eb,#fecdd3,#be123c);
+  background:linear-gradient(
+    120deg,
+    #0f172a,   /* slate-900 */
+    #0369a1    /* sky-700 */
+  );
   -webkit-background-clip:text;
   color:transparent;
   margin:0;
 }
-.vc-sub{color:#cbd5e1; margin-top:.25rem; font-size:.92rem;}
-.vc-pills{margin-top:.55rem; display:flex; flex-wrap:wrap; gap:.45rem;}
+
+.vc-sub{
+  color:#334155;            /* slate-700 */
+  margin:.45rem auto 0 auto;
+  font-size:.95rem;
+  line-height:1.35;
+  max-width:920px;
+  opacity:.95;
+}
+
+/* Pills (si jamais réutilisées plus tard) */
+.vc-pills{
+  margin-top:.55rem;
+  display:flex;
+  flex-wrap:wrap;
+  gap:.45rem;
+  justify-content:center;
+}
+
 .vc-pill{
-  display:inline-flex; align-items:center; gap:.4rem;
+  display:inline-flex;
+  align-items:center;
+  gap:.4rem;
   padding:.22rem .7rem;
   border-radius:999px;
   font-size:.74rem;
-  background:rgba(15,23,42,.82);
-  border:1px solid rgba(148,163,184,.35);
-  color:#e5e7eb;
+  background:#f0f9ff;
+  border:1px solid #bae6fd;
+  color:#0369a1;
 }
-.stTabs [data-baseweb="tab-list"]{justify-content:center; gap:.5rem;}
+
+/* Tabs (Question unique / Appel téléphonique) */
+.stTabs [data-baseweb="tab-list"]{
+  justify-content:center;
+  gap:.5rem;
+  margin-bottom: 0.8rem;
+
+}
+
 .stTabs [data-baseweb="tab"]{
   border-radius:999px !important;
   padding:0.35rem 1.0rem !important;
@@ -62,11 +101,15 @@ def _inject_page_css() -> None:
   font-size:.9rem !important;
   background:#f8fafc !important;
   color:#64748b !important;
+  border:1px solid #e2e8f0 !important;
+  
 }
+
 .stTabs [aria-selected="true"]{
-  background: linear-gradient(135deg, #7f1d1d, #be123c) !important;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9) !important;
   color: white !important;
-  box-shadow: 0 10px 30px rgba(190,18,60,0.18);
+  border:none !important;
+  box-shadow: 0 10px 30px rgba(56,189,248,0.35);
 }
 </style>
 """,
@@ -868,7 +911,6 @@ def _component_call_mode(lang: str) -> str:
       color: var(--text);
     }}
 
-    /* ✅ call-only layout (single column) */
     .grid {{ display:grid; grid-template-columns: 1fr; gap:14px; margin-top:14px; }}
     .card {{
       border-radius:18px; border:1px solid var(--stroke);
@@ -1142,7 +1184,6 @@ def _component_call_mode(lang: str) -> str:
         for (let i=0;i<data.length;i++) sum += data[i]*data[i];
         const rms = Math.sqrt(sum/data.length);
 
-        // ✅ adaptive thresholds from noise floor
         updateThresholdsFromNoise(rms);
         if (!calibrated && performance.now() - callStartedAt > 1200) calibrated = true;
 
@@ -1235,7 +1276,9 @@ def _component_call_mode(lang: str) -> str:
     micStateEl.textContent = "Speaking";
     callUi("Speaking");
 
-    const parts = splitForTts(t, 140);
+    // ✅ PATCH: chunks plus longs (moins d’appels TTS)
+    const parts = splitForTts(t, 220);
+
     const byteParts=[];
     for (const part of parts) {{
       const b64 = await ttsSynthesizeB64(part);
@@ -1283,7 +1326,6 @@ def _component_call_mode(lang: str) -> str:
     callUi("Listening");
 
     try {{
-      // ✅ robust mimeType (opus/webm fallback)
       const mime =
         (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) ? "audio/webm;codecs=opus" :
         (window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported("audio/webm")) ? "audio/webm" :
@@ -1310,7 +1352,6 @@ def _component_call_mode(lang: str) -> str:
       recStartedAt = performance.now();
       mediaRecorder.start();
 
-      // ✅ fallback stop after 6s (if silence detection doesn't stop)
       setTimeout(() => {{
         try {{
           if (mediaRecorder && mediaRecorder.state === "recording") {{
@@ -1333,18 +1374,15 @@ def _component_call_mode(lang: str) -> str:
     callUi("Processing");
   }}
 
-  // ---- RAG prompt builder
+  // ✅ PATCH: prompt téléphone ultra-court
   function buildCallPrompt(q, ctxText, useCtx, antiHall) {{
-    const rules = [
-      "Tu es un agent vocal en conversation téléphonique (service client IT-STORM).",
-      "Réponds comme un humain à l’oral, naturel et professionnel.",
-      "Phrases courtes. Pas de répétitions. Maximum 6 phrases.",
-      "Termine toujours par : 'Avez-vous d'autres questions ?'",
-    ];
-    if (antiHall) rules.push("Anti-hallucination : si tu n’es pas sûr, dis exactement : 'Je ne sais pas.'");
-    let prompt = rules.join("\\n") + "\\n";
-    if (useCtx && ctxText) prompt += "\\nHistorique récent :\\n" + ctxText + "\\n";
-    prompt += "\\nUtilisateur :\\n" + q;
+    let prompt =
+      "Tu es un agent vocal IT-STORM. " +
+      "Réponds en 2 à 4 phrases, naturel et direct. " +
+      "Termine par : 'Avez-vous d'autres questions ?' ";
+    if (antiHall) prompt += "Si tu n'es pas sûr, dis : 'Je ne sais pas.' ";
+    if (useCtx && ctxText) prompt += "\\nContexte: " + ctxText + "\\n";
+    prompt += "\\nQuestion: " + q;
     return prompt;
   }}
 
@@ -1418,17 +1456,21 @@ def _component_call_mode(lang: str) -> str:
       const useCtx = useContextEl ? !!useContextEl.checked : true;
       const antiHall = antiHallEl ? !!antiHallEl.checked : true;
 
+      // ✅ PATCH: contexte 1 tour (2 messages max)
       let ctxText = "";
       if (useCtx && HISTORY.length) {{
-        ctxText = HISTORY.map(m => (m.role==="user" ? "User: " : "Assistant: ") + m.text).join("\\n");
+        const last = HISTORY.slice(-2);
+        ctxText = last.map(m => (m.role==="user" ? "U: " : "A: ") + m.text).join(" | ");
       }}
+
       const enriched = buildCallPrompt(q, ctxText, useCtx, antiHall);
 
-      const ragUrl = "{API_BASE}/rag/hybrid";
+      // ✅ PATCH: call-mode -> /rag/fast + top_k réduit
+      const ragUrl = "{API_BASE}/rag/fast";
       const ragResp = await fetch(ragUrl, {{
         method:"POST",
         headers:{{"Content-Type":"application/json"}},
-        body: JSON.stringify({{ question: enriched }})
+        body: JSON.stringify({{ question: enriched, top_k: 2 }})
       }});
       const ragBody = await ragResp.text();
       if (!ragResp.ok) throw new Error(ragBody || "RAG error");
@@ -1448,7 +1490,9 @@ def _component_call_mode(lang: str) -> str:
       pushHistory("assistant", ans);
       lastAssistantMsg = ans;
 
-      await speak(ans);
+      // ✅ PATCH: lire seulement les 2 premières phrases en audio
+      const shortAns = (ans || "").split(/(?<=[\\.!\\?])\\s+/).slice(0,2).join(" ");
+      await speak(shortAns || ans);
 
       isBusy = false;
       return;
@@ -1536,27 +1580,16 @@ def render_stt_only() -> None:
     _inject_page_css()
 
     st.markdown(
-        """
-<div class="vc-hero">
+    """
+<div class="vc-hero vc-hero--center">
   <div class="vc-title">Voice Copilot</div>
   <div class="vc-sub">
-    Démo PFE stable : tu parles → transcription (Whisper) → question RAG → réponse documentée + lecture audio.
-  </div>
-
-  <div class="vc-pills">
-    <div class="vc-pill">🎛️ VU-mètre RMS</div>
-    <div class="vc-pill">🛡️ Anti-hallucination</div>
-    <div class="vc-pill">🔊 TTS complet (concat blob)</div>
-    <div class="vc-pill">🎙 Micro navigateur</div>
-    <div class="vc-pill">🧪 STT</div>
-    <div class="vc-pill">💬 RAG</div>
-    <div class="vc-pill">📞 Call-mode</div>
+    Une interaction vocale naturelle : parlez librement, StormCopilot comprend, recherche dans vos documents et vous répond instantanément, à l’oral.
   </div>
 </div>
 """,
-        unsafe_allow_html=True,
-    )
-    st.markdown("")
+    unsafe_allow_html=True,
+)
 
     (tab_live,) = st.tabs(["🎙 Live"])
 
@@ -1564,9 +1597,7 @@ def render_stt_only() -> None:
         sub1, sub2 = st.tabs(["✅ Question unique", "📞 Appel téléphonique"])
 
         with sub1:
-            lang = st.selectbox("Langue STT/TTS", ["fr", "en"], index=0, key="vc_lang_single")
-            components.html(_component_single_question(lang), height=950, scrolling=False)
+          components.html(_component_single_question("fr"), height=950, scrolling=False)
 
         with sub2:
-            lang = st.selectbox("Langue STT/TTS", ["fr", "en"], index=0, key="vc_lang_call")
-            components.html(_component_call_mode(lang), height=1120, scrolling=False)
+          components.html(_component_call_mode("fr"), height=1120, scrolling=False)

@@ -44,59 +44,10 @@ import streamlit as st
 
 # ===================== I18N (EN/FR) =====================
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "en"
+    st.session_state["lang"] = "fr"
 
 LANG = {
-    "en": {
-        "sidebar_settings": "Settings",
-        "sidebar_dark_mode": "Dark mode",
-        "sidebar_diag": "Diagnostics",
-        "sidebar_llm_backend": "LLM backend: **Local Hugging Face** ✅",
-        "sidebar_theme_note": "Auto theme · v2.2 (Local-only, CPU-safe)",
-        "auth.render_auth_sidebar": "Authentification",
-
-        "kpi_indexed_docs": "Indexed Docs",
-        "kpi_chunks_file": "Chunks File",
-        "kpi_vector_db": "Vector DB",
-        "kpi_output_folder": "Output Folder",
-
-        "tab_chat": "💬 Knowledge Chat",
-        "tab_upload": "📂 Upload & Index",
-        "tab_generate": "📝 Generate Docs",
-        "tab_market": "🌍 Market Watch",
-        "tab_qa": "🔎 English QA (RAG EN)",
-
-        "chat_title": "Knowledge Q&A (RAG with LangChain + Local HF)",
-        "chat_input": "Ask a question about your indexed documents",
-        "chat_button": "🔎 Retrieve & Answer",
-        "chat_clear": "🧹 Clear",   # ✅ ajouté ici
-        "chat_answer": "Answer",
-        "chat_sources": "Sources (raw chunks)",
-        "chat_question_too_long": "Your question is very long — I truncated it to 2000 characters for stability.",
-        "chat_tip_rebuild": "Tip: if you switched embedding model, rebuild your index first.",
-
-        "upload_title": "Upload documents & (re)build index",
-        "upload_uploader": "Upload PDF/DOCX/TXT",
-        "upload_save": "⬆️ Save uploads",
-        "upload_saved": "Saved {n} file(s) to `data/raw/`.",
-        "upload_extract": "⚙️ Extract & Chunk",
-        "upload_extracted": "Created {n} chunks → {outp}",
-        "upload_rebuild": "🧠 Rebuild Vector Index",
-        "upload_rebuilt": "Indexed {n} chunks into ChromaDB.",
-        "upload_preview": "Preview extracted chunks",
-
-        "theme_env": "Env: Local",
-        "brand_market_api": "Market API: ",
-        "brand_llm": "LLM (Local HF): ",
-        "brand_up": "✅ Up",
-        "brand_down": "❌ Down",
-        "brand_ready": "✅ Ready",
-        "brand_not_ready": "⚠️ Not ready",
-
-        "lang_picker": "Language",
-        "lang_en": "English",
-        "lang_fr": "Français",
-    },
+    
     "fr": {
         "sidebar_settings": "Paramètres",
         "sidebar_dark_mode": "Mode sombre",
@@ -143,14 +94,14 @@ LANG = {
         "brand_not_ready": "⚠️ Non prêt",
 
         "lang_picker": "Langue",
-        "lang_en": "Anglais",
+        
         "lang_fr": "Français",
     },
 }
 
 def t(key: str) -> str:
-    lang = st.session_state.get("lang", "en")
-    return LANG.get(lang, LANG["en"]).get(key, key)
+    lang = st.session_state.get("lang", "fr")
+    return LANG.get(lang, LANG["fr"]).get(key, key)
 # ============================================================
 
 from src.rag.chain import build_rag_chain
@@ -1268,28 +1219,6 @@ section[data-testid="stSidebar"] > div {
     border-radius: 999px;
 }
 
-/* Flags langue */
-.lang-flags {
-    display:flex;
-    gap:12px;
-    align-items:center;
-    margin-bottom:6px;
-}
-.lang-flag img {
-    height:32px;
-    border-radius:8px;
-    box-shadow:0 2px 8px rgba(0,0,0,.18);
-    border:2px solid transparent;
-    transition:transform 0.2s, border-color 0.2s;
-    cursor:pointer;
-}
-.lang-flag.active img { border-color:#4f46e5; }
-.lang-flag img:hover { transform:scale(1.07); }
-.lang-flag img:active {
-    border-color:#2563eb !important;
-    box-shadow:0 0 8px rgba(37,99,235,0.6);
-    transform:scale(0.97);
-}
 
 /* Texte d’aide */
 .sidebar-help {
@@ -1361,7 +1290,6 @@ section[data-testid="stSidebar"] > div {
 
 
 # ========= Helpers langue / flags =========
-flag_en_path = Path("src/ui/assets/flag_en.png")
 flag_fr_path = Path("src/ui/assets/flag_fr.png")
 
 def _b64(p: Path) -> str:
@@ -1377,76 +1305,169 @@ else:
 
 lang = st.session_state["lang"]
 
-# ========= CARTE 0 : IT-STORM EN BREF (ROTATEUR tout en haut) =========
-st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
+# ========= CARTE 0 : IT-STORM EN BREF (MICRO-INDICATEURS ROTATIFS) =========
 st.sidebar.markdown(
-    f'<div class="sidebar-title"><span class="icon">⚡</span>'
-    f'<span>{"IT-STORM in a few words" if lang=="en" else "IT-STORM en bref"}</span></div>'
-    '<div class="sidebar-sep"></div>',
-    unsafe_allow_html=True
-)
+    """
+<style>
+/* =========================
+   ROTATEUR IT-STORM (micro-indicateurs)
+   ========================= */
 
-if lang == "en":
-    rotator_html = """
-<div class="itstorm-rotator">
-  <div class="itstorm-rotator-inner">
-    <div class="itstorm-rotator-item">
-      IT-STORM is a consulting studio focused on Cloud, Data, AI and DevOps.
-    </div>
-    <div class="itstorm-rotator-item">
-      StormCopilot centralises documents, market data and tech watch in one place.
-    </div>
-    <div class="itstorm-rotator-item">
-      Goal: help consultants prepare missions faster with reliable information.
-    </div>
-  </div>
-</div>
-"""
-else:
-    rotator_html = """
-<div class="itstorm-rotator">
-  <div class="itstorm-rotator-inner">
-    <div class="itstorm-rotator-item">
-      IT-STORM est un studio de conseil orienté Cloud, Data, IA et DevOps.
-    </div>
-    <div class="itstorm-rotator-item">
-      StormCopilot centralise documents, données marchés et veille techno au même endroit.
-    </div>
-    <div class="itstorm-rotator-item">
-      Objectif : aider les consultants à préparer leurs missions plus vite, avec des infos fiables.
-    </div>
-  </div>
-</div>
-"""
-st.sidebar.markdown(rotator_html, unsafe_allow_html=True)
-st.sidebar.markdown("</div>", unsafe_allow_html=True)
+/* 1 ligne, pas de wrap, hauteur stable */
+.itstorm-rotator{
+  position: relative;
+  overflow: hidden;
+  height: 34px;
+  margin-top: 6px;
+}
 
-# ========= LANGUE =========
-st.sidebar.markdown("### 🌐 Language / Langue")
+.itstorm-rotator-inner{
+  position: relative;
+  height: 34px;
+}
 
-html_flags = f"""
+/* Un seul visible */
+.itstorm-rotator-item{
+  position: absolute;
+  inset: 0;
+  height: 34px;
+
+  display: flex;
+  align-items: center;
+
+  opacity: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1;
+  will-change: opacity, transform;
+  pointer-events: none;
+}
+
+/* 5s avec GAP anti-chevauchement */
+@keyframes itstormFade5s{
+  0%   { opacity: 0; transform: translateY(6px); }
+  14%  { opacity: 1; transform: translateY(0); }
+  68%  { opacity: 1; transform: translateY(0); }
+  86%  { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* 6 indicateurs => 30s total */
+.itstorm-rotator-item:nth-child(1){ animation: itstormFade5s 30s infinite; animation-delay: 0s;  }
+.itstorm-rotator-item:nth-child(2){ animation: itstormFade5s 30s infinite; animation-delay: 5s;  }
+.itstorm-rotator-item:nth-child(3){ animation: itstormFade5s 30s infinite; animation-delay: 10s; }
+.itstorm-rotator-item:nth-child(4){ animation: itstormFade5s 30s infinite; animation-delay: 15s; }
+.itstorm-rotator-item:nth-child(5){ animation: itstormFade5s 30s infinite; animation-delay: 20s; }
+.itstorm-rotator-item:nth-child(6){ animation: itstormFade5s 30s infinite; animation-delay: 25s; }
+
+
+/* =========================
+   ROTATEUR TITRES (Navigation / Modules / Paramètres / À propos)
+   ========================= */
+
+.sc-title-rotator{
+  position: relative;
+  overflow: hidden;
+  height: 24px;
+  line-height: 24px;
+}
+
+.sc-title-item{
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+
+  display: flex;
+  align-items: center;
+
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  font-weight: 800;
+  font-size: 0.92rem;
+  will-change: opacity, transform;
+}
+
+/* 5s avec GAP anti-chevauchement */
+@keyframes scTitleFade5s{
+  0%   { opacity: 0; transform: translateY(6px); }
+  14%  { opacity: 1; transform: translateY(0); }
+  68%  { opacity: 1; transform: translateY(0); }
+  86%  { opacity: 0; transform: translateY(-4px); }
+  100% { opacity: 0; transform: translateY(-4px); }
+}
+
+/* 4 titres => 20s total */
+.sc-title-item:nth-child(1){ animation: scTitleFade5s 20s infinite; animation-delay: 0s;  }
+.sc-title-item:nth-child(2){ animation: scTitleFade5s 20s infinite; animation-delay: 5s;  }
+.sc-title-item:nth-child(3){ animation: scTitleFade5s 20s infinite; animation-delay: 10s; }
+.sc-title-item:nth-child(4){ animation: scTitleFade5s 20s infinite; animation-delay: 15s; }
+
+
+/* =========================
+   Accessibilité : réduire animations
+   ========================= */
+@media (prefers-reduced-motion: reduce){
+  .itstorm-rotator-item, .sc-title-item{
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+</style>
+
+<!-- ========= CARTE 0 : IT-STORM EN BREF ========= -->
 <div class="sidebar-card">
   <div class="sidebar-title">
-    <span class="icon">🌍</span>
-    <span>{'Language selection' if lang=='en' else 'Sélection de la langue'}</span>
+    <span class="icon">⚡</span>
+    <span>IT-STORM en quelques mots</span>
   </div>
   <div class="sidebar-sep"></div>
-  <div class="lang-flags">
-    <a class="lang-flag {'active' if lang=='en' else ''}" href="?lang=en" target="_self">
-      <img src="data:image/png;base64,{_b64(flag_en_path)}" />
-    </a>
-    <a class="lang-flag {'active' if lang=='fr' else ''}" href="?lang=fr" target="_self">
-      <img src="data:image/png;base64,{_b64(flag_fr_path)}" />
-    </a>
-  </div>
-  <div class="sidebar-help">
-    {'Click a flag to switch the interface.'
-     if lang=='en'
-     else 'Clique sur un drapeau pour changer la langue de l’interface.'}
+
+  <p style="font-size:0.82rem; line-height:1.25rem; margin: 0 0 6px 0;">
+    <strong>StormCopilot</strong> est un copilote IA pour consultants IT-STORM.
+  </p>
+
+  <div class="itstorm-rotator">
+    <div class="itstorm-rotator-inner">
+      <div class="itstorm-rotator-item">📂 Upload & Index : base documentaire</div>
+      <div class="itstorm-rotator-item">🧠 RAG : réponses sourcées</div>
+      <div class="itstorm-rotator-item">🌍 Market Watch : signaux & tendances</div>
+      <div class="itstorm-rotator-item">🔎 Veille techno : Cloud · Data · IA</div>
+      <div class="itstorm-rotator-item">⚙️ Automation Studio : workflows n8n</div>
+      <div class="itstorm-rotator-item">📊 MLOps : dérive & performance</div>
+    </div>
   </div>
 </div>
-"""
-st.sidebar.markdown(html_flags, unsafe_allow_html=True)
+
+<!-- ========= CARTE TITRE ROTATIF (ex: remplace un ancien bloc "Langue") ========= -->
+<div class="sidebar-card" style="margin-top:10px;">
+  <div class="sidebar-title">
+    <span class="icon">🧭</span>
+    <div class="sc-title-rotator">
+      <div class="sc-title-item">Navigation</div>
+      <div class="sc-title-item">Modules</div>
+      <div class="sc-title-item">Paramètres</div>
+      <div class="sc-title-item">À propos</div>
+    </div>
+  </div>
+  <div class="sidebar-sep"></div>
+
+  <div style="font-size:0.80rem; opacity:0.86; line-height:1.25rem;">
+    Interface 100% française, cohérente et prête pour la démo.
+  </div>
+</div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# ========= LANGUE =========
 
 # ========= DARK / LIGHT MODE =========
 dark_mode_key = "ui_dark_mode_toggle_unique"
@@ -1473,110 +1494,92 @@ apply_theme(THEME_DARK if dark_mode else THEME_LIGHT)
 st.sidebar.caption("IT-STORM · Innovation & Consulting")
 st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-# ========= CARTE 1 : CONSEILS D’UTILISATION =========
+# =========================================================
+# SIDEBAR — CARTES (FR-only) — Mise en valeur des modules
+# =========================================================
+
+# ========= CARTE 1 : BIEN UTILISER STORMCOPILOT =========
 st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
 st.sidebar.markdown(
-    f'<div class="sidebar-title"><span class="icon">💬</span>'
-    f'<span>{"How to use StormCopilot" if lang=="en" else "Bien utiliser StormCopilot"}</span></div>'
-    '<div class="sidebar-sep"></div>',
+    """
+    <div class="sidebar-title"><span class="icon">💬</span>
+      <span>Bien utiliser StormCopilot</span>
+    </div>
+    <div class="sidebar-sep"></div>
+    """,
     unsafe_allow_html=True
 )
 
-if lang == "en":
-    st.sidebar.markdown(
-        """
+st.sidebar.markdown(
+    """
 <ul class="sidebar-list">
-  <li>Start with a clear question or a short objective.</li>
-  <li>Use the tabs above to switch between Docs, Market, Voice and Tech Watch.</li>
-  <li>Keep your prompts simple; the assistant will ask for more details if needed.</li>
+  <li><strong>Commence simple</strong> : une question claire ou un objectif court.</li>
+  <li><strong>Choisis ton module</strong> : Documents, Marchés, Voix, Veille, Automations ou MLOps.</li>
+  <li><strong>Reste concret</strong> : noms de missions, contexte IT-STORM, attentes client, contraintes.</li>
+  <li><strong>Améliore la précision</strong> : si la réponse est trop générale, ajoute 1 détail (périmètre, délai, livrable).</li>
 </ul>
-""",
-        unsafe_allow_html=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-<ul class="sidebar-list">
-  <li>Commence par une question claire ou un objectif précis.</li>
-  <li>Utilise les onglets en haut pour passer de la génération de docs au Market Watch, Voice Copilot ou Veille Techno.</li>
-  <li>Garde tes demandes simples : l’assistant demandera des détails si nécessaire.</li>
-</ul>
-""",
-        unsafe_allow_html=True,
-    )
-
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-# ========= CARTE 2 : SECTIONS PRINCIPALES =========
+
+# ========= CARTE 2 : MODULES PRINCIPAUX (mise en avant) =========
 st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
 st.sidebar.markdown(
-    f'<div class="sidebar-title"><span class="icon">📂</span>'
-    f'<span>{"Main sections" if lang=="en" else "Sections principales"}</span></div>'
-    '<div class="sidebar-sep"></div>',
+    """
+    <div class="sidebar-title"><span class="icon">🧩</span>
+      <span>Modules disponibles</span>
+    </div>
+    <div class="sidebar-sep"></div>
+    """,
     unsafe_allow_html=True
 )
 
-if lang == "en":
-    st.sidebar.markdown(
-        """
+st.sidebar.markdown(
+    """
 <ul class="sidebar-list">
-  <li><strong>Upload & Index</strong> – add new files to the knowledge base.</li>
-  <li><strong>Generate Docs</strong> – create structured documents from your questions.</li>
-  <li><strong>Market Watch</strong> – monitor markets, indicators and ML signals.</li>
-  <li><strong>Voice Copilot</strong> – talk with the assistant in natural language.</li>
-  <li><strong>Tech Watch</strong> – follow Cloud, Data, AI & freelancing trends.</li>
+  <li><strong>📂 Upload & Index</strong> : ajouter des documents internes, les préparer et enrichir la base de connaissance.</li>
+  <li><strong>📝 Génération de documents</strong> : produire des livrables structurés (résumés, notes, contenus prêts à partager).</li>
+  <li><strong>🌍 Market Watch</strong> : suivre les marchés, indicateurs, signaux et tendances utiles à la prise de décision.</li>
+  <li><strong>🎤 Assistant vocal</strong> : poser une question à l’oral et obtenir une réponse rapide, orientée mission.</li>
+  <li><strong>🔎 Veille technologique</strong> : suivre Cloud, Data, IA, DevOps et tendances du freelancing/consulting.</li>
+  <li><strong>⚙️ Automation Studio</strong> : lancer et orchestrer des workflows n8n pour automatiser les routines (radars, refresh, rapports).</li>
+  <li><strong>🧠 MLOps Market</strong> : surveiller modèles, qualité, dérive et performance, avec logique champion/challenger.</li>
 </ul>
-""",
-        unsafe_allow_html=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-<ul class="sidebar-list">
-  <li><strong>Upload & Index</strong> : ajouter de nouveaux fichiers à la base de connaissance.</li>
-  <li><strong>Generate Docs</strong> : générer des documents structurés à partir de tes questions.</li>
-  <li><strong>Market Watch</strong> : suivre les marchés, les indicateurs et les signaux ML.</li>
-  <li><strong>Voice Copilot</strong> : dialoguer à l’oral avec l’assistant.</li>
-  <li><strong>Veille Techno</strong> : suivre les tendances Cloud, Data, IA et freelancing.</li>
-</ul>
-""",
-        unsafe_allow_html=True,
-    )
-
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
-# ========= CARTE 3 : À PROPOS DE CETTE VERSION =========
+
+# ========= CARTE 3 : À PROPOS (jury-friendly) =========
 st.sidebar.markdown('<div class="sidebar-card">', unsafe_allow_html=True)
 st.sidebar.markdown(
-    f'<div class="sidebar-title"><span class="icon">🧾</span>'
-    f'<span>{"About this version" if lang=="en" else "À propos de cette version"}</span></div>'
-    '<div class="sidebar-sep"></div>',
+    """
+    <div class="sidebar-title"><span class="icon">🧾</span>
+      <span>À propos de cette version</span>
+    </div>
+    <div class="sidebar-sep"></div>
+    """,
     unsafe_allow_html=True
 )
 
-if lang == "en":
-    st.sidebar.markdown(
-        """
-**StormCopilot • Studio IT-STORM**
+st.sidebar.markdown(
+    """
+    <div style="font-weight:800; margin-bottom:0.35rem;">
+      StormCopilot • Studio IT-STORM
+    </div>
 
-• Version: <em>Preview 2025</em>  
-• Mode: local, offline-first  
-• Designed for consultants and tech enthusiasts.
-""",
-        unsafe_allow_html=True,
-    )
-else:
-    st.sidebar.markdown(
-        """
-**StormCopilot • Studio IT-STORM**
-
-• Version : <em>Aperçu 2025</em>  
-• Mode : local, priorité au hors-ligne  
-• Pensé pour les consultants et passionnés de tech.
-""",
-        unsafe_allow_html=True,
-    )
-
+<ul class="sidebar-list">
+  <li><strong>Version</strong> : <em>Aperçu 2025</em></li>
+  <li><strong>Mode</strong> : local, priorité au hors-ligne, orienté fiabilité</li>
+  <li><strong>Positionnement</strong> : copilote IA pour consultants IT-STORM, missions et portage salarial</li>
+  <li><strong>But</strong> : gagner du temps sur la recherche, la veille, l’automatisation et la préparation de livrables</li>
+</ul>
+    """,
+    unsafe_allow_html=True,
+)
 st.sidebar.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------------------------------------------------------------------
