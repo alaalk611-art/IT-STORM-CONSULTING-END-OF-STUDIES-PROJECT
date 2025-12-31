@@ -1,0 +1,728 @@
+{
+  "name": "GEN AI in Automation n8n",
+  "nodes": [
+    {
+      "parameters": {
+        "functionCode": "const body = items[0].json || {};\n\n// IMPORTANT : on garde audio_base64 tel quel\nreturn [{\n  json: {\n    ...body,\n    // tes champs calculés\n    isNight,\n    isWeekend,\n    isClosed\n  }\n}];\n"
+      },
+      "name": "Prep (Paris hour + isNight + binary)",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -2000,
+        400
+      ],
+      "id": "9659b390-a578-498c-ba1e-eb6b77e64392"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{$json.isClosed}}",
+              "value2": "={{ true }}"
+            }
+          ]
+        }
+      },
+      "name": "IF – Nuit (18h→09h)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -1760,
+        400
+      ],
+      "id": "fec2c21c-f5ad-4136-91df-22c92cc13a8c"
+    },
+    {
+      "parameters": {
+        "functionCode": "const b = items[0].json || {};\nlet audioB64 = typeof b.audio_base64 === \"string\" ? b.audio_base64.trim() : \"\";\n\n// support dataURL\nif (audioB64.startsWith(\"data:\")) {\n  const parts = audioB64.split(\"base64,\");\n  audioB64 = parts.length > 1 ? parts[1] : \"\";\n}\n\nif (!audioB64) {\n  return [{\n    json: {\n      ok: false,\n      error: \"audio manquant (audio_base64 vide ou absent)\"\n    }\n  }];\n}\n\n// on continue avec audio nettoyé\nreturn [{\n  json: {\n    ...b,\n    audio_base64: audioB64\n  }\n}];\n"
+      },
+      "name": "Guard – audio présent",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -1120,
+        336
+      ],
+      "id": "77a9de15-5852-4b0b-8cea-78c84c35895e"
+    },
+    {
+      "parameters": {
+        "functionCode": "const stt = items[0].json || {};\nconst transcript = String(stt.text || stt.transcript || \"\").trim();\n\nif (!transcript) {\n  return [{\n    json: {\n      question: \"\",\n      error: \"transcription vide\"\n    }\n  }];\n}\n\nreturn [{\n  json: {\n    question: transcript,\n    top_k: 2\n  }\n}];\n"
+      },
+      "name": "Extract transcript",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        336
+      ],
+      "id": "9f5f979a-1963-48a6-95d9-9ae23fd5ba7f"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"ok\":true,\"mode\":\"business_hours\",\"msg\":\"hors scope: heures ouvrées (Streamlit en journée)\"}",
+        "options": {}
+      },
+      "name": "Respond – Heures ouvrées",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        656
+      ],
+      "id": "06c3a2ab-8235-4e5b-b2f5-60e1c0902ce1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e3e29d11-80b5-4122-8f22-e312deea1b8f",
+              "leftValue": "={{$json.question}}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -1488,
+        384
+      ],
+      "id": "451387a4-a815-48fc-a910-d2e1787fef56",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== MODE TEST TEXTE (sans audio) =====\n\n// Question de test\nconst question =\n  \"Explique le portage salarial chez IT-STORM en 3 phrases, et comment se passe la facturation.\";\n\n\nconst top_k = 4;\n\nreturn items.map(item => ({\n  ...item,\n  json: {\n    ...(item.json || {}),\n    question,\n    transcript: question, // ✅ pour compat avec ton RAG actuel\n    top_k,\n    hasAudio: false,\n    mode: \"text-test\",\n  },\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1056,
+        -240
+      ],
+      "id": "1177562b-3503-47b1-83c6-f42621863fb5",
+      "name": "TEST – Question texte"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Best Pick robuste : supporte 1 item (jury seul) OU plusieurs items (multi-modèles)\nconst arr = Array.isArray(items) ? items : [];\n\nif (!arr.length) {\n  return [{ json: { answer: \"\", confidence: 0, sources: [], quotes: [], message: \"Aucune réponse.\" } }];\n}\n\n// Petit helper pour scorer\nfunction scoreItem(item) {\n  const j = item.json || {};\n  const conf = Number(j.confidence ?? 0);\n  const text = String(j.answer || j.message || \"\").trim();\n  const len = text.length;\n\n  // score : confiance prime, longueur juste un tie-breaker léger\n  return conf * 100 + len / 100;\n}\n\n// Si tu n'as qu'un seul item (cas actuel: jury)\nif (arr.length === 1) {\n  const j = arr[0].json || {};\n  return [{\n    json: {\n      ...j,\n      selected_model: j.dbg?.selected_model || j.dbg?.model || j.selected_model,\n      comparison: [{\n        model: j.dbg?.selected_model || j.dbg?.model || j.selected_model || \"unknown\",\n        confidence: j.confidence ?? null,\n        length: String(j.answer || j.message || \"\").length\n      }]\n    }\n  }];\n}\n\n// Cas multi-items (si tu merges plusieurs modèles plus tard)\nlet best = null;\nlet bestScore = -1;\n\nfor (const it of arr) {\n  const s = scoreItem(it);\n  if (s > bestScore) {\n    bestScore = s;\n    best = it;\n  }\n}\n\nconst bj = best?.json || {};\nreturn [{\n  json: {\n    ...bj,\n    selected_model: bj.dbg?.selected_model || bj.dbg?.model || bj.selected_model,\n    comparison: arr.map(i => {\n      const jj = i.json || {};\n      return {\n        model: jj.dbg?.selected_model || jj.dbg?.model || jj.selected_model || \"unknown\",\n        confidence: jj.confidence ?? null,\n        length: String(jj.answer || jj.message || \"\").length\n      };\n    })\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        -240
+      ],
+      "id": "a66cc830-1447-4b1b-a1b4-66dcd8d3c365",
+      "name": "Best Pick"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/rag/jury",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "question",
+              "value": "=={{ $json.question }}"
+            },
+            {
+              "name": "top_k",
+              "value": "4"
+            },
+            {
+              "name": "temperature ",
+              "value": "0.2"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -800,
+        -240
+      ],
+      "id": "6140c172-3a53-43f9-8c1c-72a1d53b4532",
+      "name": "RAG jury"
+    },
+    {
+      "parameters": {
+        "jsCode": "// === INPUT ===\n// items[0].json.answer : texte brut du RAG jury\n\nconst raw = String(items[0].json.answer || \"\").trim();\n\n// 1️⃣ Normalisation espaces\nlet text = raw\n  .replace(/\\s+/g, \" \")\n  .replace(/\\s([.,!?;:])/g, \"$1\");\n\n// 2️⃣ Découpage en phrases (robuste FR)\nlet sentences = text\n  .split(/(?<=[.!?])\\s+/)\n  .map(s => s.trim())\n  .filter(s => s.length > 0);\n\n// 3️⃣ Dé-doublonnage strict\nconst seen = new Set();\nsentences = sentences.filter(s => {\n  const key = s.toLowerCase();\n  if (seen.has(key)) return false;\n  seen.add(key);\n  return true;\n});\n\n// 4️⃣ Limite à 3 phrases\nsentences = sentences.slice(0, 3);\n\n// 5️⃣ Reconstruction finale\nconst cleanAnswer = sentences.join(\" \");\n\nreturn [{\n  json: {\n    ...items[0].json,\n    answer: cleanAnswer,\n    answer_sentences: sentences,\n    answer_nb_sentences: sentences.length,\n    answer_post_processed: true\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -432,
+        -240
+      ],
+      "id": "af2f6b93-fe39-4ab6-a7d2-e4bed77c45b8",
+      "name": "Post-process Answer"
+    },
+    {
+      "parameters": {
+        "jsCode": "function fixUtf8(str) {\n  if (!str) return str;\n\n  const map = {\n    \"Ã©\": \"é\",\n    \"Ã¨\": \"è\",\n    \"Ãª\": \"ê\",\n    \"Ã \": \"à\",\n    \"Ã¢\": \"â\",\n    \"Ã®\": \"î\",\n    \"Ã´\": \"ô\",\n    \"Ã»\": \"û\",\n    \"Ã§\": \"ç\",\n    \"â€™\": \"'\",\n    \"â€˜\": \"'\",\n    \"â€œ\": \"\\\"\",\n    \"â€�\": \"\\\"\",\n    \"â€“\": \"–\",\n    \"â€”\": \"—\",\n    \"Â \": \"\",\n  };\n\n  let out = str;\n  for (const [bad, good] of Object.entries(map)) {\n    out = out.split(bad).join(good);\n  }\n  return out;\n}\n\n// Appliquer au champ answer\nconst json = items[0].json;\n\njson.answer = fixUtf8(json.answer);\n\n// Appliquer aussi aux quotes si présentes\nif (Array.isArray(json.quotes)) {\n  json.quotes = json.quotes.map(q => ({\n    ...q,\n    quote: fixUtf8(q.quote)\n  }));\n}\n\nreturn [{ json }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -592,
+        -240
+      ],
+      "id": "b1f1eec3-5b22-48ec-895a-53aa895a28b1",
+      "name": "UTF-8 Cleanup"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = items[0].json || {};\n\nconst answer = String(data.answer || \"\").trim();\nconst confidence =\n  typeof data.confidence === \"number\"\n    ? Math.round(data.confidence * 100)\n    : null;\n\n// Modèle choisi par le jury\nconst model =\n  data.dbg?.selected_model ||\n  data.selected_model ||\n  \"unknown\";\n\n// Construction texte lisible (AVEC retours ligne)\nlet text = \"\";\ntext += \"Réponse :\\n\";\ntext += answer + \"\\n\\n\";\n\nif (confidence !== null) {\n  text += `Confiance estimée : ${confidence} %`;\n}\n\n// Ajout du modèle choisi\ntext += `\\nModèle choisi : ${model}`;\n\n// Sortie : message lisible\nreturn [\n  {\n    json: {\n      message: text\n    }\n  }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -32,
+        -240
+      ],
+      "id": "bb8786e8-c9db-4ae9-8601-f7cf04ab2c21",
+      "name": "Client Answer"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generate responses",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "name": "Webhook Generate Responses",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -2048,
+        -240
+      ],
+      "id": "61c07a84-2e41-4904-929e-f3271a38c480",
+      "webhookId": "e62bff82-ab0d-404e-8763-388122e85e07"
+    },
+    {
+      "parameters": {
+        "respondWith": "allIncomingItems",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        128,
+        -240
+      ],
+      "id": "7d8f1a28-43f9-493f-965e-58982e0b9b31",
+      "name": "Respond to Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/rag/fast",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"question\": \"={{$json.question}}\",\n  \"top_k\": 2\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -128,
+        336
+      ],
+      "id": "f829cd95-147c-4743-863d-b1ee4a7a991a",
+      "name": "Fast RAG"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "Response",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -2256,
+        400
+      ],
+      "id": "535de164-6f9a-461d-8369-54a80c48d51c",
+      "name": "Webhook FAST",
+      "webhookId": "5fa0cd73-9b56-4e53-96a3-f54918a73d63"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Convertir (n8n Code node)\n// Objectif : produire un binaire stable pour HTTP Request\n// - binary.audio (toujours présent)\n// - binary.file  (alias optionnel pour compatibilité)\n// - json.lang + json.mime + json.filename\n\nconst data = items[0].json || {};\nconst body = data.body || data;\n\nconst lang = (body.lang || \"fr\").toString().trim() || \"fr\";\n\n// MIME robuste\nlet mime = (body.mime || body.mimetype || \"audio/webm\").toString().trim().toLowerCase();\nif (!mime.includes(\"/\")) mime = \"audio/webm\";\n\n// base64 robuste\nlet b64 = (body.audio_base64 || body.audioBase64 || body.audio || \"\").toString().trim();\nif (!b64) throw new Error(\"Convertir: audio_base64 manquant\");\n\n// support data URL\nif (b64.startsWith(\"data:\")) {\n  const parts = b64.split(\"base64,\");\n  b64 = parts.length > 1 ? parts[1] : \"\";\n}\n\n// nettoyage\nconst clean = b64.replace(/\\s/g, \"\");\nif (!clean) throw new Error(\"Convertir: base64 vide après nettoyage\");\n\n// nom de fichier cohérent\nconst ext = mime.includes(\"wav\") ? \"wav\" :\n            mime.includes(\"mpeg\") || mime.includes(\"mp3\") ? \"mp3\" :\n            mime.includes(\"ogg\") ? \"ogg\" :\n            mime.includes(\"mp4\") ? \"mp4\" :\n            mime.includes(\"webm\") ? \"webm\" : \"bin\";\n\nconst filename = `audio.${ext}`;\n\n// construit l'objet binaire n8n\nconst binObj = {\n  data: clean,\n  mimeType: mime,\n  fileName: filename,\n};\n\n// ✅ On fournit 2 clés pour éviter les problèmes dans les HTTP nodes\nreturn [{\n  json: { lang, mime, filename },\n  binary: {\n    audio: binObj, // standard\n    file: binObj,  // alias compat (si API attend \"file\" côté form-data)\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        336
+      ],
+      "id": "fbb656a5-29ab-4905-bbc8-b0c1900533ea",
+      "name": "Convertir"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/rag/summary",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"={{ $json.text }}\", \"timeout\": \"={{ $json.timeout }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -928,
+        80
+      ],
+      "id": "6fa5b91e-07f0-427e-b1b5-5c4946efbd49",
+      "name": "Summary RAG"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        464,
+        336
+      ],
+      "id": "f994af5b-a986-4f1b-ac20-ba488d04a039",
+      "name": "Respond to Voice"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -1264,
+        512
+      ],
+      "id": "8f5d5f22-db38-4d53-b965-ce3254055edf",
+      "name": "Respond to Empty"
+    },
+    {
+      "parameters": {
+        "formTitle": "Resumer",
+        "formDescription": "Collez ici le texte à résumer...",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Text",
+              "placeholder": "Text à resumer",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -1744,
+        80
+      ],
+      "id": "f2c74173-4a40-4c37-8d6d-1210c5a98097",
+      "name": "Text to resume",
+      "webhookId": "3278ecc5-8ce3-4167-9963-aa2b29ded4bc"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = items[0].json || {};\n\nreturn [{\n  json: {\n    answer: r.answer || \"\",\n    confidence: r.confidence ?? null,\n    model: r.dbg?.selected_model ?? null,\n    sources: r.sources || []\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -640,
+        80
+      ],
+      "id": "65aa2fa7-ac80-4dba-846b-b5462767e8eb",
+      "name": "Response"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json || {};\n\n// accepte plusieurs sources possibles\nlet text =\n  body.text ||\n  body.label ||\n  body.Label ||\n  \"\";\n\ntext = String(text).trim();\n\nif (!text) {\n  return [{\n    json: {\n      error: \"Texte vide\",\n      hint: \"Veuillez coller un texte à résumer.\"\n    }\n  }];\n}\n\ntext = text\n  .replace(/\\r/g, \"\\n\")\n  .replace(/[ \\t]{2,}/g, \" \")\n  .replace(/\\n{3,}/g, \"\\n\\n\")\n  .trim();\n\nconst timeout = Number(body.timeout || 60);\n\nreturn [{\n  json: {\n    text,\n    timeout\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1296,
+        80
+      ],
+      "id": "ba2c6951-b71f-41ec-a528-4f945a7e85ee",
+      "name": "Pré_resumé"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j = items[0].json || {};\n\nconst answer = (j.answer || \"\").toString().trim();\nconst sources = Array.isArray(j.sources) ? j.sources : [];\n\nfunction cleanText(t){\n  return t\n    .replace(/\\\\n/g, \"\\n\")     // si la réponse contient des \\n échappés\n    .replace(/\\n{3,}/g, \"\\n\\n\")\n    .trim();\n}\n\nlet msg = cleanText(answer);\n\n// Option: ajouter sources en bas (compact)\nif (sources.length) {\n  msg += \"\\n\\nSources: \" + sources.join(\" | \");\n}\n\nreturn [{\n  json: {\n    ...j,\n    reply_text: msg\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        336
+      ],
+      "id": "eaf5bcf5-9291-4650-8462-667f32060640",
+      "name": "Answer"
+    },
+    {
+      "parameters": {
+        "content": "VOICE PIPELINE\n• Webhook FAST (audio)\n• Guard audio présent\n• STT (Whisper)\n• Fast RAG\n• Réponse vocale automatique\n• Heures ouvrées / nuit\n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -656,
+        544
+      ],
+      "id": "2ffa9b9a-897d-41e1-9d46-b4b12021e4ed",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "TEXT SUMMARY\n• Form n8n / Webhook\n• Validation & nettoyage du texte\n• Summary RAG\n• Réponse textuelle\n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -352,
+        64
+      ],
+      "id": "088a258c-df9f-4f49-bbf8-6e7f7c0413aa",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "RAG JURY\n• Multi-modèles LLM\n• Scoring & Best Pick\n• Nettoyage UTF-8\n• Post-processing réponse\n"
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        352,
+        -256
+      ],
+      "id": "d4635c35-be5b-4d19-b31c-fbb37bdbd388",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/stt/transcribe",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "whisper-1"
+            },
+            {
+              "name": "language",
+              "value": "fr"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "audio"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 120000
+        }
+      },
+      "name": "STT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -592,
+        336
+      ],
+      "id": "cc40aba4-7c89-4312-8cdf-c74f9276b0d5"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Prep (Paris hour + isNight + binary)": {
+      "main": [
+        [
+          {
+            "node": "IF – Nuit (18h→09h)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF – Nuit (18h→09h)?": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond – Heures ouvrées",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guard – audio présent": {
+      "main": [
+        [
+          {
+            "node": "Convertir",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Extract transcript": {
+      "main": [
+        [
+          {
+            "node": "Fast RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Guard – audio présent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Empty",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TEST – Question texte": {
+      "main": [
+        [
+          {
+            "node": "RAG jury",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Pick": {
+      "main": [
+        [
+          {
+            "node": "Client Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RAG jury": {
+      "main": [
+        [
+          {
+            "node": "UTF-8 Cleanup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post-process Answer": {
+      "main": [
+        [
+          {
+            "node": "Best Pick",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "UTF-8 Cleanup": {
+      "main": [
+        [
+          {
+            "node": "Post-process Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Answer": {
+      "main": [
+        [
+          {
+            "node": "Respond to Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Generate Responses": {
+      "main": [
+        [
+          {
+            "node": "TEST – Question texte",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fast RAG": {
+      "main": [
+        [
+          {
+            "node": "Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook FAST": {
+      "main": [
+        [
+          {
+            "node": "Prep (Paris hour + isNight + binary)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir": {
+      "main": [
+        [
+          {
+            "node": "STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summary RAG": {
+      "main": [
+        [
+          {
+            "node": "Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Text to resume": {
+      "main": [
+        [
+          {
+            "node": "Pré_resumé",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pré_resumé": {
+      "main": [
+        [
+          {
+            "node": "Summary RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer": {
+      "main": [
+        [
+          {
+            "node": "Respond to Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "STT": {
+      "main": [
+        [
+          {
+            "node": "Extract transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c8570225-c3b1-4489-a120-52d04f081b8c",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"
+  },
+  "id": "ep3ipow9w6JF7n4P",
+  "tags": []
+}

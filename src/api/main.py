@@ -386,6 +386,6 @@ app.include_router(rag_jury_router, prefix="/rag", tags=["rag-jury"])
 
 from src.api.rag_summary import router as rag_summary_router
 app.include_router(rag_summary_router)
-
+app.include_router(rag_summary_router, prefix="/rag", tags=["rag-summary"])
 # src/api
 

@@ -18,6 +18,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from docx import Document
 import streamlit as st
 import pandas as pd
+import requests
 
 # --- RAG strict engine (imports robustes) ---
 try:
@@ -101,6 +102,18 @@ def _label(name: str, rank: Optional[int] = None) -> str:
     emo = meta["emoji"]
     badge = f" · Rang {rank}" if rank else ""
     return f"{emo} {name}{badge}"
+
+def summarize_via_n8n(text: str):
+    url = "http://localhost:5678/webhook/Summary"
+
+    payload = {
+        "text": text
+    }
+
+    r = requests.post(url, json=payload, timeout=120)
+    r.raise_for_status()
+
+    return r.json()
 
 def _decorate_model_label(name: str, rank: Optional[int] = None) -> str:
     meta = _MODEL_META.get(name, {"emoji": "🤖", "color": "#334155"})
