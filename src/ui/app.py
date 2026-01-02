@@ -530,7 +530,9 @@ def apply_theme(theme: dict):
       --accent: {theme['accent']};
     }}
 
-    /* Transitions globales douces */
+    /* =========================
+       BASE
+       ========================= */
     * {{
       transition:
         background-color .25s ease,
@@ -558,7 +560,7 @@ def apply_theme(theme: dict):
     }}
 
     /* =========================
-       BRAND BAR / TITRES / CARTES
+       BRAND / CARTES
        ========================= */
     .brandbar {{
       background: var(--card);
@@ -627,7 +629,7 @@ def apply_theme(theme: dict):
     }}
 
     /* =========================
-       Boutons
+       BOUTONS
        ========================= */
     .stButton>button,
     .stDownloadButton>button {{
@@ -644,7 +646,7 @@ def apply_theme(theme: dict):
     }}
 
     /* =========================
-       Chips & sources
+       CHIPS / SOURCES
        ========================= */
     .chip {{
       display: inline-block;
@@ -669,83 +671,139 @@ def apply_theme(theme: dict):
     }}
 
     /* =========================
-       NAVIGATION PRINCIPALE : st.radio → pills
+       NAVIGATION PRINCIPALE
+       GRID 4 colonnes (2 lignes) — centrée — pills plus larges
+       + onglet actif illuminé + barre lumineuse
        ========================= */
 
-    /* Le conteneur du radio */
+    /* Wrapper : centre la nav */
+    div[data-testid="stRadio"] {{
+      display: flex !important;
+      justify-content: center !important;
+      padding-left: 8.5rem !important;
+      padding-right: 3.5rem !important;
+    }}
+
+    
+    /* Radiogroup = GRID */
     div[data-testid="stRadio"] > div[role="radiogroup"] {{
-        gap: 0.6rem !important;
-        flex-wrap: wrap;
+      display: grid !important;
+      grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+
+      gap: 0.85rem !important;
+      align-items: center !important;
+      justify-items: stretch !important;
+
+      max-width: 1050px;
+      width: 100%;
+      margin: 0 auto !important;
+
+      padding: 0.45rem 0.25rem 0.6rem 0.25rem !important;
     }}
 
-    /* On cache le petit rond du radio */
+    /* Cache le rond radio */
     div[data-testid="stRadio"] > div[role="radiogroup"] > label > div:first-child {{
-        display: none;
+      display: none !important;
     }}
 
-    /* Chaque option devient un pill */
+    /* Force pleine largeur (wrappers internes Streamlit) */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label,
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label > div {{
+      width: 100% !important;
+      box-sizing: border-box !important;
+    }}
+
+    /* Pills */
     div[data-testid="stRadio"] > div[role="radiogroup"] > label {{
-        border-radius: 999px;
-        border: 1px solid #e2e8f0;
-        background: #f8fafc;
-        padding: 0.25rem 1.0rem;
-        font-size: 0.92rem;
-        font-weight: 500;
-        color: #1e293b;
-        box-shadow: 0 1px 2px rgba(15,23,42,0.06);
-        cursor: pointer;
-        transition: all .20s ease;
-    }}
+      position: relative !important;
+      display: flex !important;
+      justify-content: center !important;
+      align-items: center !important;
 
-    /* Option sélectionnée (onglet actif) */
-    div[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"] {{
-        background: #ffffff;
-        border-color: #38bdf8;         /* sky blue */
-        color: #0c4a6e;
-        box-shadow: 0 4px 12px rgba(56,189,248,0.25);
-        transform: translateY(-1px);
+      min-height: 44px;
+
+      border-radius: 999px !important;
+      border: 1px solid rgba(226,232,240,0.95) !important;
+      background: rgba(248,250,252,0.96) !important;
+
+      padding: 0.5rem 1.25rem !important;
+      font-size: 0.95rem !important;
+      font-weight: 650 !important;
+      color: #1e293b !important;
+
+      box-shadow: 0 2px 6px rgba(15,23,42,0.06) !important;
+      cursor: pointer !important;
+      user-select: none !important;
+
+      transition: transform .18s ease, box-shadow .18s ease,
+                  border-color .18s ease, background .18s ease !important;
     }}
 
     /* Hover */
     div[data-testid="stRadio"] > div[role="radiogroup"] > label:hover {{
-        background: #eef2ff;
-        opacity: 0.97;
+      background: rgba(238,242,255,0.97) !important;
+      border-color: rgba(148,163,184,0.9) !important;
+      transform: translateY(-1px) !important;
+      box-shadow: 0 12px 26px rgba(2,6,23,0.10) !important;
     }}
 
-    /* =========================
-       (Optionnel) style pour de futurs st.tabs
-       ========================= */
-    .stTabs [role="tablist"] {{
-        gap: 0.6rem;
-        border-bottom: none !important;
-        padding-bottom: 0.6rem;
+    /* Barre lumineuse (off) */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label::after {{
+      content: "";
+      position: absolute;
+      left: 18%;
+      right: 18%;
+      bottom: -8px;
+      height: 4px;
+      border-radius: 999px;
+      opacity: 0;
+      transform: translateY(-2px);
+      background: transparent;
+      transition: opacity .18s ease, transform .18s ease,
+                  box-shadow .18s ease, background .18s ease !important;
+      pointer-events: none;
     }}
 
-    .stTabs [role="tab"] {{
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 999px;
-        padding: 0.35rem 1rem;
-        font-size: 0.92rem;
-        font-weight: 500;
-        color: #1e293b;
-        opacity: 0.85;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-        transition: all .20s ease;
+    /* Onglet actif (illuminé) */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"] {{
+      background: linear-gradient(135deg, #ffffff, #e0f2fe) !important;
+      border-color: rgba(56,189,248,1) !important;
+      color: #075985 !important;
+
+      transform: translateY(-2px) !important;
+      box-shadow:
+        0 16px 36px rgba(56,189,248,0.30),
+        0 0 0 4px rgba(56,189,248,0.18) !important;
     }}
 
-    .stTabs [aria-selected="true"] {{
-        background: #ffffff !important;
-        border-color: #38bdf8 !important;
-        opacity: 1 !important;
-        color: #0c4a6e !important;
-        box-shadow: 0 4px 12px rgba(56,189,248,0.25);
-        transform: translateY(-1px);
+    /* Barre lumineuse active */
+    div[data-testid="stRadio"] > div[role="radiogroup"] > label[data-checked="true"]::after {{
+      opacity: 1;
+      transform: translateY(0);
+      background: linear-gradient(90deg,
+        rgba(56,189,248,0.0),
+        rgba(56,189,248,1),
+        rgba(99,102,241,0.95),
+        rgba(56,189,248,0.0)
+      );
+      box-shadow:
+        0 12px 28px rgba(56,189,248,0.45),
+        0 0 22px rgba(56,189,248,0.35);
     }}
 
-    .stTabs [role="tab"]:hover {{
-        opacity: 0.95;
-        background: #eef2ff;
+    /* Responsive */
+    @media (max-width: 900px) {{
+      div[data-testid="stRadio"] > div[role="radiogroup"] {{
+        grid-template-columns: repeat(2, 1fr) !important;
+        max-width: 680px;
+      }}
+    }}
+
+    @media (max-width: 520px) {{
+      div[data-testid="stRadio"] > div[role="radiogroup"] {{
+        grid-template-columns: 1fr !important;
+        max-width: 100%;
+      }}
     }}
 
     /* Ligne de séparation douce */
@@ -758,39 +816,39 @@ def apply_theme(theme: dict):
     """
     st.markdown(css, unsafe_allow_html=True)
 
+
 def render_brand_header(api_ok: Optional[bool]=None, llm_ok: Optional[bool]=None):
     logo = _logo_b64()
-    c1, c2, c3 = st.columns([0.10, 0.72, 0.18])
+    c1, c2 = st.columns([0.14, 0.86])
+
     with c1:
         if logo:
             st.markdown(
                 f"""
-                <div class="brandbar" style="display:flex;align-items:center;justify-content:center;">
+                <div class="brandbar" style="height: 78px; display:flex; align-items:center; justify-content:center;">
                     <img src="data:image/png;base64,{logo}" width="56" style="border-radius:12px;"/>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
         else:
-            st.markdown('<div class="brandbar"><span class="brand-title">IS</span></div>', unsafe_allow_html=True)
+            st.markdown(
+                '<div class="brandbar" style="height: 78px; display:flex; align-items:center; justify-content:center;">'
+                '<span class="brand-title">IS</span></div>',
+                unsafe_allow_html=True
+            )
+
     with c2:
         st.markdown(
             """
-            <div class="brandbar">
+            <div class="brandbar" style="height: 78px; display:flex; flex-direction:column; justify-content:center;">
               <div class="brand-title">StormCopilot</div>
               <div class="brand-sub">Hosted by <b>IT-STORM · Innovation & Consulting</b> — Knowledge, RAG & Market Intelligence</div>
             </div>
             """,
             unsafe_allow_html=True,
         )
-    with c3:
-        st.markdown('<div class="brandbar" style="text-align:right;">', unsafe_allow_html=True)
-        if api_ok is not None:
-            st.markdown(f'<span class="chip">Market API: {"✅ Up" if api_ok else "❌ Down"}</span>', unsafe_allow_html=True)
-        if llm_ok is not None:
-            st.markdown(f'<span class="chip">LLM (Local HF): {"✅ Ready" if llm_ok else "⚠️ Not ready"}</span>', unsafe_allow_html=True)
-        st.markdown('<span class="chip">Env: Local</span>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+ 
 
 # --------------------------------------------------------------------------------------
 # Ensure folders exist

@@ -18,6 +18,7 @@ API_BASE = os.getenv("BACKEND_API_BASE_URL", "http://127.0.0.1:8001").rstrip("/"
 N8N_BASE = os.getenv("N8N_BASE_URL", "http://127.0.0.1:5678").rstrip("/")
 MLFLOW_URI = os.getenv("MLFLOW_STORE", "sqlite:///mlruns.db")
 MLFLOW_UI_URL = os.getenv("MLFLOW_UI_URL", "http://127.0.0.1:5000")
+IGNORED_IN_KPIS = {"^FCHI"}  # gardé dans l'UI, ignoré dans les KPI/best-of
 
 
 # ------------------------------------------------------------
@@ -151,22 +152,27 @@ def _inject_local_css():
 # Helpers généraux
 # ------------------------------------------------------------
 def _get_champions_summary():
-    """Résumé global des champions côté backend."""
+    """Résumé global des champions côté backend (ignore certains symboles pour les KPI)."""
     try:
         res = requests.get(f"{API_BASE}/mlops/champions", timeout=8).json()
         if not res:
             return {"count": 0, "best_sil": None, "best_symbol": None}
-        count = len(res)
+
+        # ✅ KPI count sans les symboles ignorés
+        filtered_items = [(sym, data) for sym, data in res.items() if sym not in IGNORED_IN_KPIS]
+        count = len(filtered_items)
+
         best_sym = None
         best_sil = None
-        for sym, data in res.items():
-            metrics = data.get("metrics", {})
+        for sym, data in filtered_items:
+            metrics = (data or {}).get("metrics", {}) or {}
             sil = metrics.get("silhouette")
             if sil is None:
                 continue
             if best_sil is None or sil > best_sil:
                 best_sil = sil
                 best_sym = sym
+
         return {"count": count, "best_sil": best_sil, "best_symbol": best_sym}
     except Exception:
         return {"count": 0, "best_sil": None, "best_symbol": None}
@@ -719,6 +725,9 @@ def render_champions_synthesis_card(title: str = "🏅 Synthèse des champions m
     """
     Carte récap des champions MLOps (nombre de symboles + meilleur silhouette).
     Style inspiré de la carte Market Radar n8n.
+
+    - Garde ^FCHI dans les données
+    - Mais l'ignore dans les KPI (count + best silhouette)
     """
     try:
         res = requests.get(f"{API_BASE}/mlops/champions", timeout=8).json()
@@ -730,12 +739,16 @@ def render_champions_synthesis_card(title: str = "🏅 Synthèse des champions m
         st.warning("Aucun champion disponible pour le moment.")
         return
 
-    nb_symbols = len(res)
+    # ✅ Filtrage KPI : on garde tout dans res, mais on calcule KPI sans les symboles ignorés
+    ignored = globals().get("IGNORED_IN_KPIS", {"^FCHI"})
+    filtered_items = [(sym, data) for sym, data in res.items() if sym not in ignored]
 
-    # Recherche du meilleur score silhouette
+    nb_symbols = len(filtered_items)
+
+    # Recherche du meilleur score silhouette (sans symboles ignorés)
     best_sym = None
     best_sil = None
-    for sym, data in res.items():
+    for sym, data in filtered_items:
         metrics = (data or {}).get("metrics") or {}
         sil = metrics.get("silhouette")
         if sil is None:
@@ -747,10 +760,7 @@ def render_champions_synthesis_card(title: str = "🏅 Synthèse des champions m
     # Fallback
     if best_sym is None:
         best_sym = "N/A"
-    if best_sil is None:
-        best_sil_txt = "–"
-    else:
-        best_sil_txt = f"{best_sil:.3f}"
+    best_sil_txt = "–" if best_sil is None else f"{best_sil:.3f}"
 
     # ---- Carte style "dash-card" ----
     st.markdown(
@@ -776,7 +786,7 @@ def render_champions_synthesis_card(title: str = "🏅 Synthèse des champions m
             ">
                 <div style="font-size:0.75rem;opacity:0.9;">📊 Nombre de symboles</div>
                 <div style="font-size:1.9rem;font-weight:700;">{nb_symbols}</div>
-                <div style="font-size:0.8rem;opacity:0.9;">Champions enregistrés</div>
+                <div style="font-size:0.8rem;opacity:0.9;">Champions enregistrés (hors indices ignorés)</div>
             </div>
             """,
             unsafe_allow_html=True,

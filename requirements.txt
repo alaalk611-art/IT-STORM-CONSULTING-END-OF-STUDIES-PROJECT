@@ -28,7 +28,6 @@ sentence-transformers>=3.0
 transformers>=4.44
 torch==2.9.1
 accelerate>=0.34
-huggingface-hub>=0.24
 
 # --- Document processing & reports ---
 python-docx>=1.1
@@ -68,7 +67,7 @@ chromadb>=0.5
 
 transformers>=4.44
 huggingface-hub>=0.24
-
+ollama>=0.0.13
 # Torch CPU ONLY for Docker (avoid CUDA install)
 
 accelerate>=0.34

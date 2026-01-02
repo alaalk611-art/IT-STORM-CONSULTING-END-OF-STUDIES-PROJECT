@@ -20,6 +20,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional, Tuple
 from collections import Counter
+#from chromadb.utils.embedding_functions import DefaultEmbeddingFunction
+#ef = DefaultEmbeddingFunction()
+# ou
+#from chromadb.utils.embedding_functions import SentenceTransformerEmbeddingFunction
+#ef = SentenceTransformerEmbeddingFunction(model_name="all-MiniLM-L6-v2")
 
 # ===== Dépendances minimales =====
 try:

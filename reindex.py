@@ -22,5 +22,3 @@ for fp, basename in FILES:
         max_words=220
     )
     print(res)
-
-print("Sources visibles :", rb.debug_list_sources(50))

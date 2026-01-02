@@ -47,9 +47,30 @@ except Exception:
 # =================== CSS GLOBAL ===================
 st.markdown("""
 <style>
-/* ===== DataFrame : montrer TOUTE la réponse sans coupe ===== */
+
+/* =========================================================
+   CONTENEUR CENTRAL GLOBAL (Generate Docs)
+   ========================================================= */
+.center-wrap {
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+/* Réduction légère sur très grands écrans */
+@media (min-width: 1600px) {
+  .center-wrap {
+    max-width: 1100px;
+  }
+}
+
+/* =========================================================
+   DataFrame : montrer TOUTE la réponse sans coupe
+   ========================================================= */
 [data-testid="stDataFrame"] div[role="gridcell"],
-[data-testid="stDataFrame"] div[role="gridcell"] p{
+[data-testid="stDataFrame"] div[role="gridcell"] p {
   white-space: pre-wrap !important;
   overflow: visible !important;
   text-overflow: initial !important;
@@ -58,27 +79,65 @@ st.markdown("""
   line-break: anywhere !important;
 }
 
-/* ===== Helper “?” cliquable (tooltip) ===== */
-.helper-row{
-  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
-  margin:.15rem 0 .35rem 0;
+/* =========================================================
+   Helper “?” cliquable (tooltip)
+   ========================================================= */
+.helper-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  margin: .15rem 0 .35rem 0;
 }
-.helper-label{ font-weight:600; color:#0f172a; }
-.helper{
-  position:relative; display:inline-flex; align-items:center; justify-content:center;
-  width:22px; height:22px; border-radius:50%;
-  background:#e5eefc; color:#284b9f; font-weight:700; cursor:pointer;
-  border:1px solid #c7d2fe; user-select:none;
+
+.helper-label {
+  font-weight: 600;
+  color: #0f172a;
 }
-.helper:hover{ background:#dbe8ff; }
-.helper .tooltip{
-  position:absolute; top:30px; right:-8px;
-  min-width:220px; max-width:360px; padding:.55rem .7rem; border-radius:.55rem;
-  border:1px solid #e5e7eb; background:#fff; color:#111827;
-  box-shadow:0 8px 18px rgba(0,0,0,.08); font-size:.86rem; line-height:1.25;
-  display:none; z-index:20;
+
+.helper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #e5eefc;
+  color: #284b9f;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid #c7d2fe;
+  user-select: none;
 }
-.helper:focus .tooltip, .helper:hover .tooltip{ display:block; }
+
+.helper:hover {
+  background: #dbe8ff;
+}
+
+.helper .tooltip {
+  position: absolute;
+  top: 30px;
+  right: -8px;
+  min-width: 220px;
+  max-width: 360px;
+  padding: .55rem .7rem;
+  border-radius: .55rem;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #111827;
+  box-shadow: 0 8px 18px rgba(0,0,0,.08);
+  font-size: .86rem;
+  line-height: 1.25;
+  display: none;
+  z-index: 20;
+}
+
+.helper:focus .tooltip,
+.helper:hover .tooltip {
+  display: block;
+}
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -376,7 +435,7 @@ def _make_docx_from_summary(title: str, intro: str, body: str) -> io.BytesIO:
     return buf
 
 def _sidebar_topk_slider(default:int=6) -> int:
-    lang = st.session_state.get("lang", "en")
+    lang = st.session_state.get("lang", "fr")
     is_en = (lang == "en")
     label_txt = "Top-K results" if is_en else "Top-K résultats"
     help_txt  = (
@@ -1163,53 +1222,250 @@ def _render_summary_quality(report: Dict[str, Any]):
 # ============================================================
 
 def render():
-    st.header("🧠 Generate Docs (RAG zéro-hallucination)")
+    
+    # =========================================================
+    # CSS (centralisation + hero + modebar + dataframe full text + tooltip ?)
+    # =========================================================
+    st.markdown(
+        """
+<style>
+
+/* ===== Conteneur central global ===== */
+.center-wrap{
+  max-width:1200px;
+  margin:0 auto;
+  padding:0 10px;
+}
+@media (min-width:1600px){
+  .center-wrap{max-width:1100px;}
+}
+
+/* ===== Hero premium ===== */
+.gd-hero{
+  margin: 14px 0 18px 0;
+  padding: 22px 26px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at 0% 0%,rgba(56,189,248,.34),transparent 55%),
+    radial-gradient(circle at 100% 0%,rgba(129,140,248,.30),transparent 55%),
+    linear-gradient(135deg,#e0f2fe,#f0f9ff);
+  border:1px solid rgba(37,99,235,.22);
+  box-shadow:0 22px 55px rgba(15,23,42,.10);
+}
+.gd-hero-title{
+  font-size:1.55rem;
+  font-weight:900;
+  color:#0f172a;
+  margin-bottom:4px;
+  letter-spacing:.2px;
+}
+/* =========================================================
+   TEXT ALIGN – Generate Docs
+   ========================================================= */
+
+/* Titres des HERO */
+.gd-hero-title {
+  text-align: center;
+}
+
+/* Sous-titre descriptif des HERO */
+.gd-hero-sub {
+  text-align: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* Pills sous les HERO */
+.gd-hero-pills {
+  justify-content: center;
+}
+
+/* Labels (Question, Source, etc.) */
+.center-wrap label,
+.center-wrap .stMarkdown p strong {
+  text-align: left;
+}
+
+/* Texte des réponses / résumés */
+.center-wrap .stMarkdown p,
+.center-wrap .stMarkdown div {
+  text-align: left;
+}
+
+/* Zone Question (textarea) */
+.center-wrap textarea {
+  text-align: left;
+}
+.gd-hero-sub{
+  font-size:.98rem;
+  color:#334155;
+  max-width:980px;
+  line-height:1.45;
+}
+.gd-hero-pills{
+  margin-top:12px;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+}
+.gd-pill{
+  padding:6px 12px;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:700;
+  background:rgba(255,255,255,.92);
+  border:1px solid rgba(37,99,235,.22);
+  color:#1e3a8a;
+}
+
+/* ===== Mode bar (au-dessus du radio) ===== */
+.gd-modebar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:10px 14px;
+  border-radius:16px;
+  border:1px solid rgba(148,163,184,.45);
+  background:rgba(255,255,255,.70);
+  box-shadow:0 10px 28px rgba(15,23,42,.06);
+  margin: 8px 0 10px 0;
+}
+.gd-modebar .left{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap:wrap;
+}
+.gd-badge{
+  padding:6px 10px;
+  border-radius:999px;
+  font-size:.78rem;
+  font-weight:800;
+  background:linear-gradient(120deg,rgba(56,189,248,.25),rgba(129,140,248,.18));
+  border:1px solid rgba(37,99,235,.18);
+  color:#0f172a;
+}
+
+/* ===== DataFrame : montrer TOUTE la réponse sans coupe ===== */
+[data-testid="stDataFrame"] div[role="gridcell"],
+[data-testid="stDataFrame"] div[role="gridcell"] p{
+  white-space: pre-wrap !important;
+  overflow: visible !important;
+  text-overflow: initial !important;
+  line-height: 1.35 !important;
+  word-break: break-word !important;
+  line-break: anywhere !important;
+}
+
+
+/* ===== Helper “?” cliquable (tooltip) ===== */
+.helper-row{
+  display:flex; align-items:center; justify-content:space-between; gap:.5rem;
+  margin:.15rem 0 .35rem 0;
+}
+.helper-label{ font-weight:600; color:#0f172a; }
+.helper{
+  position:relative; display:inline-flex; align-items:center; justify-content:center;
+  width:22px; height:22px; border-radius:50%;
+  background:#e5eefc; color:#284b9f; font-weight:700; cursor:pointer;
+  border:1px solid #c7d2fe; user-select:none;
+}
+.helper:hover{ background:#dbe8ff; }
+.helper .tooltip{
+  position:absolute; top:30px; right:-8px;
+  min-width:220px; max-width:360px; padding:.55rem .7rem; border-radius:.55rem;
+  border:1px solid #e5e7eb; background:#fff; color:#111827;
+  box-shadow:0 8px 18px rgba(0,0,0,.08); font-size:.86rem; line-height:1.25;
+  display:none; z-index:20;
+}
+.helper:focus .tooltip, .helper:hover .tooltip{ display:block; }
+</style>
+""",
+        unsafe_allow_html=True,
+    )
+
+    # =========================================================
+    # Helpers : fermer proprement le container avant d'arrêter
+    # =========================================================
+    def _stop_center():
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.stop()
+
+    # =========================================================
+    # Container central
+    # =========================================================
+    st.markdown('<div class="center-wrap">', unsafe_allow_html=True)
 
     # État résumé conservé entre les runs
     sum_state = st.session_state.get("sum_state")
 
+    st.markdown(
+        '<div class="gd-modebar"><div class="left">'
+        '<div class="gd-badge">Mode</div>'
+        '<span style="color:#475569;font-weight:600;">Choisis un scénario</span>'
+        "</div></div>",
+        unsafe_allow_html=True,
+    )
+
     mode = st.radio(
         "Mode",
-        ["Répondre à une question", "Résumer un document (PDF/TXT)"],
+        ["Répondre à une question", "Résumer un document"],
         horizontal=True,
+        label_visibility="collapsed",
     )
 
     # =====================================================
     # MODE 1 : QUESTION / RAG
     # =====================================================
     if mode == "Répondre à une question":
+        st.markdown(
+            """
+<div class="gd-hero">
+  <div class="gd-hero-title">🧠 Question & Réponse (RAG ancré)</div>
+  <div class="gd-hero-sub">
+    Pose une question ou colle un texte lié à IT-STORM ou à ton activité métier.
+Le Copilot analyse la base documentaire interne et produit une réponse ou un résumé fidèle, avec un contrôle de cohérence multi-modèles.
+  </div>
+  
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+
         with st.form("qa_form"):
             models = _pick_models()
             topk_context = _sidebar_topk_slider(default=6)
 
             q = st.text_area(
                 "Question",
-                placeholder="Ex: C'est quoi IT-STORM ?",
-                height=100,
+                placeholder="Ex : Explique le portage salarial chez IT-STORM en 3 phrases.",
+                height=110,
             )
+
             c1, c2 = st.columns([1, 1])
             with c1:
-                do_gen = st.form_submit_button("Générer (séquentiel)")
+                do_gen = st.form_submit_button("⚡ Générer (séquentiel)")
             with c2:
-                do_cmp = st.form_submit_button("Comparer (jury)")
-            do_sum = False  # pour ne pas confondre avec le mode résumé
+                do_cmp = st.form_submit_button("🏆 Comparer (jury)")
 
         if not (do_gen or do_cmp):
-            return
+            _stop_center()
 
         if not q or not q.strip():
             st.error("Merci de saisir une question.")
-            return
+            _stop_center()
 
         base = _call_smart_rag(q) or {}
         if base:
             _display_grounded_block(base)
 
         collected: List[Dict[str, Any]] = []
+
         if do_gen:
             st.subheader("🧪 Réponses par modèle (séquentiel)")
             for m in models:
-                with st.spinner(f"{m} génère une réponse."):
+                with st.spinner(f"{m} génère une réponse…"):
                     r = _ask_one_model(q, model=m, topk_context=topk_context, timeout=600.0)
                 st.markdown(_decorate_model_label(r.get("model", "—")), unsafe_allow_html=True)
                 st.write(r.get("answer", ""))
@@ -1224,7 +1480,7 @@ def render():
         results: List[Dict[str, Any]] = []
         if do_cmp:
             if len(models) < 3:
-                st.info("Astuce: pour une comparaison significative, sélectionne ≥ 3 modèles.")
+                st.info("Astuce : pour une comparaison significative, sélectionne ≥ 3 modèles.")
             jury = _call_jury(q, models=models, topk_context=topk_context, timeout=600.0) or {}
             results = jury.get("results") or []
             for r in results:
@@ -1240,24 +1496,32 @@ def render():
             _render_race(final_list)
             _table_results(final_list, title="📊 Comparatif des réponses")
 
-        return  # fin du mode question
+        _stop_center()  # fin du mode question (et fermeture center-wrap)
 
     # =====================================================
     # MODE 2 : RÉSUMÉ (DOC / TEXTE COLLÉ)
     # =====================================================
+    st.markdown(
+        """
+<div class="gd-hero">
+  <div class="gd-hero-title">📄 Résumé intelligent (Best + Ultimate)</div>
+  <div class="gd-hero-sub">
+    Importe un PDF/TXT ou colle un texte long. Le copilot génère plusieurs résumés,
+    sélectionne la meilleure version et peut produire une fusion “Ultimate”.
+  </div>
+  
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
     # 1) BLOC MODÈLES EN PREMIER
     models = _pick_models()
-    _sidebar_topk_slider(default=6)  # juste pour cohérence UI, non utilisé dans le résumé
+    _sidebar_topk_slider(default=6)  # cohérence UI, pas utilisé dans le résumé
 
     # 2) TOGGLE REFORMULATION
     st.session_state.setdefault("sum_use_template", True)
-
-    st.toggle(
-        "🧩 Reformuler avec gabarit analytique (global)",
-        key="sum_use_template",
-    )
-
+    st.toggle("🧩 Reformuler avec gabarit analytique (global)", key="sum_use_template")
 
     # 3) CHOIX DE LA SOURCE + CHAMP ASSOCIÉ
     st.session_state.setdefault("sum_source_kind", "Choisir…")
@@ -1275,24 +1539,21 @@ def render():
     pasted_text = ""
 
     if source_kind == "Fichier PDF/TXT":
-        up = st.file_uploader(
-            "Importer un document (.pdf ou .txt)",
-            type=["pdf", "txt"],
-        )
+        up = st.file_uploader("Importer un document (.pdf ou .txt)", type=["pdf", "txt"])
     elif source_kind == "Texte collé":
         pasted_text = st.text_area(
             "Texte à résumer",
             placeholder="Colle ici un ou plusieurs paragraphes (mail, article, texte brut…)",
-            height=220,
+            height=230,
         )
 
     # 4) BOUTON "RÉSUMER" TOUT EN BAS
-    do_sum = st.button("Résumer")
+    do_sum = st.button("✨ Résumer", use_container_width=True)
 
     # 5) MOTEUR DE RÉSUMÉ (rag_sum)
     if _summarize_text_three_cli is None or read_any_text is None:
         st.error("Module de résumé avancé (rag_sum) indisponible. Vérifie src/rag_sum.py.")
-        return
+        _stop_center()
 
     use_template = bool(st.session_state.get("sum_use_template", True))
     source_kind = st.session_state.get("sum_source_kind", "Choisir…")
@@ -1302,42 +1563,41 @@ def render():
         if source_kind == "Fichier PDF/TXT":
             if up is None:
                 st.error("Importe un fichier .pdf ou .txt à résumer.")
-                return
+                _stop_center()
 
             file_bytes = up.read()
             filename = up.name or "document"
             text, ext = read_any_text(file_bytes, filename)
 
             if not text or not text.strip():
-                st.error(f"Impossible de lire le contenu de « {filename} ».")
-                return
+                st.error(f"Impossible de lire le contenu de « {filename} ». ")
+                _stop_center()
 
         elif source_kind == "Texte collé":
             raw = (pasted_text or "").strip()
             if not raw:
                 st.error("Merci de coller un texte à résumer.")
-                return
+                _stop_center()
             text = raw
             ext = "(texte)"
             filename = "Texte collé"
 
         else:
             st.error("Merci de choisir la source du contenu à résumer.")
-            return
+            _stop_center()
 
         text_len = len(text or "")
         st.info(f"Longueur texte : {text_len} caractères")
 
         models_for_sum = models or ["mistral:7b-instruct", "llama3.2:3b", "qwen2.5:7b"]
 
-        with st.spinner("⏳ Génération des résumés (mode three-direct, 1 par modèle)…"):
+        with st.spinner("⏳ Génération des résumés (1 par modèle)…"):
             summaries = _summarize_text_three_cli(text, models=models_for_sum, timeout=200.0) or []
 
         if not summaries:
             st.error("Aucun résumé n'a été produit (summaries vide).")
-            return
+            _stop_center()
 
-        # Meilleur résumé interne rag_sum
         best = max(summaries, key=lambda x: x.get("score", 0.0))
         best_report = best.get("report", {}) or {}
         raw_best_text = best.get("answer", "") or ""
@@ -1345,7 +1605,6 @@ def render():
         best_export_text = best_paragraph if best_paragraph else raw_best_text.strip()
         best_model_name = best.get("model", "—")
 
-        # Ultimate Version (fusion multi-modèles)
         try:
             ultimate_text = _build_ultimate_summary(
                 source_text=text,
@@ -1353,12 +1612,9 @@ def render():
                 use_template=use_template,
             )
         except Exception as e:
-            st.warning(
-                f"Fusion ultime impossible, utilisation de la meilleure version uniquement. Détail : {e}"
-            )
+            st.warning(f"Fusion ultime impossible, utilisation de la meilleure version uniquement. Détail : {e}")
             ultimate_text = best_export_text
 
-        # Stockage
         st.session_state["sum_state"] = {
             "filename": filename,
             "ext": ext,
@@ -1376,7 +1632,7 @@ def render():
     else:
         if not sum_state:
             st.info("Choisis la source (fichier ou texte collé), puis clique sur « Résumer » pour générer un résumé.")
-            return
+            _stop_center()
 
     # ----- Affichage depuis sum_state -----
     filename = sum_state.get("filename", "document")
@@ -1416,16 +1672,14 @@ def render():
                 data=buf_best,
                 file_name="resume_best_version.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
             )
 
     with col_ultimate:
         if ultimate_text:
             buf_ult = _make_docx_from_summary(
                 title="Résumé - Ultimate Version",
-                intro=(
-                    f"Document : {filename} · Version fusionnée à partir des meilleurs résumés "
-                    f"(mistral / llama / qwen, etc.)."
-                ),
+                intro=f"Document : {filename} · Version fusionnée (multi-modèles).",
                 body=ultimate_text,
             )
             st.download_button(
@@ -1433,6 +1687,7 @@ def render():
                 data=buf_ult,
                 file_name="resume_ultimate_version.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                use_container_width=True,
             )
 
     if summaries:
@@ -1446,9 +1701,12 @@ def render():
                 st.write(para if para else txt)
 
     st.markdown("---")
-    if st.button("🔄 Réinitialiser le résumé"):
+    if st.button("🔄 Réinitialiser le résumé", use_container_width=True):
         st.session_state["sum_state"] = None
         st.rerun()
+
+    # fermeture container central
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def render_generate_docs_tab():

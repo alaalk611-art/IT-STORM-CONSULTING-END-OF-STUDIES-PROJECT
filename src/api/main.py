@@ -31,6 +31,19 @@ from src.api import tech_watch
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# ---------------------------------------------------------------------
+# Chargement robuste du .env (racine projet)
+# ---------------------------------------------------------------------
+ROOT_DIR = Path(__file__).resolve().parents[2]
+ENV_PATH = ROOT_DIR / ".env"
+
+load_dotenv(dotenv_path=ENV_PATH)
+
+print("[ENV] Loaded from:", ENV_PATH)
+print("[ENV] FFMPEG_PATH =", os.getenv("FFMPEG_PATH"))
 
 router = APIRouter()
 #app = FastAPI()

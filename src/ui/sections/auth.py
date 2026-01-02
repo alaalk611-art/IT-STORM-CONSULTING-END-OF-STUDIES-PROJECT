@@ -49,6 +49,11 @@ except Exception:
 
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
+# Auto-refresh (pour le compte à rebours)
+try:
+    from streamlit_autorefresh import st_autorefresh  # pip install streamlit-autorefresh
+except Exception:
+    st_autorefresh = None  # fallback: timer se met à jour au prochain rerun
 
 
 # =========================
@@ -603,6 +608,45 @@ def _inject_auth_css() -> None:
             margin-top: 8px;
             margin-bottom: 12px;
         }
+        /* ===== OTP Timer (pill) ===== */
+        .otp-timer-wrap{
+        display:flex;
+        justify-content:center;
+        margin: 10px 0 6px 0;
+        }
+        .otp-timer{
+        display:inline-flex;
+        align-items:center;
+        gap:8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        border: 1px solid rgba(37,99,235,0.18);
+        background: rgba(37,99,235,0.06);
+        color:#1e3a8a;
+        font-size: 12.5px;
+        font-weight: 600;
+        }
+        .otp-timer b{
+        font-variant-numeric: tabular-nums;
+        }
+
+        /* ===== Shake animation (invalid code) ===== */
+        @keyframes otpShake {
+        0% { transform: translateX(0); }
+        15% { transform: translateX(-10px); }
+        30% { transform: translateX(10px); }
+        45% { transform: translateX(-8px); }
+        60% { transform: translateX(8px); }
+        75% { transform: translateX(-4px); }
+        90% { transform: translateX(4px); }
+        100% { transform: translateX(0); }
+        }
+        .auth-card.shake{
+        animation: otpShake 420ms ease-in-out;
+        border: 1px solid rgba(239,68,68,0.35);
+        box-shadow: 0px 14px 34px rgba(239,68,68,0.12);
+        }
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -751,17 +795,42 @@ def render_auth_gate() -> bool:
         st.markdown("</div>", unsafe_allow_html=True)
         return False
 
-    # Étape 3 : code email
+    # Étape 3 : code email (centré & élégant + timer + shake)
     if step == 3:
+        # --- calc timer ---
+        expires_at = float(st.session_state.get("email_otp_expires_at", 0) or 0)
+        remaining = max(0, int(expires_at - time.time()))
+
+        # Auto-refresh chaque seconde tant que le timer tourne
+        if remaining > 0 and st_autorefresh is not None:
+            st_autorefresh(interval=1000, key="otp_timer_refresh")
+
+        # --- shake flag (1 rerun) ---
+        shake = bool(st.session_state.pop("_otp_shake", False))
+        shake_cls = " shake" if shake else ""
+
         st.markdown(
-            """
-            <div class="auth-card">
-              <div class="auth-title">🔐 Accès StormCopilot</div>
-              <div class="auth-subtitle">Dernière vérification avant l'accès complet</div>
-              <div class="auth-step">Étape 3 sur 3 — Vérification email</div>
+            f"""
+            <div class="auth-card auth-card-narrow{shake_cls}">
+            <div class="auth-title">🔐 Accès StormCopilot</div>
+            <div class="auth-subtitle">Dernière vérification avant l'accès complet</div>
+            <div class="auth-step">Étape 3 sur 3 — Vérification email</div>
             """,
             unsafe_allow_html=True,
         )
+
+        # Timer visuel
+        mm = remaining // 60
+        ss = remaining % 60
+        if expires_at > 0:
+            st.markdown(
+                f"""
+                <div class="otp-timer-wrap">
+                <div class="otp-timer">⏱️ Expire dans <b>{mm:01d}:{ss:02d}</b></div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
         mail_to = os.getenv("SC_EMAIL_TO", "")
         if mail_to:
@@ -769,31 +838,29 @@ def render_auth_gate() -> bool:
         else:
             st.caption(_t_auth("auth_email_sent"))
 
-        col1, col2 = st.columns([2, 1])
-
         submitted_code = False
         code_input = ""
 
-        with col1:
-            with st.form("login_form_step3_email"):
-                code_input = st.text_input(_t_auth("auth_email_code"))
-                submitted_code = st.form_submit_button(_t_auth("auth_submit_code"))
+        with st.form("login_form_step3_email"):
+            code_input = st.text_input(
+                _t_auth("auth_email_code"),
+                placeholder="• • • • • •",
+                max_chars=6,
+            )
+            submitted_code = st.form_submit_button(_t_auth("auth_submit_code"))
 
-        with col2:
-            st.markdown("<div class='resend-btn'>", unsafe_allow_html=True)
-            if st.button(_t_auth("auth_resend_code"), key="btn_resend_code"):
-                with st.spinner("⏳ Envoi d'un nouveau code…"):
-                    time.sleep(0.4)
-                    _start_email_otp_flow()
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.markdown("</div>", unsafe_allow_html=True)
-                st.rerun()
-                return False
-            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("<div class='resend-btn otp-resend'>", unsafe_allow_html=True)
+        if st.button(_t_auth("auth_resend_code"), key="btn_resend_code"):
+            with st.spinner("⏳ Envoi d'un nouveau code…"):
+                time.sleep(0.4)
+                _start_email_otp_flow()
+            st.rerun()
+            return False
+        st.markdown("</div>", unsafe_allow_html=True)
 
         if submitted_code:
             with st.spinner("⏳ Vérification en cours…"):
-                time.sleep(0.5)
+                time.sleep(0.35)
                 status = _check_email_code(code_input)
 
                 if status == "ok":
@@ -805,15 +872,19 @@ def render_auth_gate() -> bool:
                     st.markdown("</div>", unsafe_allow_html=True)
                     st.rerun()
                     return False
-                elif status == "expired":
+
+                # ❗ Shake sur invalid/expired
+                st.session_state["_otp_shake"] = True
+                if status == "expired":
                     st.error(_t_auth("auth_error_code_expired"))
                 else:
                     st.error(_t_auth("auth_error_code"))
 
+                st.markdown("</div>", unsafe_allow_html=True)
+                st.rerun()
+                return False
+
         st.markdown("</div>", unsafe_allow_html=True)
         return False
-
-    st.session_state["auth_step"] = 1
-    return False
 
 # End of src/ui/sections/auth.py

@@ -9,8 +9,8 @@
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        -2000,
-        400
+        -2048,
+        352
       ],
       "id": "9659b390-a578-498c-ba1e-eb6b77e64392"
     },
@@ -29,8 +29,8 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
       "position": [
-        -1760,
-        400
+        -1856,
+        352
       ],
       "id": "fec2c21c-f5ad-4136-91df-22c92cc13a8c"
     },
@@ -42,7 +42,7 @@
       "type": "n8n-nodes-base.function",
       "typeVersion": 1,
       "position": [
-        -1120,
+        -1568,
         336
       ],
       "id": "77a9de15-5852-4b0b-8cea-78c84c35895e"
@@ -70,8 +70,8 @@
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1,
       "position": [
-        -1248,
-        656
+        -1648,
+        496
       ],
       "id": "06c3a2ab-8235-4e5b-b2f5-60e1c0902ce1"
     },
@@ -103,24 +103,11 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
       "position": [
-        -1488,
-        384
+        -1264,
+        336
       ],
       "id": "451387a4-a815-48fc-a910-d2e1787fef56",
       "name": "If"
-    },
-    {
-      "parameters": {
-        "jsCode": "// ===== MODE TEST TEXTE (sans audio) =====\n\n// Question de test\nconst question =\n  \"Explique le portage salarial chez IT-STORM en 3 phrases, et comment se passe la facturation.\";\n\n\nconst top_k = 4;\n\nreturn items.map(item => ({\n  ...item,\n  json: {\n    ...(item.json || {}),\n    question,\n    transcript: question, // ✅ pour compat avec ton RAG actuel\n    top_k,\n    hasAudio: false,\n    mode: \"text-test\",\n  },\n}));\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1056,
-        -240
-      ],
-      "id": "1177562b-3503-47b1-83c6-f42621863fb5",
-      "name": "TEST – Question texte"
     },
     {
       "parameters": {
@@ -129,7 +116,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -240,
+        -32,
         -240
       ],
       "id": "a66cc830-1447-4b1b-a1b4-66dcd8d3c365",
@@ -161,7 +148,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.3,
       "position": [
-        -800,
+        -592,
         -240
       ],
       "id": "6140c172-3a53-43f9-8c1c-72a1d53b4532",
@@ -174,7 +161,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -432,
+        -224,
         -240
       ],
       "id": "af2f6b93-fe39-4ab6-a7d2-e4bed77c45b8",
@@ -187,7 +174,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -592,
+        -384,
         -240
       ],
       "id": "b1f1eec3-5b22-48ec-895a-53aa895a28b1",
@@ -200,44 +187,11 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        -32,
+        176,
         -240
       ],
       "id": "bb8786e8-c9db-4ae9-8601-f7cf04ab2c21",
       "name": "Client Answer"
-    },
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "generate responses",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "name": "Webhook Generate Responses",
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 1,
-      "position": [
-        -2048,
-        -240
-      ],
-      "id": "61c07a84-2e41-4904-929e-f3271a38c480",
-      "webhookId": "e62bff82-ab0d-404e-8763-388122e85e07"
-    },
-    {
-      "parameters": {
-        "respondWith": "allIncomingItems",
-        "options": {
-          "responseCode": 200
-        }
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
-      "position": [
-        128,
-        -240
-      ],
-      "id": "7d8f1a28-43f9-493f-965e-58982e0b9b31",
-      "name": "Respond to Response"
     },
     {
       "parameters": {
@@ -261,14 +215,14 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "Response",
-        "responseMode": "responseNode",
+        "responseMode": "lastNode",
         "options": {}
       },
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2.1,
       "position": [
-        -2256,
-        400
+        -2320,
+        352
       ],
       "id": "535de164-6f9a-461d-8369-54a80c48d51c",
       "name": "Webhook FAST",
@@ -289,98 +243,16 @@
     },
     {
       "parameters": {
-        "method": "POST",
-        "url": "http://host.docker.internal:8001/rag/summary",
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={ \"text\": \"={{ $json.text }}\", \"timeout\": \"={{ $json.timeout }}\"}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.3,
-      "position": [
-        -928,
-        80
-      ],
-      "id": "6fa5b91e-07f0-427e-b1b5-5c4946efbd49",
-      "name": "Summary RAG"
-    },
-    {
-      "parameters": {
         "options": {}
       },
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.4,
       "position": [
-        464,
-        336
-      ],
-      "id": "f994af5b-a986-4f1b-ac20-ba488d04a039",
-      "name": "Respond to Voice"
-    },
-    {
-      "parameters": {
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.4,
-      "position": [
-        -1264,
-        512
+        -1056,
+        496
       ],
       "id": "8f5d5f22-db38-4d53-b965-ce3254055edf",
       "name": "Respond to Empty"
-    },
-    {
-      "parameters": {
-        "formTitle": "Resumer",
-        "formDescription": "Collez ici le texte à résumer...",
-        "formFields": {
-          "values": [
-            {
-              "fieldLabel": "Text",
-              "placeholder": "Text à resumer",
-              "requiredField": true
-            }
-          ]
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.formTrigger",
-      "typeVersion": 2.3,
-      "position": [
-        -1744,
-        80
-      ],
-      "id": "f2c74173-4a40-4c37-8d6d-1210c5a98097",
-      "name": "Text to resume",
-      "webhookId": "3278ecc5-8ce3-4167-9963-aa2b29ded4bc"
-    },
-    {
-      "parameters": {
-        "jsCode": "const r = items[0].json || {};\n\nreturn [{\n  json: {\n    answer: r.answer || \"\",\n    confidence: r.confidence ?? null,\n    model: r.dbg?.selected_model ?? null,\n    sources: r.sources || []\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -640,
-        80
-      ],
-      "id": "65aa2fa7-ac80-4dba-846b-b5462767e8eb",
-      "name": "Response"
-    },
-    {
-      "parameters": {
-        "jsCode": "const body = items[0].json || {};\n\n// accepte plusieurs sources possibles\nlet text =\n  body.text ||\n  body.label ||\n  body.Label ||\n  \"\";\n\ntext = String(text).trim();\n\nif (!text) {\n  return [{\n    json: {\n      error: \"Texte vide\",\n      hint: \"Veuillez coller un texte à résumer.\"\n    }\n  }];\n}\n\ntext = text\n  .replace(/\\r/g, \"\\n\")\n  .replace(/[ \\t]{2,}/g, \" \")\n  .replace(/\\n{3,}/g, \"\\n\\n\")\n  .trim();\n\nconst timeout = Number(body.timeout || 60);\n\nreturn [{\n  json: {\n    text,\n    timeout\n  }\n}];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        -1296,
-        80
-      ],
-      "id": "ba2c6951-b71f-41ec-a528-4f945a7e85ee",
-      "name": "Pré_resumé"
     },
     {
       "parameters": {
@@ -428,8 +300,8 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        352,
-        -256
+        176,
+        -32
       ],
       "id": "d4635c35-be5b-4d19-b31c-fbb37bdbd388",
       "name": "Sticky Note2"
@@ -474,6 +346,152 @@
         336
       ],
       "id": "cc40aba4-7c89-4312-8cdf-c74f9276b0d5"
+    },
+    {
+      "parameters": {
+        "jsCode": "const r = items[0].json || {};\n\nreturn [{\n  json: {\n    answer: r.answer || \"\",\n    confidence: r.confidence ?? null,\n    model: r.dbg?.selected_model ?? null,\n    sources: r.sources || []\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        16
+      ],
+      "id": "16701801-be93-4fe5-b745-8fc37362dc22",
+      "name": "Response"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8001/rag/summary_fast",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"text\": \"={{ $json.text }}\", \"timeout\": \"={{ $json.timeout }}\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        -1152,
+        16
+      ],
+      "id": "cf2bad6a-0b74-4267-a07e-e346bac4b1e3",
+      "name": "Summary RAG"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = items[0].json || {};\n\n// accepte plusieurs sources possibles\nlet text =\n  body.text ||\n  body.label ||\n  body.Label ||\n  \"\";\n\ntext = String(text).trim();\n\nif (!text) {\n  return [{\n    json: {\n      error: \"Texte vide\",\n      hint: \"Veuillez coller un texte à résumer.\"\n    }\n  }];\n}\n\ntext = text\n  .replace(/\\r/g, \"\\n\")\n  .replace(/[ \\t]{2,}/g, \" \")\n  .replace(/\\n{3,}/g, \"\\n\\n\")\n  .trim();\n\nconst timeout = Number(body.timeout || 60);\n\nreturn [{\n  json: {\n    text,\n    timeout\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1520,
+        16
+      ],
+      "id": "56d43021-8707-41dc-bebd-c0dffdacf7fb",
+      "name": "Text to resume"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Prepare Question (Guard) – compatible Form + Webhook\n\nconst body = items[0].json || {};\n\nlet question =\n  body.question ||\n  body.text ||\n  body.label ||\n  body.Label ||\n  \"\";\n\nquestion = String(question).trim();\n\nif (!question) {\n  question = \"Explique le portage salarial chez IT-STORM en 3 phrases.\";\n}\n\nreturn [{\n  json: {\n    question,\n    top_k: 4,\n    temperature: 0.2,\n    mode: \"form\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1344,
+        -240
+      ],
+      "id": "8287a892-b1c4-438e-aef5-7032b75bd78d",
+      "name": "Question"
+    },
+    {
+      "parameters": {
+        "formTitle": "Question",
+        "formDescription": "Question",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Question",
+              "placeholder": "Ex: Explique le portage salarial chez IT-STORM en 3 phrases",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -1728,
+        -240
+      ],
+      "id": "1a515d3f-dcf1-4f6d-b2cf-41091e2100e5",
+      "name": "Generate",
+      "webhookId": "f83a38b8-7c4e-4c0d-bb07-85e17cb3321b"
+    },
+    {
+      "parameters": {
+        "formTitle": "Resumer",
+        "formDescription": "Collez ici le texte à résumer...",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Label",
+              "placeholder": "Text à resumer",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -1872,
+        16
+      ],
+      "id": "3b9309ec-d635-4a97-8910-8da24b20f8ec",
+      "name": "Resume",
+      "webhookId": "d098cf07-97a4-4ec8-b262-ad9dff6c005c"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Guard – audio présent (Form Upload)\n// Ton champ upload s'appelle \"voice\" => on map vers \"audio\" attendu par STT\n\nconst bin = items[0].binary || {};\nconst voice = bin.voice; // ✅ champ réel du Form Trigger\n\nif (!voice) {\n  return [{\n    json: {\n      ok: false,\n      error: \"Aucun fichier uploadé dans le champ 'voice' (binary.voice introuvable)\"\n    }\n  }];\n}\n\n// ✅ On standardise vers binary.audio (attendu par le node STT)\nreturn [{\n  json: {\n    lang: \"fr\",\n    source: \"form-upload\"\n  },\n  binary: {\n    audio: voice\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -832,
+        176
+      ],
+      "id": "1ab257d2-6c78-487b-b5e6-e507934befd9",
+      "name": "convertir rapide"
+    },
+    {
+      "parameters": {
+        "formTitle": "Voice ",
+        "formDescription": "Voice",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "voice",
+              "fieldType": "file",
+              "acceptFileTypes": ".webm",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.3,
+      "position": [
+        -1808,
+        176
+      ],
+      "id": "bc7950aa-1eea-4d76-9e39-8d1c4b4075f0",
+      "name": "Voice",
+      "webhookId": "164c7494-3cff-47e0-ac4f-6577768fe59d"
     }
   ],
   "pinData": {},
@@ -493,7 +511,7 @@
       "main": [
         [
           {
-            "node": "If",
+            "node": "Guard – audio présent",
             "type": "main",
             "index": 0
           }
@@ -511,7 +529,7 @@
       "main": [
         [
           {
-            "node": "Convertir",
+            "node": "If",
             "type": "main",
             "index": 0
           }
@@ -534,7 +552,7 @@
       "main": [
         [
           {
-            "node": "Guard – audio présent",
+            "node": "Convertir",
             "type": "main",
             "index": 0
           }
@@ -542,17 +560,6 @@
         [
           {
             "node": "Respond to Empty",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "TEST – Question texte": {
-      "main": [
-        [
-          {
-            "node": "RAG jury",
             "type": "main",
             "index": 0
           }
@@ -605,24 +612,7 @@
     },
     "Client Answer": {
       "main": [
-        [
-          {
-            "node": "Respond to Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Webhook Generate Responses": {
-      "main": [
-        [
-          {
-            "node": "TEST – Question texte",
-            "type": "main",
-            "index": 0
-          }
-        ]
+        []
       ]
     },
     "Fast RAG": {
@@ -658,6 +648,22 @@
         ]
       ]
     },
+    "Answer": {
+      "main": [
+        []
+      ]
+    },
+    "STT": {
+      "main": [
+        [
+          {
+            "node": "Extract transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Summary RAG": {
       "main": [
         [
@@ -673,17 +679,6 @@
       "main": [
         [
           {
-            "node": "Pré_resumé",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Pré_resumé": {
-      "main": [
-        [
-          {
             "node": "Summary RAG",
             "type": "main",
             "index": 0
@@ -691,22 +686,55 @@
         ]
       ]
     },
-    "Answer": {
+    "Question": {
       "main": [
         [
           {
-            "node": "Respond to Voice",
+            "node": "RAG jury",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "STT": {
+    "Generate": {
       "main": [
         [
           {
-            "node": "Extract transcript",
+            "node": "Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resume": {
+      "main": [
+        [
+          {
+            "node": "Text to resume",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "convertir rapide": {
+      "main": [
+        [
+          {
+            "node": "STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice": {
+      "main": [
+        [
+          {
+            "node": "convertir rapide",
             "type": "main",
             "index": 0
           }
@@ -718,7 +746,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "c8570225-c3b1-4489-a120-52d04f081b8c",
+  "versionId": "02c27b8f-d8df-4f84-b193-eece8c833900",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "8faa178fd7657ad564c5a4004415c08f3764567bef62cee213be0d4c1a454317"

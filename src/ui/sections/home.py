@@ -2,13 +2,44 @@
 # Path: src/ui/sections/home.py
 
 from __future__ import annotations
+
+import os
+from pathlib import Path
 import streamlit as st
 
 
 def render_home_tab() -> None:
+    # ==========================================================
+    # Helpers (métriques dynamiques, robustes)
+    # ==========================================================
+    def _count_files(folder: str, exts: tuple[str, ...] | None = None) -> str:
+        try:
+            p = Path(folder)
+            if not p.exists():
+                return "—"
+            if exts:
+                return str(sum(1 for f in p.rglob("*") if f.is_file() and f.suffix.lower() in exts))
+            return str(sum(1 for f in p.rglob("*") if f.is_file()))
+        except Exception:
+            return "—"
+
+    def _file_exists(fp: str) -> bool:
+        try:
+            return Path(fp).exists()
+        except Exception:
+            return False
+
+    # Dossiers “classiques” du projet (fallback si différents → affiche —)
+    RAW_DIR = os.getenv("SC_RAW_DIR", "data/raw")
+    PROC_DIR = os.getenv("SC_PROC_DIR", "data/processed")
+    CHUNKS_FP = os.getenv("SC_CHUNKS_FILE", str(Path(PROC_DIR) / "chunks.jsonl"))
+
+    docs_raw = _count_files(RAW_DIR, exts=(".pdf", ".docx", ".txt", ".md", ".pptx", ".csv", ".xlsx", ".xls", ".html", ".htm", ".json"))
+    chunks_ready = "OK" if _file_exists(CHUNKS_FP) else "—"
+    proc_files = _count_files(PROC_DIR)  # indicateur simple (fichiers process)
 
     # ==========================================================
-    # CSS GLOBAL
+    # CSS GLOBAL (inchangé : même thème / même style)
     # ==========================================================
     st.markdown(
         """
@@ -177,7 +208,7 @@ animation:titleSheen 7s ease-in-out 1.4s infinite;
 .home-hero-text-sub{
 font-size:.95rem;
 color:#cbd5f5;
-max-width:620px;
+max-width:650px;
 }
 
 /* mot "portage salarial" mis en avant */
@@ -231,7 +262,7 @@ border-radius:14px;
 border:1px solid rgba(148,163,184,.55);
 background:rgba(15,23,42,.88);
 backdrop-filter:blur(10px);
-min-width:130px;
+min-width:140px;
 }
 .home-metric-label{
 font-size:.7rem;
@@ -297,7 +328,6 @@ transform:translate(-50%,-50%);
 
 /* ============= AUTRES BLOCS ================= */
 
-/* Cartes : slide-up + fade */
 .home-row{margin-top:1.35rem;}
 .home-glow-card{
 border-radius:18px;
@@ -310,17 +340,10 @@ color:#e5e7eb;
 opacity:0;
 transform:translateY(18px);
 }
-.home-glow-card.card-1{
-animation:cardFadeUp .6s ease-out .20s forwards;
-}
-.home-glow-card.card-2{
-animation:cardFadeUp .6s ease-out .35s forwards;
-}
-.home-glow-card.card-3{
-animation:cardFadeUp .6s ease-out .50s forwards;
-}
+.home-glow-card.card-1{animation:cardFadeUp .6s ease-out .20s forwards;}
+.home-glow-card.card-2{animation:cardFadeUp .6s ease-out .35s forwards;}
+.home-glow-card.card-3{animation:cardFadeUp .6s ease-out .50s forwards;}
 
-/* Timeline + bas de page: fade-up léger */
 .home-steps{
 margin-top:1.8rem;
 opacity:0;
@@ -329,7 +352,7 @@ animation:sectionFadeUp .6s ease-out .65s forwards;
 }
 .home-steps-title{font-size:1.05rem;font-weight:700;margin-bottom:.5rem;}
 .home-step-row{display:flex;flex-wrap:wrap;gap:.7rem;}
-.home-step{flex:1 1 180px;display:flex;gap:.55rem;font-size:.78rem;}
+.home-step{flex:1 1 210px;display:flex;gap:.55rem;font-size:.78rem;}
 .home-step-badge{
 min-width:24px;
 height:24px;
@@ -362,11 +385,7 @@ animation:sectionFadeUp .6s ease-out .85s forwards;
 .home-bottom-list li{margin-bottom:.12rem;}
 
 /* ================== ANIMATIONS KEYFRAMES ================== */
-
-@keyframes fadeInHero{
-from{opacity:0;transform:translateY(10px);}
-to{opacity:1;transform:translateY(0);}
-}
+@keyframes fadeInHero{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
 @keyframes heroBreath{
 0%{transform:perspective(1100px) rotateX(0deg) rotateY(0deg) translateY(0);}
 50%{transform:perspective(1100px) rotateX(2deg) rotateY(-2deg) translateY(-4px);}
@@ -382,45 +401,18 @@ to{opacity:1;transform:translateY(0);}
 50%{opacity:.9;transform:scale(1.08);}
 100%{opacity:.45;transform:scale(1);}
 }
-
-@keyframes floatOrb1{
-0%{transform:translate3d(0,0,0) scale(1);}
-100%{transform:translate3d(15px,22px,0) scale(1.08);}
-}
-@keyframes floatOrb2{
-0%{transform:translate3d(0,0,0) scale(1);}
-100%{transform:translate3d(-18px,18px,0) scale(1.04);}
-}
-
-@keyframes wordRise{
-from{opacity:0;transform:translateY(8px);}
-to{opacity:1;transform:translateY(0);}
-}
+@keyframes floatOrb1{0%{transform:translate3d(0,0,0) scale(1);}100%{transform:translate3d(15px,22px,0) scale(1.08);}}
+@keyframes floatOrb2{0%{transform:translate3d(0,0,0) scale(1);}100%{transform:translate3d(-18px,18px,0) scale(1.04);}}
+@keyframes wordRise{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
 @keyframes titleSheen{
 0%{opacity:0;transform:translateX(-120%);}
 10%{opacity:.9;}
 50%{opacity:.6;}
 100%{opacity:0;transform:translateX(120%);}
 }
-@keyframes radarSweep{
-0%{transform:rotate(0deg);}
-100%{transform:rotate(360deg);}
-}
-@keyframes irisBreath{
-0%{transform:scale(1);}
-50%{transform:scale(1.06) translateY(-2px);}
-100%{transform:scale(1);}
-}
-
-/* cartes + sections */
-@keyframes cardFadeUp{
-from{opacity:0;transform:translateY(18px);}
-to{opacity:1;transform:translateY(0);}
-}
-@keyframes sectionFadeUp{
-from{opacity:0;transform:translateY(14px);}
-to{opacity:1;transform:translateY(0);}
-}
+@keyframes radarSweep{0%{transform:rotate(0deg);}100%{transform:rotate(360deg);}}
+@keyframes cardFadeUp{from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);}}
+@keyframes sectionFadeUp{from{opacity:0;transform:translateY(14px);}to{opacity:1;transform:translateY(0);}}
 
 </style>
 """,
@@ -428,7 +420,7 @@ to{opacity:1;transform:translateY(0);}
     )
 
     # ==========================================================
-    # HERO (3D) — SANS mini IRIS dans le hero
+    # HERO (3D) — MAJ “projet final”
     # ==========================================================
     hero_html = (
         "<div class='home-hero'>"
@@ -439,127 +431,128 @@ to{opacity:1;transform:translateY(0);}
         "<div>"
         "<div class='home-hero-text-title'>"
         "<span class='word'>StormCopilot</span>"
-        "<span class='word'>• Copilote IA</span>"
-        "<span class='word'>pour consultants</span>"
+        "<span class='word'>• Plateforme IA</span>"
+        "<span class='word'>+ Automation</span>"
         "<span class='word'>IT-STORM</span>"
         "</div>"
-        "<div class='home-hero-text-sub'>Un cockpit unique pour connecter vos <b>documents internes</b>, "
-        "la <b>veille Cloud / Data / IA</b> et les informations clés du "
-        "<span class='spark'>portage salarial</span>.</div>"
+        "<div class='home-hero-text-sub'>"
+        "Une plateforme unifiée pour <b>ingérer</b> vos documents, "
+        "<b>interroger</b> la base RAG, <b>générer</b> des livrables consulting-ready, "
+        "orchestrer des radars via <b>n8n</b>, et piloter <b>Market / Tech / MLOps</b> "
+        "autour des besoins <span class='spark'>portage salarial</span> &amp; missions."
+        "</div>"
         "<div class='home-hero-pill-row'>"
-        "<div class='home-pill'><div class='home-pill-dot'></div>IA locale &amp; RAG multi-sources</div>"
-        "<div class='home-pill'><div class='home-pill-dot'></div>Portage salarial IT-STORM</div>"
-        "<div class='home-pill'><div class='home-pill-dot'></div>Cloud · Data · DevOps · Sécurité</div>"
+        "<div class='home-pill'><div class='home-pill-dot'></div>RAG + Jury multi-modèles (local)</div>"
+        "<div class='home-pill'><div class='home-pill-dot'></div>Automation Studio (n8n)</div>"
+        "<div class='home-pill'><div class='home-pill-dot'></div>Voice Copilot (STT → RAG → TTS)</div>"
         "</div>"
-        "<div class='home-metrics-row'>"
-        "<div class='home-metric-chip'><div class='home-metric-label'>Docs indexés</div>"
-        "<div class='home-metric-value'>14 fichiers</div></div>"
-        "<div class='home-metric-chip'><div class='home-metric-label'>Sources RAG</div>"
-        "<div class='home-metric-value'>5 collections</div></div>"
-        "<div class='home-metric-chip'><div class='home-metric-label'>Veille techno</div>"
-        "<div class='home-metric-value'>8 flux actifs</div></div>"
-        "<div class='home-metric-chip'><div class='home-metric-label'>LLM local</div>"
-        "<div class='home-metric-value'>Ready ⚡</div></div>"
-        "</div>"
+        
         "</div>"
         "<div class='home-hero-mini'>"
-        "<div class='home-mini-chip'>Mode consultant : activé</div>"
+        
         "<div class='home-mini-radar'><div class='home-mini-radar-sweep'></div><div class='home-mini-radar-center'></div></div>"
-        "<div class='home-mini-chip'>Veille &amp; documents synchronisés</div>"
+        
         "</div>"
         "</div>"
         "</div>"
     )
-
     st.markdown(hero_html, unsafe_allow_html=True)
 
     # ==========================================================
-    # 3 CARTES (avec classes card-1/2/3)
+    # 3 CARTES — MAJ : modules finaux
     # ==========================================================
     col1, col2, col3 = st.columns(3)
 
     col1.markdown(
         "<div class='home-row'><div class='home-glow-card card-1'>"
-        "<div class='home-glow-title'><span class='icon'>🤖</span> Mode IA · RAG intelligent</div>"
-        "<div class='home-glow-tagline'>Pose tes questions comme à un collègue senior.</div>"
-        "<div class='home-glow-bullet'>• Recherche contextuelle dans les documents IT-STORM.<br>"
-        "• Synthèses courtes et sources citées automatiquement.<br>"
-        "• Génération de slides, notes client, comptes-rendus.</div>"
+        "<div class='home-glow-title'><span class='icon'>🧠</span> Generate Docs · RAG + Jury</div>"
+        "<div class='home-glow-tagline'>Question, résumé, et génération de livrables prêts client.</div>"
+        "<div class='home-glow-bullet'>"
+        "• RAG multi-sources + réduction d’hallucinations.<br>"
+        "• Résumé long + mode “question” + citations.<br>"
+        "• Export DOCX consulting-ready."
+        "</div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
 
     col2.markdown(
         "<div class='home-row'><div class='home-glow-card card-2'>"
-        "<div class='home-glow-title'><span class='icon'>🧾</span> Portage salarial &amp; missions</div>"
-        "<div class='home-glow-tagline'>Prépare une mission en quelques clics.</div>"
-        "<div class='home-glow-bullet'>• Fonctionnement du portage & avantages.<br>"
-        "• Messages clients & propositions de valeur.<br>"
-        "• Briefing mission prêt à partager.</div>"
+        "<div class='home-glow-title'><span class='icon'>🎙️</span> Voice Copilot · STT → RAG → TTS</div>"
+        "<div class='home-glow-tagline'>Démo “assistant vocal” : parler, comprendre, répondre.</div>"
+        "<div class='home-glow-bullet'>"
+        "• Transcription locale (audio → texte).<br>"
+        "• Réponse ancrée sur la base IT-STORM.<br>"
+        "• Restitution vocale + UX demo-friendly."
+        "</div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
 
     col3.markdown(
         "<div class='home-row'><div class='home-glow-card card-3'>"
-        "<div class='home-glow-title'><span class='icon'>🌐</span> Studio IT-STORM · Cloud / Data / DevOps</div>"
-        "<div class='home-glow-tagline'>Vue 360° sur l’écosystème technique.</div>"
-        "<div class='home-glow-bullet'>• Veille continue sur les services Cloud, IA &amp; DevOps.<br>"
-        "• Suivi des marchés pour les décideurs et product owners.<br>"
-        "• Base de connaissances enrichie à chaque mission.</div>"
+        "<div class='home-glow-title'><span class='icon'>⚙️</span> Automation + Radars + MLOps</div>"
+        "<div class='home-glow-tagline'>Orchestration n8n et pilotage de pipelines.</div>"
+        "<div class='home-glow-bullet'>"
+        "• Tech Radar & Market Radar (webhooks n8n).<br>"
+        "• Daily Full : scénario complet automatisé.<br>"
+        "• MLOps : training, monitoring, champions."
+        "</div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
 
     # ==========================================================
-    # TIMELINE EN 4 GESTES
+    # TIMELINE — MAJ : parcours final (avec tous les modules)
     # ==========================================================
     st.markdown(
-        "<div class='home-steps'><div class='home-steps-title'>🔁 Votre parcours en 4 gestes</div>"
+        "<div class='home-steps'><div class='home-steps-title'>🔁 Parcours complet (projet final)</div>"
         "<div class='home-step-row'>"
         "<div class='home-step'><div class='home-step-badge'>1</div>"
-        "<div><div class='home-step-label'>Connecter vos contenus</div>"
-        "<div class='home-step-sub'>Déposez vos documents dans 📂 Upload &amp; Index.</div></div></div>"
+        "<div><div class='home-step-label'>Sécuriser l’accès</div>"
+        "<div class='home-step-sub'>Authentification multi-étapes dans 🔐 Auth.</div></div></div>"
         "<div class='home-step'><div class='home-step-badge'>2</div>"
-        "<div><div class='home-step-label'>Activer la mémoire IA</div>"
-        "<div class='home-step-sub'>Extraction &amp; chunking → base RAG enrichie.</div></div></div>"
+        "<div><div class='home-step-label'>Ingestion documentaire</div>"
+        "<div class='home-step-sub'>Upload → Chunking → Index dans 📂 Upload.</div></div></div>"
         "<div class='home-step'><div class='home-step-badge'>3</div>"
-        "<div><div class='home-step-label'>Lire le marché &amp; la tech</div>"
-        "<div class='home-step-sub'>Suivi dans 🌍 Market Watch et 🔎 Veille Techno.</div></div></div>"
+        "<div><div class='home-step-label'>Comprendre & produire</div>"
+        "<div class='home-step-sub'>Q/R, résumé, DOCX dans 📝 Generate Docs.</div></div></div>"
         "<div class='home-step'><div class='home-step-badge'>4</div>"
-        "<div><div class='home-step-label'>Produire le livrable</div>"
-        "<div class='home-step-sub'>Slides & synthèses dans 📝 Generate Docs.</div></div></div>"
+        "<div><div class='home-step-label'>Observer & automatiser</div>"
+        "<div class='home-step-sub'>Market / Tech / Automation Studio (n8n) + 🧪 MLOps.</div></div></div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
 
     # ==========================================================
-    # BOTTOM : PITCH + CTA
+    # BOTTOM : pitch final + CTA final
     # ==========================================================
     colL, colR = st.columns([1.2, 1.0])
 
     colL.markdown(
         "<div class='home-bottom'><div class='home-bottom-card'>"
-        "<div class='home-bottom-title'>Pourquoi ce copilote est différent ?</div>"
+        "<div class='home-bottom-title'>Ce que StormCopilot apporte (version finale)</div>"
         "<ul class='home-bottom-list'>"
-        "<li>Conçu pour le quotidien des consultants IT-STORM.</li>"
-        "<li>Combine documents internes, veille marché et IA.</li>"
-        "<li>Prépare directement des livrables utiles.</li>"
+        "<li>Un point d’entrée unique pour la connaissance IT-STORM (docs + RAG).</li>"
+        "<li>Génération de livrables directement exploitables (résumés + DOCX).</li>"
+        "<li>Automatisation par workflows (n8n) + radars Tech & Marché.</li>"
+        "<li>Pipeline MLOps : entraînement, monitoring, synthèse champions.</li>"
         "</ul>"
-        "<div>Moins de temps à chercher l’information, plus de temps pour la mission.</div>"
+        "<div>Objectif : transformer l’information en action, sans perte de temps.</div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
 
     colR.markdown(
         "<div class='home-bottom'><div class='home-bottom-card'>"
-        "<div class='home-bottom-title'>Et maintenant ?</div>"
+        "<div class='home-bottom-title'>Par où commencer ?</div>"
         "<ul class='home-bottom-list'>"
-        "<li>Ajoute des documents dans 📂 Upload &amp; Index.</li>"
-        "<li>Teste une question métier dans 💬 Chat Connaissance.</li>"
-        "<li>Observe la veille dans 🔎 Veille Techno.</li>"
+        "<li>1) Ajoute des documents dans 📂 Upload.</li>"
+        "<li>2) Pose une question IT-STORM dans 📝 Generate Docs.</li>"
+        "<li>3) Lance un radar dans ⚙️ Automation Studio.</li>"
+        "<li>4) Vérifie le monitoring dans 🧪 MLOps.</li>"
         "</ul>"
-        "<div>Tu peux revenir ici à tout moment.</div>"
+        "<div>Astuce : IRIS (bulle) peut t’accompagner à tout moment.</div>"
         "</div></div>",
         unsafe_allow_html=True,
     )
