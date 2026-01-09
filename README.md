@@ -1,44 +1,60 @@
-# 🧠 Intelligent Consulting Copilot
+# 🌩️ Storm Copilot
+### GenAI · Automation · n8n · Market Intelligence · MLOps
 
-**Intelligent Consulting Copilot** est un outil interne de **knowledge management** et de **génération automatique de livrables** basé sur l’IA.  
-Il combine **RAG (Retrieval-Augmented Generation)**, **LLM** et une interface **Streamlit** moderne pour aider les consultants à retrouver rapidement les bonnes informations et produire des résumés, présentations et rapports.
+**Storm Copilot** est une plateforme d’IA conçue pour le **conseil et l’aide à la décision**, combinant **IA générative**, **RAG**, **automatisation de workflows**, **veille intelligente** et **MLOps**.
 
----
-
-## ✨ Fonctionnalités principales
-
-✅ **Knowledge Chat**  
-Posez vos questions en langage naturel sur les documents indexés et obtenez des réponses **contextualisées** et **citées**.
-
-✅ **Upload & Index**  
-Chargez vos PDF/DOCX/TXT, extrayez et découpez le texte en *chunks*, encodez-les avec **SentenceTransformers MiniLM** et stockez-les dans **ChromaDB**.
-
-✅ **Generate Docs**  
-Générez en un clic un **DOCX** ou **PPTX** basé sur la réponse du chatbot ou sur un contenu personnalisé.
-
-✅ **Market Watch** *(placeholder évolutif)*  
-Tableau de veille concurrentielle : appels d’offres détectés, news des concurrents, tendances technologiques et rapport PDF hebdomadaire.
+Elle transforme documents, données et signaux marché en **insights actionnables** et **livrables professionnels automatisés**.
 
 ---
 
-## 📁 Arborescence du projet
+## 🚀 What it does
+
+- 🧠 Chat IA contextualisé (RAG)
+- 📤 Ingestion & indexation documentaire
+- 🧾 Génération automatique de rapports (PDF, DOCX, PPTX)
+- 🔁 Orchestration de workflows avec **n8n**
+- 📊 Veille marché & technologique augmentée par l’IA
+- 📈 Suivi et gouvernance des modèles (MLOps)
+
+---
+
+## 🛠️ Tech Stack
+
+`Python · Streamlit · LangChain · ChromaDB · Ollama · n8n · MLflow`
+
+---
+
+## 🎯 Built for
+
+Consulting · Knowledge Management · Market Intelligence · GenAI Automation
+
+---
+
+## 📁 Project Structure
 
 ```text
-intelligent_copilot/
-├─ data/
-│   ├─ raw/           # documents bruts uploadés
-│   ├─ interim/       # fichiers temporaires (OCR, prétraitement)
-│   └─ processed/     # chunks.jsonl et autres sorties
-├─ vectors/           # base Chroma persistée (embeddings)
-├─ out/               # livrables générés (pptx/docx/pdf)
-├─ logs/              # logs d’exécution
-├─ scripts/           # scripts utilitaires PowerShell (setup, ingestion, run)
-├─ src/
-│   ├─ config/        # settings, chemins, logging
-│   ├─ utils/         # I/O helpers, texte, timers, métriques
-│   ├─ ingestion/     # extraction texte, chunking, pipeline
-│   ├─ indexing/      # embeddings, stockage et build index
-│   ├─ rag/           # retriever, prompts, LLM et RAGChain LangChain
-│   ├─ generation/    # générateurs DOCX, PPTX et PDF
-│   └─ ui/            # app.py (interface Streamlit)
-└─ tests/             # tests unitaires de base
+storm_copilot/
+├─ data/                    # Données brutes, intermédiaires et traitées
+├─ docs/                    # Documentation projet
+├─ mlops_metrics/           # Métriques et monitoring
+├─ mlruns/                  # Expérimentations MLflow
+├─ models/                  # Modèles IA
+├─ out/                     # Livrables générés
+├─ scripts/                 # Scripts utilitaires
+├─ vectors/                 # Base vectorielle (ChromaDB)
+│
+└─ src/
+   ├─ api/                  # Points d’entrée API
+   ├─ automation/           # Workflows n8n
+   ├─ config/               # Configuration globale
+   ├─ data_tech_watch/      # Veille technologique
+   ├─ embeddings/           # Embeddings
+   ├─ generation/           # DOCX / PPTX / PDF
+   ├─ indexing/             # Indexation vectorielle
+   ├─ ingestion/            # Extraction & prétraitement
+   ├─ llm/                  # LLM locaux
+   ├─ mlops/                # MLOps & monitoring
+   ├─ n8n/                  # Orchestration
+   ├─ rag/                  # Pipelines RAG
+   ├─ ui/                   # Interface Streamlit
+   └─ app.py                # Entrée principale
