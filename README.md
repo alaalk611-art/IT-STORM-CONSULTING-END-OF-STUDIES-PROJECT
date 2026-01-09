@@ -28,6 +28,7 @@ Python · Streamlit · LangChain · ChromaDB · Ollama · n8n · MLflow
 Consulting · Knowledge Management · Market Intelligence · GenAI Automation
 
 📁 Project Structure
+
 storm_copilot/
 ├─ data/                    # Données brutes, intermédiaires et traitées
 ├─ docs/                    # Documentation projet
