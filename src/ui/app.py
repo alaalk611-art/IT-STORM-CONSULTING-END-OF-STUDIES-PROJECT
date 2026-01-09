@@ -1504,23 +1504,8 @@ st.sidebar.markdown(
   </div>
 </div>
 
-<!-- ========= CARTE TITRE ROTATIF (ex: remplace un ancien bloc "Langue") ========= -->
-<div class="sidebar-card" style="margin-top:10px;">
-  <div class="sidebar-title">
-    <span class="icon">🧭</span>
-    <div class="sc-title-rotator">
-      <div class="sc-title-item">Navigation</div>
-      <div class="sc-title-item">Modules</div>
-      <div class="sc-title-item">Paramètres</div>
-      <div class="sc-title-item">À propos</div>
-    </div>
-  </div>
-  <div class="sidebar-sep"></div>
 
-  <div style="font-size:0.80rem; opacity:0.86; line-height:1.25rem;">
-    Interface 100% française, cohérente et prête pour la démo.
-  </div>
-</div>
+
     """,
     unsafe_allow_html=True,
 )

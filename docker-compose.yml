@@ -1,93 +1,51 @@
-version: "3.9"
-
 services:
-  # =========================
-  # 1. Backend FastAPI
-  # =========================
   backend:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.backend
+    build: .
     container_name: storm_backend
-    restart: unless-stopped
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8001
+    env_file: .env.docker
+    volumes:
+      - ./data:/app/data
+      - ./vectors:/app/vectors
+      - ./mlruns.db:/app/mlruns.db
     ports:
       - "8001:8001"
-    environment:
-      BACKEND_ENV: "prod"
-      # URLs internes (dans le réseau Docker)
-      OLLAMA_BASE_URL: "http://ollama:11434"
-      N8N_BASE_URL: "http://n8n:5678"
-      CHROMA_DB_DIR: "/app/data/chroma"
-      LOGS_DIR: "/app/data/logs"
-    volumes:
-      - ./data/chroma:/app/data/chroma
-      - ./data/logs:/app/data/logs
-    depends_on:
-      - ollama
-      - n8n
-    networks:
-      - stormnet
-
-  # =========================
-  # 2. UI Streamlit
-  # =========================
-  ui:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.ui
-    container_name: storm_ui
     restart: unless-stopped
+
+  ui:
+    build: .
+    container_name: storm_ui
+    command: streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+    env_file: .env.docker
+    volumes:
+      - ./data:/app/data
+      - ./vectors:/app/vectors
     ports:
       - "8501:8501"
-    environment:
-      BACKEND_API_BASE_URL: "http://backend:8001"
-      N8N_BASE_URL: "http://n8n:5678"
-      DEFAULT_LANG: "fr"
     depends_on:
       - backend
-      - n8n
-    networks:
-      - stormnet
-
-  # =========================
-  # 3. Ollama (LLM local)
-  # =========================
-  ollama:
-    image: ollama/ollama:latest
-    container_name: storm_ollama
     restart: unless-stopped
-    ports:
-      - "11434:11434"
-    environment:
-      OLLAMA_NUM_PARALLEL: "1"
-      OLLAMA_HOST: "0.0.0.0"
+
+  mlflow:
+    build: .
+    container_name: storm_mlflow
+    command: mlflow ui --backend-store-uri sqlite:////app/mlruns.db --host 0.0.0.0 --port 5000
+    env_file: .env.docker
     volumes:
-      - ./ollama:/root/.ollama
-    networks:
-      - stormnet
-
-  # =========================
-  # 4. n8n (Automation Studio)
-  # =========================
-  n8n:
-    image: n8nio/n8n:latest
-    container_name: storm_n8n
+      - ./mlruns.db:/app/mlruns.db
+      - ./mlruns:/app/mlruns
+    ports:
+      - "5000:5000"
     restart: unless-stopped
+
+  n8n:
+    image: n8nio/n8n
+    container_name: storm_n8n
     ports:
       - "5678:5678"
-    environment:
-      N8N_HOST: "n8n"
-      N8N_PORT: 5678
-      WEBHOOK_URL: "http://n8n:5678/"
-      GENERIC_TIMEZONE: "Europe/Paris"
     volumes:
-      - ./n8n_data:/home/node/.n8n
-    networks:
-      - stormnet
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
 
-# =========================
-# Réseau commun
-# =========================
-networks:
-  stormnet:
-    driver: bridge
+volumes:
+  n8n_data:

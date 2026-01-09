@@ -497,7 +497,7 @@ def _render_tab_monitoring():
         if st.button("🔄 Rafraîchir monitoring via n8n"):
             try:
                 resp = requests.post(
-                    f"{N8N_BASE}/webhook/market-monitoring", timeout=15
+                    f"{N8N_BASE}/webhook/daily-ml-ops", timeout=15
                 )
                 st.success("Monitoring déclenché via n8n.")
                 with st.expander("Voir la réponse JSON brute"):
@@ -590,7 +590,7 @@ def _render_tab_training():
         if st.button("▶️ Exécuter daily-ml-ops (n8n)"):
             try:
                 resp = requests.post(
-                    f"{N8N_BASE}/webhook/daily-ml-ops",
+                    f"{N8N_BASE}/webhook/hook",
                     timeout=120,
                 )
                 resp.raise_for_status()

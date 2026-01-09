@@ -531,7 +531,7 @@ animation:sectionFadeUp .6s ease-out .85s forwards;
 
     colL.markdown(
         "<div class='home-bottom'><div class='home-bottom-card'>"
-        "<div class='home-bottom-title'>Ce que StormCopilot apporte (version finale)</div>"
+        "<div class='home-bottom-title'>Ce que StormCopilot apporte</div>"
         "<ul class='home-bottom-list'>"
         "<li>Un point d’entrée unique pour la connaissance IT-STORM (docs + RAG).</li>"
         "<li>Génération de livrables directement exploitables (résumés + DOCX).</li>"

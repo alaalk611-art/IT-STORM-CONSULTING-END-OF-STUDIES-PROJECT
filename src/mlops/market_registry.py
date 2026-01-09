@@ -20,7 +20,15 @@ def update_champion(symbol: str, metrics: dict, run_id: str):
     reg = load_registry()
 
     old = reg.get(symbol)
-    new_score = metrics.get("silhouette", 0) + metrics.get("ae_reconstruction", 0) * -1
+    # Robust scoring (handle None safely)
+    sil = metrics.get("silhouette")
+    sil = float(sil) if sil is not None else 0.0
+ 
+    ae = metrics.get("ae_reconstruction")
+    ae = float(ae) if ae is not None else 0.0
+ 
+     # Higher silhouette is better, lower reconstruction error is better
+    new_score = sil - ae
 
     if old:
         old_score = old["score"]
