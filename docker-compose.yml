@@ -4,6 +4,8 @@ services:
     container_name: storm_backend
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8001
     env_file: .env.docker
+    environment:
+      - PYTHONPATH=/app
     volumes:
       - ./data:/app/data
       - ./vectors:/app/vectors
@@ -11,41 +13,22 @@ services:
     ports:
       - "8001:8001"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
 
   ui:
     build: .
     container_name: storm_ui
-    command: streamlit run src/ui/app.py --server.address=0.0.0.0 --server.port=8501
+    command: streamlit run src/ui/app.py --server.address 0.0.0.0 --server.port 8501
     env_file: .env.docker
-    volumes:
-      - ./data:/app/data
-      - ./vectors:/app/vectors
+    environment:
+      - PYTHONPATH=/app
+    depends_on:
+      backend:
+        condition: service_healthy
     ports:
       - "8501:8501"
-    depends_on:
-      - backend
     restart: unless-stopped
-
-  mlflow:
-    build: .
-    container_name: storm_mlflow
-    command: mlflow ui --backend-store-uri sqlite:////app/mlruns.db --host 0.0.0.0 --port 5000
-    env_file: .env.docker
-    volumes:
-      - ./mlruns.db:/app/mlruns.db
-      - ./mlruns:/app/mlruns
-    ports:
-      - "5000:5000"
-    restart: unless-stopped
-
-  n8n:
-    image: n8nio/n8n
-    container_name: storm_n8n
-    ports:
-      - "5678:5678"
-    volumes:
-      - n8n_data:/home/node/.n8n
-    restart: unless-stopped
-
-volumes:
-  n8n_data:

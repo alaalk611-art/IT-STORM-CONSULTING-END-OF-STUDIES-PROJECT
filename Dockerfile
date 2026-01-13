@@ -3,20 +3,18 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-RUN apt-get update && apt-get install -y \
-    ffmpeg \
-    build-essential \
-    curl \
-    git \
-    && rm -rf /var/lib/apt/lists/*
-
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Outils utiles (curl requis pour healthcheck)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    build-essential \
+  && rm -rf /var/lib/apt/lists/*
 
-COPY . .
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
-EXPOSE 8001 8501 5000
+COPY . /app
 
-CMD ["bash"]
+EXPOSE 8001
+EXPOSE 8501
