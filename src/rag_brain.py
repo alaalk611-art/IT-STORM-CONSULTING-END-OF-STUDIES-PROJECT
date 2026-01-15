@@ -39,7 +39,10 @@ try:
 except Exception:
     BM25Okapi = None  # BM25 optionnel (late fusion plus robuste si présent)
 
-from sentence_transformers import CrossEncoder
+try:
+    from sentence_transformers import CrossEncoder
+except Exception:
+    CrossEncoder = None
 
 
 def _build_embedding_fn(model_name: str):
@@ -572,8 +575,8 @@ class SmartRAG:
         # ----------------------------------------------------------------------
         # ✅ Cross Encoder (rerank neural) optionnel
         # ----------------------------------------------------------------------
-        self.cross: Optional[CrossEncoder] = None
-        if os.getenv("ENABLE_CROSS_ENCODER", "1") == "1":
+        self.cross = None
+        if os.getenv("ENABLE_CROSS_ENCODER", "1") == "1" and CrossEncoder is not None:
             model_name = os.getenv("CROSS_ENCODER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
             try:
                 self.cross = CrossEncoder(model_name)
@@ -979,8 +982,6 @@ class SmartRAG:
         out.append("Données manquantes : précisez la question ou ajoutez des documents pertinents.")
         return humanize_fr("\n".join(out)), sorted(set(q["source"] for q in quotes)), quotes
 
-    # API principale
-    # API principale
     def ask(self, question: str) -> SmartRAGResult:
         # 0) Normalisation de la question
         q0 = (question or "").strip()
@@ -1005,7 +1006,7 @@ class SmartRAG:
         if conf < CONF_MIN:
             expansions = [
                 q0 + " IT STORM consulting",
-                q0 + " RAG IT STORM",
+                q0 + " portage salarial IT STORM",
                 q0 + " cloud data devops IT STORM",
             ]
             best_ranked, best_conf = ranked, conf
@@ -1018,7 +1019,7 @@ class SmartRAG:
                     best_ranked, best_conf = r2, c2
             ranked, conf = best_ranked, best_conf
 
-        # 6) Construction de la réponse (ANCRÉE, générique, 3–5 phrases)
+        # 6) Construction de la réponse (ANCRÉE, stricte, 3–5 phrases)
         if conf < CONF_MIN:
             # Trop peu de confiance → fallback ultra-sécurisé
             ans, srcs, qts = self.build_fallback(ranked)
@@ -1032,24 +1033,22 @@ class SmartRAG:
                 ans, srcs, qts = self.build_fallback(ranked)
 
             else:
-                # Assemble un paragraphe fluide à partir des quotes (3–5 phrases)
-                para = assemble_human_paragraph(quotes, max_sentences=5)
+                # ✅ 1) Builder strict : filtre marketing/simulateur/revenu net + ton neutre
+                para = self._build_clean_anchored_paragraph(quotes)
 
-                # Forcer un début propre si la question parle explicitement d'IT STORM
+                # ✅ 2) Si trop strict → on retombe sur un assemblage souple (mais toujours extractif)
+                if (para or "").strip().lower() == "je ne sais pas.":
+                    para = assemble_human_paragraph(quotes, max_sentences=5)
+
+                # ✅ 3) Préfix IT STORM si la question le mentionne et que la réponse ne commence pas par ça
                 ql = q0.lower()
                 if "it storm" in ql or "itstorm" in ql or "it-storm" in ql:
                     if not para.lower().startswith("it storm"):
-                        # On cherche une citation commençant par "IT STORM"
-                        prefix_set = False
                         for q in quotes:
                             txt = (q.get("quote") or "").strip()
                             if txt.lower().startswith("it storm"):
                                 para = txt + " " + para
-                                prefix_set = True
                                 break
-                        if not prefix_set:
-                            # Filet de sécurité : phrase très générique
-                            para = "IT STORM est une entreprise spécialisée. " + para
 
                 ans = humanize_fr(para)
                 srcs = sorted(set(q["source"] for q in quotes))

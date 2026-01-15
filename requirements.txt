@@ -13,6 +13,7 @@ fastapi>=0.115
 uvicorn[standard]>=0.30
 yfinance>=0.2.52
 pydantic>=2.8
+fastembed
 
 # --- Frontend (Streamlit + Visualisation) ---
 streamlit>=1.38
@@ -26,7 +27,7 @@ langchain-chroma>=0.1
 chromadb>=0.5
 sentence-transformers>=3.0
 transformers>=4.44
-Torch
+torch
 accelerate>=0.34
 
 # --- Document processing & reports ---

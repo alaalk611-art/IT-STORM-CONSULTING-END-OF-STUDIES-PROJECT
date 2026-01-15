@@ -19,6 +19,12 @@ N8N_BASE = os.getenv("N8N_BASE_URL", "http://127.0.0.1:5678").rstrip("/")
 MLFLOW_URI = os.getenv("MLFLOW_STORE", "sqlite:///mlruns.db")
 MLFLOW_UI_URL = os.getenv("MLFLOW_UI_URL", "http://127.0.0.1:5000")
 IGNORED_IN_KPIS = {"^FCHI"}  # gardé dans l'UI, ignoré dans les KPI/best-of
+# --- Webhook n8n : on garde "hook" comme point d’entrée unique ---
+N8N_WEBHOOK_HOOK = os.getenv("N8N_WEBHOOK_HOOK", "/webhook/hook")
+
+# --- Seuils AE unifiés (échelle 0..1) ---
+AE_GREEN_MAX = float(os.getenv("AE_GREEN_MAX", "0.6"))
+AE_YELLOW_MAX = float(os.getenv("AE_YELLOW_MAX", "0.8"))
 
 
 # ------------------------------------------------------------
@@ -287,12 +293,13 @@ def _render_train_summary(title: str, payload):
 
             if recon is None:
                 recon_emoji = "❔"
-            elif recon < 0.005:
+            elif recon < AE_GREEN_MAX:
                 recon_emoji = "🟢"
-            elif recon <= 0.010:
+            elif recon <= AE_YELLOW_MAX:
                 recon_emoji = "🟡"
             else:
                 recon_emoji = "🔴"
+
 
             ver_emoji = f"🧬 v{version}" if version is not None else "–"
 
@@ -325,18 +332,19 @@ def _render_train_summary(title: str, payload):
 def _render_tab_models_and_runs():
     st.subheader("🏆 Models & Runs")
 
-
-    # =================================================
-    # ROW 2 — Tableau des champions + panneau MLflow
-    # =================================================
     col_left, col_right = st.columns([2.1, 1])
 
-    # ------- Colonne gauche : tableau des champions -------
+    # =========================
+    # Colonne gauche : Champions
+    # =========================
     with col_left:
         st.markdown("#### 🏅 Champions par symbole")
 
         try:
-            res = requests.get(f"{API_BASE}/mlops/champions", timeout=8).json()
+            resp = requests.get(f"{API_BASE}/mlops/champions", timeout=8)
+            resp.raise_for_status()
+            res = resp.json()
+
             if not res:
                 st.info(
                     "Aucun champion enregistré pour le moment. "
@@ -355,13 +363,13 @@ def _render_tab_models_and_runs():
                     if sil is None:
                         sil_emoji = "❔"
                     elif sil > 0.35:
-                        sil_emoji = "👍"
+                        sil_emoji = ""
                     elif sil > 0.20:
-                        sil_emoji = "🙂"
+                        sil_emoji = ""
                     else:
                         sil_emoji = "⚠️"
 
-                    # Emoji reconstruction
+                    # Emoji reconstruction (échelle 0..1)
                     if recon is None:
                         recon_emoji = "❔"
                     elif recon < 0.6:
@@ -371,27 +379,63 @@ def _render_tab_models_and_runs():
                     else:
                         recon_emoji = "🔴"
 
+                    score_num = pd.to_numeric(score, errors="coerce")
+
                     rows.append(
                         {
                             "Symbole": sym,
                             "Silhouette": f"{sil_emoji} {sil:.3f}" if sil is not None else "❔",
                             "Reconstruction AE": f"{recon_emoji} {recon:.4f}" if recon is not None else "❔",
-                            "Score global": score,
+                            "Score global": score_num,  # numérique pour tri
                             "run_id": data.get("run_id"),
                         }
                     )
 
                 df = pd.DataFrame(rows)
 
-                # Score global : plus proche de 0 = meilleur (scores négatifs chez toi)
-                if "Score global" in df.columns:
-                    df = df.sort_values("Score global", ascending=True)
+                # --- Type plus explicite
+                df["Type"] = df["Symbole"].apply(
+                    lambda x: "📊 Indice marché (référence)" if x == "^FCHI" else "Action"
+                )
 
-                st.dataframe(df, use_container_width=True)
+                # --- Tri : ^FCHI d'abord, puis score le plus proche de 0
+                df["Score global"] = pd.to_numeric(df["Score global"], errors="coerce")
+                df["_score_abs"] = df["Score global"].abs()
+                df["_is_fchi"] = (df["Symbole"] == "^FCHI").astype(int)
+
+                df = df.sort_values(
+                    by=["_is_fchi", "_score_abs"],
+                    ascending=[False, True],
+                ).drop(columns=["_is_fchi", "_score_abs"])
+
+                # --- Highlight ^FCHI (vraiment visible)
+                def _highlight_fchi(row):
+                    if row.get("Symbole") == "^FCHI":
+                        return [
+                            "background-color: #e8f1ff; font-weight: 800; border-left: 6px solid #3b82f6;"
+                        ] * len(row)
+                    return [""] * len(row)
+
+                # --- Format score pour affichage (après tri)
+                df["Score global"] = df["Score global"].apply(
+                    lambda x: f"{x:.4f}" if pd.notna(x) else "—"
+                )
+
+                # --- Ordre colonnes
+                cols_order = ["Symbole", "Type", "Silhouette", "Reconstruction AE", "Score global", "run_id"]
+                df = df[[c for c in cols_order if c in df.columns]]
+
+                st.dataframe(df.style.apply(_highlight_fchi, axis=1), use_container_width=True)
+
+                # Note anti-question jury (courte)
+                st.caption("📊 ^FCHI est l’indice de marché (référence macro) utilisé pour représenter l’état global du marché.")
+
         except Exception as e:
             st.error(f"Erreur lors de la récupération des champions : {e}")
 
-    # ------- Colonne droite : panneau explicatif MLflow -------
+    # =========================
+    # Colonne droite : panneau MLflow
+    # =========================
     with col_right:
         st.markdown(
             """
@@ -403,9 +447,8 @@ def _render_tab_models_and_runs():
                 • Entraînements <b>QuickTrain</b> et <b>FullTrain</b> pour chaque symbole.<br/>
                 • Suivi de la <b>silhouette</b> (cohésion des régimes de marché) et de
                   l’erreur de <b>reconstruction AutoEncoder</b>.<br/>
-                • Analyse de l’évolution dans le temps via l’historique des runs ci-dessous.<br/><br/>
-                Tu peux explorer tous les runs (params, métriques détaillées, artefacts)
-                directement dans l’UI MLflow :
+                • Analyse de l’évolution via l’historique des runs ci-dessous.<br/><br/>
+                UI MLflow :
               </div>
               <div class="mlops-panel-sub" style="margin-top:0.5rem;">
                 <code>http://127.0.0.1:5000</code>
@@ -417,9 +460,9 @@ def _render_tab_models_and_runs():
 
     st.markdown("---")
 
-    # =================================================
-    # ROW 3 — Historique des runs par symbole
-    # =================================================
+    # =========================
+    # Historique runs
+    # =========================
     st.markdown("#### 🔎 Historique des runs par symbole")
 
     default_symbols = ["^FCHI", "BNP.PA", "AIR.PA", "MC.PA", "OR.PA", "ORA.PA"]
@@ -451,23 +494,15 @@ def _render_tab_models_and_runs():
         return
 
     cols = [
-        c
-        for c in [
-            "run_id",
-            "start_time",
-            "mode",
-            "symbols",
-            "silhouette",
-            "ae_reconstruction",
+        c for c in [
+            "run_id", "start_time", "mode", "symbols", "silhouette", "ae_reconstruction"
         ]
         if c in df_hist.columns
     ]
 
     try:
         st.dataframe(
-            df_hist[cols].style.format(
-                {"silhouette": "{:.3f}", "ae_reconstruction": "{:.4f}"}
-            ),
+            df_hist[cols].style.format({"silhouette": "{:.3f}", "ae_reconstruction": "{:.4f}"}),
             use_container_width=True,
         )
     except Exception:
@@ -480,9 +515,7 @@ def _render_tab_models_and_runs():
         ]
         st.line_chart(chart_df)
 
-    st.caption(
-        "Pour plus de détails, tu peux retrouver un run dans MLflow UI en utilisant son run_id."
-    )
+    st.caption("Pour plus de détails, tu peux retrouver un run dans MLflow UI en utilisant son run_id.")
 
 # ------------------------------------------------------------
 # TAB 2 – Monitoring (marché)
@@ -492,16 +525,18 @@ def _render_tab_monitoring():
 
     last_metrics_file, metrics_date = _get_last_monitoring_file()
 
+    # --- Layout top (button + last snapshot info)
     col_btn, col_info = st.columns([1, 2])
+
+    payload = None  # réponse JSON n8n (si dispo)
+
     with col_btn:
         if st.button("🔄 Rafraîchir monitoring via n8n"):
             try:
-                resp = requests.post(
-                    f"{N8N_BASE}/webhook/daily-ml-ops", timeout=15
-                )
+                resp = requests.post(f"{N8N_BASE}/webhook/mlops-daily-full", timeout=30)
+                resp.raise_for_status()
+                payload = resp.json()
                 st.success("Monitoring déclenché via n8n.")
-                with st.expander("Voir la réponse JSON brute"):
-                    st.json(resp.json())
             except Exception as e:
                 st.error(f"Erreur lors de l’appel n8n : {e}")
 
@@ -513,6 +548,7 @@ def _render_tab_monitoring():
             """,
             unsafe_allow_html=True,
         )
+
         if last_metrics_file:
             st.markdown(
                 f"<div class='mlops-panel-sub'>Fichier : <code>{last_metrics_file}</code></div>",
@@ -528,10 +564,74 @@ def _render_tab_monitoring():
                 "<div class='mlops-panel-sub'>Aucun fichier trouvé dans <code>mlops_metrics/</code>.</div>",
                 unsafe_allow_html=True,
             )
+
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("")
 
+    # =========================================================
+    # 1) ENCARTS "JURY-PROOF" basés sur la réponse n8n (si dispo)
+    # =========================================================
+    if payload:
+        kpis = payload.get("mlops_kpis", {})
+        decision = payload.get("mlops_decision", {}) or {}
+        rules = decision.get("rules", {}) or {}
+
+        pipeline_status = kpis.get("pipeline_status", "—")
+        nb_ok = kpis.get("nb_symbols_ok", "—")
+        nb_req = kpis.get("nb_symbols_requested", "—")
+        drift_avg = float(kpis.get("drift_avg", 0.0) or 0.0)
+        drift_max = float(kpis.get("drift_max", 0.0) or 0.0)
+        retrain = bool(kpis.get("retrain_recommended", False))
+
+        thr_avg = float(rules.get("drift_avg_threshold", 0.25) or 0.25)
+        thr_max = float(rules.get("drift_max_threshold", 0.50) or 0.50)
+
+        ok_avg = drift_avg < thr_avg
+        ok_max = drift_max < thr_max
+
+        # ---- Badges (simple, lisible)
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"**Pipeline :** {pipeline_status}")
+        with c2:
+            st.markdown(f"**Actifs :** {nb_ok}/{nb_req}")
+        with c3:
+            st.markdown(f"**Décision :** {'🔴 Retrain recommandé' if retrain else '🟢 Pas de retrain'}")
+        with c4:
+            st.markdown(
+                f"**Drift :** avg {drift_avg:.3f}/{thr_avg:.2f} {'✅' if ok_avg else '⚠️'} · "
+                f"max {drift_max:.3f}/{thr_max:.2f} {'✅' if ok_max else '⚠️'}"
+            )
+
+        # ---- Encadré décision
+        explanation = decision.get("explanation") or payload.get("human_text") or ""
+        if not explanation:
+            explanation = (
+                "Aujourd’hui, aucun ré-entraînement n’est déclenché. "
+                "Les scores de dérive restent sous les seuils définis."
+            )
+
+        st.info(
+            "🧠 **Décision MLOps (quotidienne)**\n\n"
+            f"{explanation}"
+        )
+
+        # ---- (Optionnel) Markdown executive si tu veux une belle synthèse
+        md = payload.get("mlops_visual_md")
+        if md:
+            with st.expander("📄 Synthèse (Executive)"):
+                st.markdown(md)
+
+        # ---- Debug JSON (masqué)
+        with st.expander("🔎 Détails techniques (debug)"):
+            st.json(payload)
+
+    st.markdown("---")
+
+    # =========================================================
+    # 2) AFFICHAGE SNAPSHOT CSV (preuve simple & stable)
+    # =========================================================
     if last_metrics_file and os.path.exists(last_metrics_file):
         try:
             df = pd.read_csv(last_metrics_file)
@@ -712,15 +812,16 @@ def render():
 
     # 3 tabs simplifiés
     tab1, tab2, tab3 = st.tabs(
-        ["🏆 Models & Runs", "📉 Monitoring", "⚙️ Training & Automation"]
+        [ "⚙️ Training & Automation", "🏆 Models & Runs", "📉 Monitoring"]
     )
 
     with tab1:
-        _render_tab_models_and_runs()
-    with tab2:
-        _render_tab_monitoring()
-    with tab3:
         _render_tab_training()
+    with tab2:
+        _render_tab_models_and_runs()
+    with tab3:
+        _render_tab_monitoring()
+        
 def render_champions_synthesis_card(title: str = "🏅 Synthèse des champions mis à jour"):
     """
     Carte récap des champions MLOps (nombre de symboles + meilleur silhouette).

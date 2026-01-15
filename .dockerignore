@@ -1,12 +1,39 @@
-.venv
-__pycache__
+# Python
+.venv/
+venv/
+__pycache__/
 *.pyc
-.git
-.gitignore
-.env
-.env.*
-.idea
-.vscode
-dist
-build
+*.pyo
+*.pyd
+
+# Git / IDE
+.git/
+.vscode/
+.idea/
+
+# Data / logs
 *.log
+*.sqlite
+mlruns/
+artifacts/
+data/
+vectors/
+
+# HuggingFace / Whisper caches (TON ERREUR)
+cache/
+cache/**
+**/cache/**
+.hf_cache/
+**/.cache/
+**/hf_cache/
+**/huggingface/
+**/whisper/
+
+# Node / front (si tu en as)
+node_modules/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db

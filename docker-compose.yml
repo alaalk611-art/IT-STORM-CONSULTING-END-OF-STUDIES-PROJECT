@@ -1,6 +1,17 @@
 services:
+  ollama:
+    image: ollama/ollama
+    container_name: storm_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
   backend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: storm_backend
     command: uvicorn src.api.main:app --host 0.0.0.0 --port 8001
     env_file: .env.docker
@@ -10,9 +21,12 @@ services:
       - ./data:/app/data
       - ./vectors:/app/vectors
       - ./mlruns.db:/app/mlruns.db
+      - hf_cache:/app/.cache
     ports:
       - "8001:8001"
     restart: unless-stopped
+    depends_on:
+      - ollama
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8001/health || exit 1"]
       interval: 10s
@@ -20,7 +34,9 @@ services:
       retries: 20
 
   ui:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: storm_ui
     command: streamlit run src/ui/app.py --server.address 0.0.0.0 --server.port 8501
     env_file: .env.docker
@@ -32,3 +48,9 @@ services:
     ports:
       - "8501:8501"
     restart: unless-stopped
+    volumes:
+      - hf_cache:/app/.cache
+
+volumes:
+  ollama:
+  hf_cache:

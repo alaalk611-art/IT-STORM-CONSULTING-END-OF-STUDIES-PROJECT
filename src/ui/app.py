@@ -1644,92 +1644,116 @@ render_brand_header(api_ok=None, llm_ok=True)
 # --------------------------------------------------------------------------------------
 # AUTH GATE GLOBAL — page de login avant l'accès aux onglets
 # --------------------------------------------------------------------------------------
-#auth_ok = auth.render_auth_gate()
-#if not auth_ok:
-    # Tant que l'utilisateur n'a pas passé les 3 vérifications,
-    # on ne montre PAS les onglets.
-    #st.stop()
+# --------------------------------------------------------------------------------------
+# AUTH GATE GLOBAL — une seule fois par session
+# --------------------------------------------------------------------------------------
+#if "auth_ok" not in st.session_state:
+#    st.session_state["auth_ok"] = False
+
+#if not st.session_state["auth_ok"]:
+#    auth_ok = auth.render_auth_gate()
+#    if auth_ok:
+#        st.session_state["auth_ok"] = True
+#        st.rerun()
+#    else:
+#        st.stop()
 
 # =====================================================================
+# NAVIGATION / TABS (radio + URL + liens ouvrables via clic droit)
 # =====================================================================
-# NAVIGATION / TABS (version radio + session_state)
-# =====================================================================
+
 # ---------------------------
 # Définition des routes
 # ---------------------------
+# =====================================================================
+# NAVIGATION / TABS (UNIQUE) — liens (clic gauche = même onglet, clic droit = nouvel onglet)
+# =====================================================================
+# =====================================================================
+# NAVIGATION / TABS (UNIQUE) — liens (clic gauche = même onglet, clic droit = nouvel onglet)
+# =====================================================================
+
 ROUTES = {
     "home": "🏠 Accueil",
     "upload": "📂 Upload & Index",
     "docs": "📝 Generate Docs",
-    "market": "🌍 Market Watch",
     "voice": "🎤 Voice Copilot",
     "tech": "🔎 Veille Techno",
+    "market": "🌍 Market Watch",
+    "mlops": "🧠 MLOps Market",
     "automation": "⚙️ Automation Studio",
-    "mlops": "🧠 MLOps Market", 
+    
 }
 
-tab_names = list(ROUTES.values())
+def render_tabs_as_links(routes: dict, current_page: str):
+    st.markdown(
+        """
+        <style>
+          .sc-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+                    gap:0.85rem; max-width:1050px; margin:0.6rem auto 0.9rem auto; }
+          .sc-tab  { text-decoration:none; text-align:center; display:flex; justify-content:center; align-items:center;
+                    min-height:44px; border-radius:999px; border:1px solid rgba(226,232,240,0.95);
+                    background:rgba(248,250,252,0.96); padding:0.5rem 1.25rem; font-size:0.95rem; font-weight:650;
+                    color:#1e293b; box-shadow:0 2px 6px rgba(15,23,42,0.06);
+                    transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease, background .18s ease; }
+          .sc-tab:hover { background:rgba(238,242,255,0.97); border-color:rgba(148,163,184,0.9);
+                         transform:translateY(-1px); box-shadow:0 12px 26px rgba(2,6,23,0.10); }
+          .sc-tab.active { background:linear-gradient(135deg,#ffffff,#e0f2fe); border-color:rgba(56,189,248,1);
+                          color:#075985; transform:translateY(-2px);
+                          box-shadow:0 16px 36px rgba(56,189,248,0.30), 0 0 0 4px rgba(56,189,248,0.18); }
+          @media (max-width:900px){ .sc-tabs{ grid-template-columns:repeat(2,1fr); max-width:680px; } }
+          @media (max-width:520px){ .sc-tabs{ grid-template-columns:1fr; max-width:100%; } }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    items = []
+    for key, label in routes.items():
+        cls = "sc-tab active" if key == current_page else "sc-tab"
+        # IMPORTANT: target="_self" => clic gauche même onglet
+        items.append(f'<a class="{cls}" href="?page={key}" target="_self" rel="noopener">{label}</a>')
+
+    st.markdown(f'<div class="sc-tabs">{"".join(items)}</div>', unsafe_allow_html=True)
 
 # ---------------------------
 # Lire l’URL actuelle
 # ---------------------------
 params = st.query_params
-
-# si la clé n'existe pas → "home"
 current_page = params.get("page", "home")
-# Streamlit peut renvoyer une liste si plusieurs valeurs, on normalise en str
 if isinstance(current_page, list):
     current_page = current_page[0]
+if current_page not in ROUTES:
+    current_page = "home"
 
-# Convertir le paramètre "page" → nom d'onglet
-selected_tab_name = ROUTES.get(current_page, "🏠 Accueil")
-
-# ---------------------------
-# Sélecteur d’onglets
-# ---------------------------
-selected = st.radio(
-    "Navigation",
-    tab_names,
-    index=tab_names.index(selected_tab_name),
-    horizontal=True,
-    label_visibility="collapsed",
-)
+# Afficher navigation unique
+render_tabs_as_links(ROUTES, current_page=current_page)
 
 # ---------------------------
-# Mettre à jour l'URL en fonction de l'onglet choisi
-# ---------------------------
-reverse_routes = {v: k for k, v in ROUTES.items()}
-new_page_param = reverse_routes[selected]
-
-# ICI la correction : on met à jour l'objet, on ne l'appelle pas
-st.query_params.update({"page": new_page_param})
-
-# ---------------------------
-# ROUTING
+# ROUTING (comme tu as déjà)
 # ---------------------------
 from src.ui.sections import home
 
-if selected == "🏠 Accueil":
+if current_page == "home":
     home.render_home_tab()
     render_chatbot()
 
-elif selected == "📂 Upload & Index":
+elif current_page == "upload":
     upload.render_upload_tab()
 
-elif selected == "📝 Generate Docs":
+elif current_page == "docs":
     generate_docs_rag.render()
 
-elif selected == "🌍 Market Watch":
+elif current_page == "market":
     market.render()
 
-elif selected == "🎤 Voice Copilot":
+elif current_page == "voice":
     speech_chat.render_stt_only()
 
-elif selected == "🔎 Veille Techno":
+elif current_page == "tech":
     tech_watch.render()
 
-elif selected == "⚙️ Automation Studio":
+elif current_page == "automation":
     automation.render_automation_tab()
 
-elif selected == "🧠 MLOps Market":
+elif current_page == "mlops":
     mlops.render_mlops_tab()
