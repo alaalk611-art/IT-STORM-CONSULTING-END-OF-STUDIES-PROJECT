@@ -964,7 +964,7 @@ if (el_{i}) {{
     return selected
 
 def _display_grounded_block(block: Dict[str, Any]) -> None:
-    st.markdown("### 🔍 Réponse ancrée")
+    st.markdown("### 🔍 Réponse Générée")
     ans = block.get("answer") or "Je ne sais pas."
     st.write(ans)
 

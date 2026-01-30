@@ -387,7 +387,7 @@ def render_chatbot():
     }} catch(e) {{}}
     msgs.innerHTML = "";
     window.__sc_welcome_once_shown__ = false;
-    addBot("Historique effacé. on commence  une nouvelle conversation.", false);
+    addBot("Historique effacé. on commence une nouvelle conversation.", false);
   }}
 
   // Restaurer l'historique au chargement
