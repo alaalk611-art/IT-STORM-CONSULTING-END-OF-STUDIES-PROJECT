@@ -14,6 +14,7 @@ Elle transforme documents, données et signaux marché en insights actionnables 
 ### AI Assistant Demo
 
 <video src="demo/IA_demo.mp4" controls width="800"></video>
+Watch the video: [Open demo](demo/IA_demo.mp4)
 
 Voice-enabled assistant powered by RAG, local LLMs and document intelligence.
 
