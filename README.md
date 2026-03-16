@@ -45,77 +45,75 @@ Suivi et monitoring des modèles avec :
 
 ---
 
-# 🧱 Architecture du système
+## 🧱 Architecture du système
 
 StormCopilot repose sur une architecture modulaire combinant plusieurs technologies IA modernes :
 
-
+```
 Users
-│
-▼
+ │
+ ▼
 Streamlit Interface
-│
-▼
+ │
+ ▼
 FastAPI Backend
-│
-├── RAG Engine
-│ ├── Document ingestion
-│ ├── Chunking
-│ ├── Embeddings
-│ └── Vector Search (ChromaDB)
-│
-├── LLM Manager
-│ └── Ollama (Mistral / Llama)
-│
-├── Document Generator
-│ ├── DOCX
-│ ├── PPTX
-│ └── PDF
-│
-└── Automation Layer
-└── n8n workflows
+ │
+ ├── RAG Engine
+ │   ├── Document ingestion
+ │   ├── Chunking
+ │   ├── Embeddings
+ │   └── Vector Search (ChromaDB)
+ │
+ ├── LLM Manager
+ │   └── Ollama (Mistral / Llama)
+ │
+ ├── Document Generator
+ │   ├── DOCX
+ │   ├── PPTX
+ │   └── PDF
+ │
+ └── Automation Layer
+     └── n8n workflows
 
 Monitoring
-└── MLflow
-
+ └── MLflow
+```
 
 ---
 
-# 📁 Structure du projet
+## 📁 Structure du projet
 
-
+```
 storm_copilot/
 │
-├── data/ # Données brutes, intermédiaires et traitées
-├── docs/ # Documentation du projet
-├── mlops_metrics/ # Métriques et monitoring
-├── mlruns/ # Expérimentations MLflow
-├── models/ # Modèles IA
-├── out/ # Livrables générés
-├── scripts/ # Scripts utilitaires
-├── vectors/ # Base vectorielle (ChromaDB)
+├── data/                # Données brutes, intermédiaires et traitées
+├── docs/                # Documentation du projet
+├── mlops_metrics/       # Métriques et monitoring
+├── mlruns/              # Expérimentations MLflow
+├── models/              # Modèles IA
+├── out/                 # Livrables générés
+├── scripts/             # Scripts utilitaires
+├── vectors/             # Base vectorielle (ChromaDB)
 │
 ├── src/
-│ ├── api/ # Points d’entrée API
-│ ├── automation/ # Workflows n8n
-│ ├── config/ # Configuration globale
-│ ├── data_tech_watch/ # Veille technologique
-│ ├── embeddings/ # Génération d’embeddings
-│ ├── generation/ # Génération DOCX / PPTX / PDF
-│ ├── indexing/ # Indexation vectorielle
-│ ├── ingestion/ # Extraction & prétraitement
-│ ├── llm/ # Gestion des LLM locaux
-│ ├── mlops/ # MLOps & monitoring
-│ ├── n8n/ # Orchestration
-│ ├── rag/ # Pipelines RAG
-│ └── ui/ # Interface Streamlit
+│   ├── api/             # Points d’entrée API
+│   ├── automation/      # Workflows n8n
+│   ├── config/          # Configuration globale
+│   ├── data_tech_watch/ # Veille technologique
+│   ├── embeddings/      # Génération d’embeddings
+│   ├── generation/      # DOCX / PPTX / PDF
+│   ├── indexing/        # Indexation vectorielle
+│   ├── ingestion/       # Extraction & prétraitement
+│   ├── llm/             # Gestion des LLM locaux
+│   ├── mlops/           # MLOps & monitoring
+│   ├── n8n/             # Orchestration
+│   ├── rag/             # Pipelines RAG
+│   └── ui/              # Interface Streamlit
 │
 ├── docker-compose.yml
 ├── requirements.txt
 └── README.md
-
-
----
+```
 
 # 🛠️ Stack technique
 
