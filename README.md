@@ -5,7 +5,19 @@
 La plateforme transforme **documents, données et signaux du marché** en **insights exploitables et livrables professionnels automatisés**.
 
 ---
+---
+## 🎬 Demo
 
+### 🧠 StormCopilot AI Demo
+
+[![Watch the demo](https://img.shields.io/badge/Watch-Demo-blue?style=for-the-badge)](demo/IA_demo.mp4)
+
+### 🔁 n8n Automation Demo
+
+[![Watch the demo](https://img.shields.io/badge/Watch-Demo-blue?style=for-the-badge)](demo/N8N_demo.mp4)
+
+---
+---
 # 🚀 Fonctionnalités principales
 
 StormCopilot propose plusieurs modules d’intelligence augmentée :
