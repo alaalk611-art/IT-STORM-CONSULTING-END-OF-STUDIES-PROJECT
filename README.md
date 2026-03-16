@@ -7,15 +7,26 @@ Elle transforme documents, données et signaux marché en insights actionnables 
 
 ---
 
+---
+
 ## 🎬 Demo
 
 ### AI Assistant Demo
-▶️ [Watch the demo](demo/IA_demo.mp4)
 
-### n8n Automation Demo
-▶️ [Watch the demo](demo/N8N_demo.mp4)
+<video src="demo/IA_demo.mp4" controls width="800"></video>
+
+Voice-enabled assistant powered by RAG, local LLMs and document intelligence.
 
 ---
+
+### n8n Automation Demo
+
+<video src="demo/N8N_demo.mp4" controls width="800"></video>
+
+Workflow orchestration and automation pipelines using n8n.
+
+---
+
 
 🚀 What it does
 
