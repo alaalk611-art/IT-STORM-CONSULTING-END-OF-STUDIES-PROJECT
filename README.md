@@ -1,60 +1,163 @@
-# 🌩️ Storm Copilot
-### GenAI · Automation · n8n · Market Intelligence · MLOps
+# 🌩️ StormCopilot
 
-**Storm Copilot** est une plateforme d’IA conçue pour le **conseil et l’aide à la décision**, combinant **IA générative**, **RAG**, **automatisation de workflows**, **veille intelligente** et **MLOps**.
+**StormCopilot** est une plateforme d’assistance intelligente pour le **conseil et l’aide à la décision**, combinant **IA générative, RAG, automatisation de workflows et MLOps**.
 
-Elle transforme documents, données et signaux marché en **insights actionnables** et **livrables professionnels automatisés**.
+La plateforme transforme **documents, données et signaux du marché** en **insights exploitables et livrables professionnels automatisés**.
+
+---
+---
+## 🎬 Demo
+
+### 🧠 StormCopilot AI Demo
+
+[![Watch the demo](https://img.shields.io/badge/Watch-Demo-blue?style=for-the-badge)](demo/IA_demo.mp4)
+
+### 🔁 n8n Automation Demo
+
+[![Watch the demo](https://img.shields.io/badge/Watch-Demo-blue?style=for-the-badge)](demo/N8N_demo.mp4)
+
+---
+---
+# 🚀 Fonctionnalités principales
+
+StormCopilot propose plusieurs modules d’intelligence augmentée :
+
+### 🧠 Chat IA contextualisé (RAG)
+- Analyse de documents internes
+- Recherche sémantique dans une base vectorielle
+- Réponses contextualisées avec LLM
+
+### 📄 Génération automatique de livrables
+Production automatique de :
+
+- Rapports **PDF**
+- Présentations **PowerPoint**
+- Documents **DOCX**
+
+### 📊 Veille intelligente
+Analyse automatique de :
+
+- tendances technologiques
+- signaux marché
+- innovations IA
+
+### 🔁 Automatisation de workflows
+Automatisation complète via **n8n** :
+
+- pipelines de veille
+- génération de rapports
+- orchestrations data
+
+### 📈 Gouvernance des modèles (MLOps)
+Suivi et monitoring des modèles avec :
+
+- **MLflow**
+- suivi des performances
+- gestion des expérimentations
 
 ---
 
-## 🚀 What it does
+## 🧱 Architecture du système
 
-- 🧠 Chat IA contextualisé (RAG)
-- 📤 Ingestion & indexation documentaire
-- 🧾 Génération automatique de rapports (PDF, DOCX, PPTX)
-- 🔁 Orchestration de workflows avec **n8n**
-- 📊 Veille marché & technologique augmentée par l’IA
-- 📈 Suivi et gouvernance des modèles (MLOps)
+StormCopilot repose sur une architecture modulaire combinant plusieurs technologies IA modernes :
+
+```
+Users
+ │
+ ▼
+Streamlit Interface
+ │
+ ▼
+FastAPI Backend
+ │
+ ├── RAG Engine
+ │   ├── Document ingestion
+ │   ├── Chunking
+ │   ├── Embeddings
+ │   └── Vector Search (ChromaDB)
+ │
+ ├── LLM Manager
+ │   └── Ollama (Mistral / Llama)
+ │
+ ├── Document Generator
+ │   ├── DOCX
+ │   ├── PPTX
+ │   └── PDF
+ │
+ └── Automation Layer
+     └── n8n workflows
+
+Monitoring
+ └── MLflow
+```
 
 ---
 
-## 🛠️ Tech Stack
+## 📁 Structure du projet
 
-`Python · Streamlit · LangChain · ChromaDB · Ollama · n8n · MLflow`
-
----
-
-## 🎯 Built for
-
-Consulting · Knowledge Management · Market Intelligence · GenAI Automation
-
----
-
-## 📁 Project Structure
-
-```text
+```
 storm_copilot/
-├─ data/                    # Données brutes, intermédiaires et traitées
-├─ docs/                    # Documentation projet
-├─ mlops_metrics/           # Métriques et monitoring
-├─ mlruns/                  # Expérimentations MLflow
-├─ models/                  # Modèles IA
-├─ out/                     # Livrables générés
-├─ scripts/                 # Scripts utilitaires
-├─ vectors/                 # Base vectorielle (ChromaDB)
 │
-└─ src/
-   ├─ api/                  # Points d’entrée API
-   ├─ automation/           # Workflows n8n
-   ├─ config/               # Configuration globale
-   ├─ data_tech_watch/      # Veille technologique
-   ├─ embeddings/           # Embeddings
-   ├─ generation/           # DOCX / PPTX / PDF
-   ├─ indexing/             # Indexation vectorielle
-   ├─ ingestion/            # Extraction & prétraitement
-   ├─ llm/                  # LLM locaux
-   ├─ mlops/                # MLOps & monitoring
-   ├─ n8n/                  # Orchestration
-   ├─ rag/                  # Pipelines RAG
-   ├─ ui/                   # Interface Streamlit
-   └─ app.py                # Entrée principale
+├── data/                # Données brutes, intermédiaires et traitées
+├── docs/                # Documentation du projet
+├── mlops_metrics/       # Métriques et monitoring
+├── mlruns/              # Expérimentations MLflow
+├── models/              # Modèles IA
+├── out/                 # Livrables générés
+├── scripts/             # Scripts utilitaires
+├── vectors/             # Base vectorielle (ChromaDB)
+│
+├── src/
+│   ├── api/             # Points d’entrée API
+│   ├── automation/      # Workflows n8n
+│   ├── config/          # Configuration globale
+│   ├── data_tech_watch/ # Veille technologique
+│   ├── embeddings/      # Génération d’embeddings
+│   ├── generation/      # DOCX / PPTX / PDF
+│   ├── indexing/        # Indexation vectorielle
+│   ├── ingestion/       # Extraction & prétraitement
+│   ├── llm/             # Gestion des LLM locaux
+│   ├── mlops/           # MLOps & monitoring
+│   ├── n8n/             # Orchestration
+│   ├── rag/             # Pipelines RAG
+│   └── ui/              # Interface Streamlit
+│
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+
+# 🛠️ Stack technique
+
+StormCopilot combine plusieurs technologies modernes :
+
+### Langages
+- Python
+
+### IA & NLP
+- LangChain
+- Transformers
+- Ollama
+- Mistral / Llama
+
+### Data & vector search
+- ChromaDB
+- embeddings HuggingFace
+
+### Backend
+- FastAPI
+
+### Interface utilisateur
+- Streamlit
+
+### Automatisation
+- n8n
+
+### MLOps
+- MLflow
+
+### Conteneurisation
+- Docker
+- Docker Compose
+
+---
