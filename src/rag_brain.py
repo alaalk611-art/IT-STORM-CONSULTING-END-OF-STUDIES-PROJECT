@@ -1346,7 +1346,7 @@ def ask_multi_ollama(
                 timeout=600.0,
                 options={
                     "num_ctx": 2048,      # plus de contexte, meilleure couverture
-                    "top_k": 40,
+                    "top_k":6,
                     "top_p": 0.9,
                     "repeat_penalty": 1.1
                 }
